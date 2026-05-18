@@ -3,9 +3,9 @@ import type { Model, ProviderDef } from "../types.ts"
 export const PROVIDERS: ProviderDef[] = [
 	{
 		id: "glm",
-		name: "GLM (Zhipu AI)",
+		name: "GLM (Z.AI)",
 		api: "openai",
-		baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+		baseUrl: "https://api.z.ai/api/paas/v4",
 		envKey: "GLM_API_KEY",
 	},
 	{
@@ -34,16 +34,48 @@ export const PROVIDERS: ProviderDef[] = [
 export const MODELS: Model[] = [
 	// GLM
 	{
-		id: "glm-4-plus",
-		name: "GLM-4 Plus",
+		id: "glm-5.1",
+		name: "GLM-5.1",
 		provider: "glm",
 		contextWindow: 128_000,
 		maxTokens: 4096,
 		supportsThinking: false,
 	},
 	{
-		id: "glm-4-flash",
-		name: "GLM-4 Flash",
+		id: "glm-5",
+		name: "GLM-5",
+		provider: "glm",
+		contextWindow: 128_000,
+		maxTokens: 4096,
+		supportsThinking: false,
+	},
+	{
+		id: "glm-5-turbo",
+		name: "GLM-5 Turbo",
+		provider: "glm",
+		contextWindow: 128_000,
+		maxTokens: 4096,
+		supportsThinking: false,
+	},
+	{
+		id: "glm-4.7",
+		name: "GLM-4.7",
+		provider: "glm",
+		contextWindow: 128_000,
+		maxTokens: 4096,
+		supportsThinking: false,
+	},
+	{
+		id: "glm-4.7-flash",
+		name: "GLM-4.7 Flash (Free)",
+		provider: "glm",
+		contextWindow: 128_000,
+		maxTokens: 4096,
+		supportsThinking: false,
+	},
+	{
+		id: "glm-4.5-flash",
+		name: "GLM-4.5 Flash (Free)",
 		provider: "glm",
 		contextWindow: 128_000,
 		maxTokens: 4096,
