@@ -1,11 +1,11 @@
 import { join } from "node:path"
-import type { ForgeConfig } from "../types.ts"
+import type { NovaConfig } from "../types.ts"
 
-const FORGE_DIR = () => join(process.env.HOME ?? "~", ".forge")
-const CONFIG_PATH = () => join(FORGE_DIR(), "config.json")
-const AUTH_PATH = () => join(FORGE_DIR(), "auth.json")
+const NOVA_DIR = () => join(process.env.HOME ?? "~", ".novacode")
+const CONFIG_PATH = () => join(NOVA_DIR(), "config.json")
+const AUTH_PATH = () => join(NOVA_DIR(), "auth.json")
 
-const defaultConfig: ForgeConfig = {
+const defaultConfig: NovaConfig = {
 	provider: "",
 	model: "",
 	apiKeys: {},
@@ -20,7 +20,7 @@ export async function configExists(): Promise<boolean> {
 	}
 }
 
-export async function loadConfig(): Promise<ForgeConfig> {
+export async function loadConfig(): Promise<NovaConfig> {
 	try {
 		const raw = await Bun.file(CONFIG_PATH()).json()
 		return { ...defaultConfig, ...raw }
@@ -29,8 +29,8 @@ export async function loadConfig(): Promise<ForgeConfig> {
 	}
 }
 
-export async function saveConfig(config: ForgeConfig): Promise<void> {
-	const dir = FORGE_DIR()
+export async function saveConfig(config: NovaConfig): Promise<void> {
+	const dir = NOVA_DIR()
 	const { mkdir } = await import("node:fs/promises")
 	await mkdir(dir, { recursive: true })
 	await Bun.write(CONFIG_PATH(), JSON.stringify(config, null, 2))
@@ -47,6 +47,6 @@ export async function saveConfig(config: ForgeConfig): Promise<void> {
 	}
 }
 
-export function getForgeDir(): string {
-	return FORGE_DIR()
+export function getNovaDir(): string {
+	return NOVA_DIR()
 }

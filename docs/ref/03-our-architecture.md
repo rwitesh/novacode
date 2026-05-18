@@ -13,7 +13,7 @@ No Node.js. No build step. Bun runs `.ts` natively.
 ## File Tree
 
 ```
-forge/
+novacode/
 ├── src/
 │   ├── main.ts                    # entry — first-run detect → onboarding → TUI
 │   │
@@ -72,10 +72,10 @@ forge/
 ## Data Flow
 
 ```
-$ forge
+$ novacode
   │
   ├─ no config? → onboarding wizard (pick provider, key, model)
-  │                  → saves ~/.forge/{config,auth}.json
+  │                  → saves ~/.novacode/{config,auth}.json
   │
   ├─ has config → load providers, build Agent
   │
@@ -100,10 +100,10 @@ $ forge
          └─ no tool calls → done → render in TUI
 ```
 
-## ~/:forge: Layout
+## ~/:novacode: Layout
 
 ```
-~/.forge/
+~/.novacode/
 ├── config.json     # providers, default model
 ├── auth.json       # API keys (chmod 600)
 └── sessions/

@@ -1,14 +1,14 @@
-# Forge — AGENTS.md
+# Novacode — AGENTS.md
 
 Project knowledge for coding agents working on this codebase.
 
 ## Project Overview
 
-Forge is an open-source, multi-provider coding agent built with Bun. It follows a ReAct agent loop pattern (Reason → Act → Observe) inspired by pi-coding-agent's architecture but simplified.
+Novacode is an open-source, multi-provider coding agent built with Bun. It follows a ReAct agent loop pattern (Reason → Act → Observe) inspired by pi-coding-agent's architecture but simplified.
 
 **Stack:** Bun runtime, TypeScript, no Node.js APIs for file I/O (prefer `Bun.file()`, `Bun.write()`, `Bun.spawn()`).
 
-**Config dir:** `~/.forge/` (config.json, auth.json, sessions/)
+**Config dir:** `~/.novacode/` (config.json, auth.json, sessions/)
 
 ## Commands
 
@@ -21,7 +21,7 @@ bun run lint:fix     # biome lint + auto-fix
 bun run format       # biome format
 bun run typecheck    # tsc --noEmit
 bun run check        # typecheck + lint + test (run this before committing)
-bun run build        # compile to binary
+bun run build        # compile to binary (outputs `novacode`, accessible as `nova` too)
 ```
 
 ## Architecture

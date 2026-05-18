@@ -135,7 +135,7 @@ export type AgentEvent =
 
 // ── Config ────────────────────────────────────────────────────
 
-export interface ForgeConfig {
+export interface NovaConfig {
 	provider: string
 	model: string
 	apiKeys: Record<string, string> // provider -> key

@@ -120,7 +120,7 @@ export async function loadMcpTools(config: Record<string, MCPServer>): Promise<T
 ## Example Extension
 
 ```javascript
-// ~/.forge/extensions/db.js
+// ~/.novacode/extensions/db.js
 export default {
   name: "db",
   tools: [{

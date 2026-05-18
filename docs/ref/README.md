@@ -1,4 +1,4 @@
-# forge
+# novacode
 
 Open-source multi-provider coding agent. Bun-native. Fast.
 
@@ -14,10 +14,10 @@ Open-source multi-provider coding agent. Bun-native. Fast.
 ## First Run
 
 ```
-$ forge
+$ novacode
 
   ╭──────────────────────────────────────────╮
-  │  ⚡ forge  — your coding companion        │
+  │  ⚡ novacode  — your coding companion        │
   │  Let's pick a provider.                  │
   ╰──────────────────────────────────────────╯
 

@@ -14,7 +14,7 @@ import { onboard } from "./onboarding/wizard.ts"
 import { interactive } from "./tui/app.tsx"
 import { print } from "./tui/print.ts"
 
-const DIR = join(homedir(), ".forge")
+const DIR = join(homedir(), ".novacode")
 
 async function main() {
   const cfg = new ConfigStore(DIR)
@@ -138,9 +138,9 @@ import type { ProviderInfo } from "../config/providers.ts"
 
 const banner = `
 ${chalk.bold.cyan("  ╭─────────────────────────────────────────────╮")}
-${chalk.bold.cyan("  │")}  ${chalk.bold.white("⚡ forge")}  ${chalk.dim("— your coding companion")}      ${chalk.bold.cyan("│")}
+${chalk.bold.cyan("  │")}  ${chalk.bold.white("⚡ novacode")}  ${chalk.dim("— your coding companion")}      ${chalk.bold.cyan("│")}
 ${chalk.bold.cyan("  │")}  ${chalk.dim("Let's pick a provider. Keys are stored at")}  ${chalk.bold.cyan("│")}
-${chalk.bold.cyan("  │")}  ${chalk.dim("~/.forge/auth.json")}                           ${chalk.bold.cyan("│")}
+${chalk.bold.cyan("  │")}  ${chalk.dim("~/.novacode/auth.json")}                           ${chalk.bold.cyan("│")}
 ${chalk.bold.cyan("  ╰─────────────────────────────────────────────╯")}
 `
 
@@ -207,7 +207,7 @@ async function verify(id: string, info: ProviderInfo, key: string): Promise<bool
   return false
 }
 
-function quit() { console.log(chalk.dim("\n  Run forge again to set up.")); process.exit(0) }
+function quit() { console.log(chalk.dim("\n  Run novacode again to set up.")); process.exit(0) }
 ```
 
 ## Commands
@@ -498,7 +498,7 @@ function App({ agent, cfg }: { agent: Agent; cfg: ConfigStore }) {
     <Box flexDirection="column" padding={1}>
       {/* Header */}
       <Box marginBottom={1}>
-        <Text bold color="cyan">⚡ forge</Text>
+        <Text bold color="cyan">⚡ novacode</Text>
         <Text dimColor> │ {agent.model.id}</Text>
         <Text dimColor> │ {busy ? chalk.yellow("working…") : chalk.green("ready")}</Text>
       </Box>
@@ -545,7 +545,7 @@ function Message({ msg }: { msg: Msg }) {
     const text = msg.content.filter(c => c.type === "text").map(c => c.text).join("")
     return (
       <Box flexDirection="column" marginBottom={1}>
-        <Text bold color="magenta">forge</Text>
+        <Text bold color="magenta">novacode</Text>
         <Text>{text}</Text>
       </Box>
     )

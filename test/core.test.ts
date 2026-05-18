@@ -11,18 +11,18 @@ describe("tools", () => {
 	})
 
 	it("write + read roundtrip", async () => {
-		const cwd = `/tmp/forge-test-${Date.now()}`
+		const cwd = `/tmp/novacode-test-${Date.now()}`
 		await import("node:fs/promises").then((fs) => fs.mkdir(cwd, { recursive: true }))
 		const tools = getDefaultTools(cwd)
 		const write = tools.find((t) => t.def.name === "write")!
 		const read = tools.find((t) => t.def.name === "read")!
 
-		const wResult = await write.execute({ path: "hello.txt", content: "hello forge" })
+		const wResult = await write.execute({ path: "hello.txt", content: "hello nova" })
 		expect(wResult.isError).toBe(false)
 
 		const rResult = await read.execute({ path: "hello.txt" })
 		expect(rResult.isError).toBe(false)
-		expect(rResult.content[0]!.type === "text" && rResult.content[0]!.text).toBe("hello forge")
+		expect(rResult.content[0]!.type === "text" && rResult.content[0]!.text).toBe("hello nova")
 	})
 })
 

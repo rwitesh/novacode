@@ -1,4 +1,4 @@
-# lefthook.yml — git hooks for forge
+# lefthook.yml — git hooks for novacode
 
 pre-commit:
   commands:

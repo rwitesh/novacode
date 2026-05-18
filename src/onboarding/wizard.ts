@@ -1,10 +1,10 @@
 import * as clack from "@clack/prompts"
 import { getModelsForProvider, getProvider, PROVIDERS } from "../config/providers.ts"
 import { saveConfig } from "../config/store.ts"
-import type { ForgeConfig } from "../types.ts"
+import type { NovaConfig } from "../types.ts"
 
-export async function runOnboarding(): Promise<ForgeConfig> {
-	clack.intro("⚡ forge — your coding companion")
+export async function runOnboarding(): Promise<NovaConfig> {
+	clack.intro("⚡ Nova — your coding companion")
 
 	const providerId = await clack.select({
 		message: "Pick a provider",
@@ -45,7 +45,7 @@ export async function runOnboarding(): Promise<ForgeConfig> {
 		process.exit(0)
 	}
 
-	const config: ForgeConfig = {
+	const config: NovaConfig = {
 		provider: providerId as string,
 		model: modelId as string,
 		apiKeys: { [providerId as string]: apiKey as string },

@@ -3,7 +3,7 @@ import type { Tool } from "../types.ts"
 export function buildSystemPrompt(cwd: string, tools: Tool[]): string {
 	const toolSnippets = tools.map((t) => `- ${t.def.name}: ${t.def.description}`).join("\n")
 
-	return `You are forge, a coding assistant. You help users by reading files, running commands, editing code, and writing new files.
+	return `You are Nova, a coding assistant made by novacode. You help users by reading files, running commands, editing code, and writing new files.
 
 Available tools:
 ${toolSnippets}

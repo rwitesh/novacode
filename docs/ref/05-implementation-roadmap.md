@@ -10,7 +10,7 @@
 - [ ] `src/onboarding/wizard.ts` — @clack prompts
 - [ ] `src/main.ts` — first-run detect → onboard
 
-**Done when:** `forge` → wizard → saves config → exits
+**Done when:** `novacode` → wizard → saves config → exits
 
 ---
 
@@ -33,9 +33,9 @@
 - [ ] `src/tools/shell.ts` — bash (Bun.spawn)
 - [ ] `src/tools/search.ts` — grep (rg), find, ls
 - [ ] System prompt builder
-- [ ] Print mode: `forge "explain this"`
+- [ ] Print mode: `novacode "explain this"`
 
-**Done when:** `forge "read package.json"` → agent reads file, responds
+**Done when:** `novacode "read package.json"` → agent reads file, responds
 
 ---
 

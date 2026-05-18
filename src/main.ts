@@ -38,25 +38,25 @@ async function main() {
 	const { flags, args } = parseCli()
 
 	if (flags.version) {
-		console.log("forge 0.1.0")
+		console.log("novacode 0.1.0")
 		process.exit(0)
 	}
 
 	if (flags.help) {
-		console.log(`forge — open-source coding agent
+		console.log(`novacode — open-source coding agent
 
 Usage:
-  forge                    Interactive mode
-  forge "prompt"           Print mode (non-interactive)
-  forge --provider <id>    Set provider
-  forge --model <id>       Set model
+  novacode                Interactive mode
+  novacode "prompt"       Print mode (non-interactive)
+  novacode --provider     Set provider
+  novacode --model        Set model
 
 Options:
-  -h, --help               Show help
-  -v, --version            Show version
-  --provider <id>          Provider to use
-  --model <id>             Model to use
-  --api-key <key>          API key override`)
+  -h, --help              Show help
+  -v, --version           Show version
+  --provider <id>         Provider to use
+  --model <id>            Model to use
+  --api-key <key>         API key override`)
 		process.exit(0)
 	}
 
@@ -77,7 +77,7 @@ Options:
 
 	if (!apiKey) {
 		console.error(
-			`No API key for ${provider.name}. Set ${provider.envKey} or run forge for onboarding.`,
+			`No API key for ${provider.name}. Set ${provider.envKey} or run novacode for onboarding.`,
 		)
 		process.exit(1)
 	}
@@ -112,7 +112,7 @@ Options:
 	}
 
 	// TODO: Interactive TUI mode (Phase 3)
-	console.log('Interactive mode coming soon. Use: forge "your prompt"')
+	console.log('Interactive mode coming soon. Use: novacode "your prompt"')
 	process.exit(0)
 }
 
