@@ -43,7 +43,9 @@ src/
 │   └── prompt.ts        # system prompt builder
 ├── tools/
 │   ├── index.ts         # tool factory exports
-│   └── fs.ts            # read, write, edit, bash tools
+│   ├── fs.ts            # read, write, edit tools
+│   ├── shell.ts         # bash tool
+│   └── search.ts        # glob, grep, ls tools
 ├── session/             # (TODO) JSONL session persistence + compaction
 ├── onboarding/
 │   └── wizard.ts        # first-run @clack/prompts setup
@@ -69,6 +71,7 @@ src/
 - No semicolons (biome enforces `asNeeded`)
 - `async/await` over `.then()` chains
 - Error handling: try/catch in tools, return `ToolResult` with `isError: true`
+- No decorative comment separators — no `───` dashes, no `***` bars. Use plain `//` for section breaks or nothing at all. Let code structure speak.
 - Tests: small, focused, in `test/` directory. Use `bun:test` (describe/it/expect)
 
 ## Pre-commit

@@ -1,47 +1,79 @@
+/**
+ * Filesystem tools for reading, writing, and editing files.
+ * Includes safety checks to prevent path traversal.
+ */
 import { mkdir } from "node:fs/promises"
-import { dirname, resolve } from "node:path"
+import { dirname, extname, resolve } from "node:path"
 import type { Tool, ToolResult } from "../types.ts"
 
+// Extensions we return as base64 images instead of text
+const IMAGES = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"])
+
+const text = (s: string) => ({ type: "text" as const, text: s })
+
+/**
+ * Ensures the target path is within the project root.
+ */
+function safePath(cwd: string, p: string): string {
+	const abs = resolve(cwd, p)
+	if (!abs.startsWith(cwd)) throw new Error(`Path outside project: ${p}`)
+	return abs
+}
+
+/**
+ * Tool for reading file contents with line numbers and truncation support.
+ * Also handles image files by returning them as base64.
+ */
 export function readTool(cwd: string): Tool {
 	return {
 		def: {
 			name: "read",
-			description: "Read file contents. Supports text files and images.",
+			description:
+				"Read file contents. Supports text and images (jpg, png, gif, webp). Text output is truncated to 2000 lines with line numbers.",
 			parameters: {
 				type: "object",
 				properties: {
 					path: { type: "string", description: "Path to file (relative or absolute)" },
-					offset: { type: "number", description: "Line to start from (1-indexed)" },
-					limit: { type: "number", description: "Max lines to read" },
+					offset: { type: "number", description: "Start line (1-based, default 1)" },
+					limit: { type: "number", description: "Max lines to read (default 2000)" },
 				},
 				required: ["path"],
 			},
 		},
 		async execute(args): Promise<ToolResult> {
-			const filePath = resolve(cwd, args.path as string)
 			try {
+				const filePath = safePath(cwd, args.path as string)
 				const file = Bun.file(filePath)
-				const exists = await file.exists()
-				if (!exists) {
-					return {
-						content: [{ type: "text", text: `File not found: ${args.path}` }],
-						isError: true,
-					}
+				if (!(await file.exists())) {
+					return { content: [text(`File not found: ${args.path}`)], isError: true }
 				}
 
-				const text = await file.text()
-				const lines = text.split("\n")
-				const offset = Number(args.offset ?? 1) - 1
-				const limit = args.limit ? Number(args.limit) : lines.length
-				const sliced = lines.slice(offset, offset + limit)
-
-				return {
-					content: [{ type: "text", text: sliced.join("\n") }],
-					isError: false,
+				// Return images as base64 so the LLM can process them visually
+				const ext = extname(filePath).toLowerCase()
+				if (IMAGES.has(ext)) {
+					const buf = await file.arrayBuffer()
+					const b64 = Buffer.from(buf).toString("base64")
+					const mime = ext === ".jpg" ? "image/jpeg" : `image/${ext.slice(1)}`
+					return { content: [{ type: "image", data: b64, mime }], isError: false }
 				}
+
+				const content = await file.text()
+				const lines = content.split("\n")
+				const offset = Math.max(0, (Number(args.offset ?? 1) || 1) - 1)
+				const limit = Number(args.limit ?? 2000) || 2000
+				const slice = lines.slice(offset, offset + limit)
+				const truncated = offset + limit < lines.length
+
+				// Line numbers help the LLM reference specific lines when editing
+				const numbered = slice
+					.map((l, i) => `${String(offset + i + 1).padStart(4)}│${l}`)
+					.join("\n")
+				const suffix = truncated ? `\n…${lines.length - offset - limit} more lines` : ""
+
+				return { content: [text(numbered + suffix)], isError: false }
 			} catch (e) {
 				return {
-					content: [{ type: "text", text: `Error reading file: ${(e as Error).message}` }],
+					content: [text(`Error reading file: ${(e as Error).message}`)],
 					isError: true,
 				}
 			}
@@ -49,11 +81,15 @@ export function readTool(cwd: string): Tool {
 	}
 }
 
+/**
+ * Tool for writing full content to a file.
+ * Automatically creates parent directories if they don't exist.
+ */
 export function writeTool(cwd: string): Tool {
 	return {
 		def: {
 			name: "write",
-			description: "Write content to a file. Creates the file and parent dirs if needed.",
+			description: "Write content to a file. Creates the file and parent directories if needed.",
 			parameters: {
 				type: "object",
 				properties: {
@@ -64,17 +100,18 @@ export function writeTool(cwd: string): Tool {
 			},
 		},
 		async execute(args): Promise<ToolResult> {
-			const filePath = resolve(cwd, args.path as string)
 			try {
+				const filePath = safePath(cwd, args.path as string)
+				const content = args.content as string
 				await mkdir(dirname(filePath), { recursive: true })
-				await Bun.write(filePath, args.content as string)
+				await Bun.write(filePath, content)
 				return {
-					content: [{ type: "text", text: `Wrote ${args.path}` }],
+					content: [text(`Wrote ${content.length} bytes → ${args.path}`)],
 					isError: false,
 				}
 			} catch (e) {
 				return {
-					content: [{ type: "text", text: `Error writing file: ${(e as Error).message}` }],
+					content: [text(`Error writing file: ${(e as Error).message}`)],
 					isError: true,
 				}
 			}
@@ -82,101 +119,85 @@ export function writeTool(cwd: string): Tool {
 	}
 }
 
+/**
+ * Tool for surgical edits using exact text replacement.
+ * Requires oldText to be unique to avoid ambiguous replacements.
+ */
 export function editTool(cwd: string): Tool {
 	return {
 		def: {
 			name: "edit",
-			description: "Edit a file using exact text replacement.",
+			description:
+				"Edit a file using exact text replacement. Each edit's oldText must be unique in the file.",
 			parameters: {
 				type: "object",
 				properties: {
 					path: { type: "string", description: "Path to file" },
 					edits: {
-						type: "string",
-						description: "JSON array of {oldText, newText} replacements",
+						type: "array",
+						description:
+							"Array of {oldText, newText} replacements. oldText must be unique. Non-overlapping.",
+						items: {
+							type: "object",
+							properties: {
+								oldText: { type: "string", description: "Exact text to find (must be unique)" },
+								newText: { type: "string", description: "Replacement text" },
+							},
+							required: ["oldText", "newText"],
+						},
 					},
 				},
 				required: ["path", "edits"],
 			},
 		},
 		async execute(args): Promise<ToolResult> {
-			const filePath = resolve(cwd, args.path as string)
 			try {
+				const filePath = safePath(cwd, args.path as string)
 				const file = Bun.file(filePath)
-				const exists = await file.exists()
-				if (!exists) {
-					return {
-						content: [{ type: "text", text: `File not found: ${args.path}` }],
-						isError: true,
-					}
+				if (!(await file.exists())) {
+					return { content: [text(`File not found: ${args.path}`)], isError: true }
 				}
 
 				let content = await file.text()
-				const edits = JSON.parse(args.edits as string) as Array<{
-					oldText: string
-					newText: string
-				}>
+				const edits = args.edits as Array<{ oldText: string; newText: string }>
 
+				// Validate all edits before applying any — avoids partial writes on bad input
 				for (const edit of edits) {
-					if (!content.includes(edit.oldText)) {
+					const count = content.split(edit.oldText).length - 1
+					if (count === 0) {
 						return {
-							content: [{ type: "text", text: `oldText not found in ${args.path}` }],
+							content: [text(`oldText not found: "${edit.oldText.slice(0, 80)}…"`)],
 							isError: true,
 						}
 					}
+					// Ambiguous match would replace the wrong occurrence
+					if (count > 1) {
+						return {
+							content: [
+								text(
+									`oldText found ${count} times — add surrounding context to make it unique: "${edit.oldText.slice(0, 60)}…"`,
+								),
+							],
+							isError: true,
+						}
+					}
+				}
+
+				// Apply edits sequentially
+				for (const edit of edits) {
 					content = content.replace(edit.oldText, edit.newText)
 				}
 
 				await Bun.write(filePath, content)
 				return {
-					content: [{ type: "text", text: `Edited ${args.path}` }],
+					content: [
+						text(`Edited ${args.path} (${edits.length} replacement${edits.length > 1 ? "s" : ""})`),
+					],
 					isError: false,
 				}
 			} catch (e) {
 				return {
-					content: [{ type: "text", text: `Error editing file: ${(e as Error).message}` }],
-					isError: true,
-				}
-			}
-		},
-	}
-}
-
-export function bashTool(cwd: string): Tool {
-	return {
-		def: {
-			name: "bash",
-			description: "Execute a shell command.",
-			parameters: {
-				type: "object",
-				properties: {
-					command: { type: "string", description: "Shell command to run" },
-					timeout: { type: "number", description: "Timeout in seconds" },
-				},
-				required: ["command"],
-			},
-		},
-		async execute(args, signal): Promise<ToolResult> {
-			try {
-				const proc = Bun.spawn(["sh", "-c", args.command as string], {
-					cwd,
-					stdout: "pipe",
-					stderr: "pipe",
-					signal,
-				})
-
-				const stdout = await new Response(proc.stdout).text()
-				const stderr = await new Response(proc.stderr).text()
-				const exitCode = await proc.exited
-
-				const output = stdout + (stderr ? `\nSTDERR:\n${stderr}` : "")
-				return {
-					content: [{ type: "text", text: output || `(exit code ${exitCode})` }],
-					isError: exitCode !== 0,
-				}
-			} catch (e) {
-				return {
-					content: [{ type: "text", text: `Error: ${(e as Error).message}` }],
+					content: [text(`Error editing file: ${(e as Error).message}`)],
 					isError: true,
 				}
 			}

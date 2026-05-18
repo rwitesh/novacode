@@ -1,10 +1,14 @@
+/**
+ * Entry point for the novacode CLI.
+ * Handles configuration, CLI flags, and switches between interactive/print modes.
+ */
 import { parseArgs } from "node:util"
 import { Agent } from "./agent/agent.ts"
 import { buildSystemPrompt } from "./agent/prompt.ts"
 import { getProvider, MODELS } from "./config/providers.ts"
 import { configExists, loadConfig } from "./config/store.ts"
 import { runOnboarding } from "./onboarding/wizard.ts"
-import { getDefaultTools } from "./tools/index.ts"
+import { getAllTools } from "./tools/index.ts"
 import { runPrintMode } from "./tui/print.ts"
 import type { Model } from "./types.ts"
 
@@ -93,7 +97,7 @@ Options:
 	}
 
 	const cwd = process.cwd()
-	const tools = getDefaultTools(cwd)
+	const tools = getAllTools(cwd)
 	const system = buildSystemPrompt(cwd, tools)
 
 	const agent = new Agent({

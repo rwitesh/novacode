@@ -1,3 +1,7 @@
+/**
+ * Core agent loop that orchestrates model interaction and tool execution.
+ * Handles turns, tool routing, safety checks, and event streaming.
+ */
 import { stream } from "../provider/registry.ts"
 import { EventStream } from "../provider/stream.ts"
 import type {
@@ -5,12 +9,13 @@ import type {
 	AssistantMsg,
 	Model,
 	Msg,
-	StopReason,
 	Tool,
 	ToolCallPart,
 	ToolResultMsg,
-	Usage,
 } from "../types.ts"
+
+// Safety cap so a misbehaving model can't loop forever
+const MAX_TURNS = 50
 
 export interface LoopCtx {
 	system: string
@@ -18,15 +23,21 @@ export interface LoopCtx {
 	tools: Tool[]
 }
 
+/**
+ * Execution options for the loop, including safety hooks.
+ */
 export interface LoopOpts {
 	model: Model
 	apiKey: string
 	baseUrl: string
+	maxTurns?: number
+	// Intercept tool calls before they execute
 	beforeTool?: (
 		call: ToolCallPart,
 		args: unknown,
 		ctx: LoopCtx,
 	) => Promise<{ block?: boolean; reason?: string } | undefined>
+	// Run logic after a tool completes
 	afterTool?: (call: ToolCallPart, result: ToolResultMsg, ctx: LoopCtx) => Promise<void>
 }
 
@@ -37,6 +48,9 @@ function text(s: string) {
 	return { type: "text" as const, text: s }
 }
 
+/**
+ * Start a long-running agent session that yields an EventStream of updates.
+ */
 export function run(
 	input: string,
 	ctx: LoopCtx,
@@ -45,6 +59,7 @@ export function run(
 ): EventStream<AgentEvent, Msg[]> {
 	const es = new EventStream<AgentEvent, Msg[]>()
 	const out: Msg[] = []
+	const maxTurns = opts.maxTurns ?? MAX_TURNS
 
 	const userMsg: Msg = { role: "user", content: input, ts: Date.now() }
 	ctx.messages.push(userMsg)
@@ -54,10 +69,22 @@ export function run(
 		es.push({ type: "start" })
 
 		try {
-			while (true) {
+			let turns = 0
+			while (turns < maxTurns) {
 				if (signal?.aborted) break
 
+				turns++
 				es.push({ type: "turn" })
+
+				// Warn before hitting the hard limit so the caller can compact/summarize
+				const approxTokens = estimateTokens(ctx.messages)
+				if (approxTokens > opts.model.contextWindow * 0.9) {
+					es.push({
+						type: "text_delta",
+						text: `[warning] Approaching context limit (~${Math.round(approxTokens / 1000)}k / ${Math.round(opts.model.contextWindow / 1000)}k tokens)`,
+					})
+				}
+
 				const reply = await getReply(ctx, opts, signal)
 				out.push(reply)
 
@@ -75,6 +102,8 @@ export function run(
 				// Execute tool calls
 				const results: ToolResultMsg[] = []
 				for (const call of calls) {
+					if (signal?.aborted) break
+
 					const tool = ctx.tools.find((t) => t.def.name === call.name)
 					if (!tool) {
 						const errResult: ToolResultMsg = {
@@ -91,7 +120,7 @@ export function run(
 						continue
 					}
 
-					// beforeTool hook
+					// beforeTool lets callers block dangerous operations (e.g. rm -rf)
 					const blocked = await opts.beforeTool?.(call, call.args, ctx)
 					if (blocked?.block) {
 						const blockResult: ToolResultMsg = {
@@ -128,8 +157,14 @@ export function run(
 
 				es.push({ type: "turn_end", msg: reply, results })
 			}
+
+			if (turns >= maxTurns) {
+				es.push({
+					type: "text_delta",
+					text: `[max turns reached (${maxTurns})]`,
+				})
+			}
 		} catch (e) {
-			// If aborted, finalize gracefully
 			if ((e as Error).name === "AbortError") {
 				es.push({ type: "done", stop: "aborted" })
 				es.finish(out)
@@ -158,45 +193,15 @@ async function getReply(ctx: LoopCtx, opts: LoopOpts, signal?: AbortSignal): Pro
 	})
 
 	const content: AssistantMsg["content"] = []
-	let usage: Usage = { in: 0, out: 0 }
-	let stop: StopReason = "stop"
 
-	// Collect the result first
-	const result = await new Promise<unknown>((resolve) => {
-		const check = async () => {
-			while (!providerStream.isDone) {
-				await new Promise((r) => setTimeout(r, 10))
-			}
-			resolve(providerStream.result)
+	// Accumulate content by consuming provider events — the stream may not
+	// have a usable .result depending on how the registry bridge works
+	for await (const ev of providerStream) {
+		if (ev.type === "text_delta") {
+			content.push(text(ev.text))
+		} else if (ev.type === "tool_call") {
+			content.push(ev.call)
 		}
-		check()
-	})
-
-	// Type assertion since we know the result structure
-	const res = result as
-		| {
-				content: Array<{
-					type: string
-					text?: string
-					id?: string
-					name?: string
-					args?: Record<string, unknown>
-				}>
-				usage: Usage
-				stop: string
-		  }
-		| undefined
-
-	if (res) {
-		for (const c of res.content) {
-			if (c.type === "text" && c.text !== undefined) {
-				content.push(text(c.text))
-			} else if (c.type === "tool_call" && c.id && c.name) {
-				content.push({ type: "tool_call", id: c.id, name: c.name, args: c.args ?? {} })
-			}
-		}
-		usage = res.usage
-		stop = res.stop as StopReason
 	}
 
 	return {
@@ -204,8 +209,24 @@ async function getReply(ctx: LoopCtx, opts: LoopOpts, signal?: AbortSignal): Pro
 		content,
 		model: opts.model.id,
 		provider: opts.model.provider,
-		usage,
-		stop,
+		usage: { in: 0, out: 0 },
+		stop: content.some((c) => c.type === "tool_call") ? "tool_use" : "stop",
 		ts: Date.now(),
 	}
+}
+
+// Rough token estimate: ~4 chars per token for English/code.
+// Real tokenizers vary, but this is close enough for capacity warnings.
+function estimateTokens(messages: Msg[]): number {
+	let chars = 0
+	for (const msg of messages) {
+		if (typeof msg.content === "string") {
+			chars += msg.content.length
+		} else if (Array.isArray(msg.content)) {
+			for (const part of msg.content) {
+				if (part.type === "text") chars += part.text.length
+			}
+		}
+	}
+	return Math.ceil(chars / 4)
 }

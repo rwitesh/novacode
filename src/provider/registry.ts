@@ -1,6 +1,13 @@
+/**
+ * Registry for different model providers (OpenAI, Anthropic, etc.).
+ * Provides a unified streaming interface for the agent loop.
+ */
 import type { AgentEvent, ApiFormat, Model, Msg, ToolDef, Usage } from "../types.ts"
 import { EventStream } from "./stream.ts"
 
+/**
+ * Signature for provider-specific streaming implementations.
+ */
 export type StreamFn = (opts: StreamOpts) => EventStream<StreamEvent, AssistantResult>
 
 export interface StreamOpts {
@@ -31,17 +38,26 @@ export interface AssistantResult {
 	stop: string
 }
 
+// Internal map of registered provider implementations
 const registry = new Map<ApiFormat, StreamFn>()
 
+/**
+ * Register a new provider implementation.
+ */
 export function register(api: ApiFormat, fn: StreamFn): void {
 	registry.set(api, fn)
 }
 
+/**
+ * Initiate a stream from the appropriate provider.
+ * Bridges provider-specific events to the internal AgentEvent format.
+ */
 export function stream(opts: StreamOpts): EventStream<AgentEvent, Msg[]> {
 	const fn = registry.get(opts.model.provider as ApiFormat)
 	if (!fn) throw new Error(`No provider registered for: ${opts.model.provider}`)
 
-	// Bridge the provider StreamEvent → AgentEvent
+	// Bridge layer: converts provider-specific StreamEvents into the agent's
+	// AgentEvent shape, so the loop and TUI only deal with one event type.
 	const providerStream = fn(opts)
 	const agentStream = new EventStream<AgentEvent, Msg[]>()
 	const results: Msg[] = []

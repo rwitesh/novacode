@@ -1,3 +1,7 @@
+/**
+ * Shared type definitions for the entire project.
+ * Includes messaging, tools, providers, and agent loop events.
+ */
 /** Content Parts */
 
 export interface TextPart {
@@ -104,6 +108,9 @@ export interface ToolPropDef {
 	type: string
 	description?: string
 	enum?: string[]
+	items?: ToolPropDef
+	properties?: Record<string, ToolPropDef>
+	required?: string[]
 }
 
 export interface ToolResult {

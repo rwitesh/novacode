@@ -1,6 +1,9 @@
-/**
+/*
  * Push-based async event stream.
- * Used to stream agent events to consumers (TUI, print mode, etc).
+ *
+ * Producers call push()/finish(). Consumers iterate with for-await-of.
+ * Backpressure is implicit: push() resolves immediately; the iterator
+ * awaits the next value only when the consumer asks for it.
  */
 export class EventStream<T, R> {
 	#events: T[] = []
@@ -12,6 +15,7 @@ export class EventStream<T, R> {
 
 	push(event: T): void {
 		if (this.#abort) return
+		// If a consumer is already waiting, deliver directly — skip the queue
 		if (this.#resolve) {
 			const resolve = this.#resolve
 			this.#resolve = undefined
@@ -24,9 +28,9 @@ export class EventStream<T, R> {
 	finish(result: R): void {
 		this.#done = true
 		this.#result = result
-		// Drain any pending events first via waking up the iterator
+		// Wake up a suspended iterator so it can see done=true and exit
 		if (this.#resolve) {
-			// Wake up with undefined, the loop will see done=true
+			// undefined is a sentinel — the iterator loop checks done after waking
 			this.#resolve(undefined as T)
 		}
 		if (this.#doneResolve) {
