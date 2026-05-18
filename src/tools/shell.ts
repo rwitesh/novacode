@@ -35,16 +35,20 @@ export function bashTool(cwd: string): Tool {
 					stderr: "pipe",
 				})
 
+				// Start reading pipes immediately so they don't block the process
+				const stdoutPromise = new Response(proc.stdout).text()
+				const stderrPromise = new Response(proc.stderr).text()
+
 				// Track whether we killed it vs normal exit, so the output reflects the cause
 				let killed = false
 				const timer = setTimeout(() => {
 					killed = true
-					proc.kill()
+					proc.kill(9) // SIGKILL to be more aggressive against orphans
 				}, timeoutMs)
 
 				const onAbort = () => {
 					killed = true
-					proc.kill()
+					proc.kill(9)
 				}
 				signal?.addEventListener("abort", onAbort, { once: true })
 
@@ -52,8 +56,16 @@ export function bashTool(cwd: string): Tool {
 				clearTimeout(timer)
 				signal?.removeEventListener("abort", onAbort)
 
-				const stdout = await new Response(proc.stdout).text()
-				const stderr = await new Response(proc.stderr).text()
+				// After exitCode, pipes should close. We give them a tiny grace period
+				// to avoid hanging on orphans.
+				const stdout = await Promise.race([
+					stdoutPromise,
+					new Promise<string>((r) => setTimeout(() => r(""), 500)),
+				])
+				const stderr = await Promise.race([
+					stderrPromise,
+					new Promise<string>((r) => setTimeout(() => r(""), 500)),
+				])
 
 				// Prevent context-window blowout from noisy commands
 				const MAX = 50_000
@@ -68,7 +80,7 @@ export function bashTool(cwd: string): Tool {
 				if (killed) out += `\n[timeout after ${timeoutMs / 1000}s]`
 				out += `\n[exit ${exitCode}]`
 
-				return { content: [text(out)], isError: exitCode !== 0 }
+				return { content: [text(out)], isError: exitCode !== 0 || killed }
 			} catch (e) {
 				return {
 					content: [text(`Error: ${(e as Error).message}`)],
