@@ -1,4 +1,4 @@
-// ── Content Parts ──────────────────────────────────────────────
+/** Content Parts */
 
 export interface TextPart {
 	type: "text"
@@ -25,7 +25,7 @@ export interface ToolCallPart {
 
 export type ContentPart = TextPart | ImagePart | ThinkPart | ToolCallPart
 
-// ── Messages ──────────────────────────────────────────────────
+/** Messages */
 
 export interface UserMsg {
 	role: "user"
@@ -56,7 +56,7 @@ export interface ToolResultMsg {
 export type Msg = UserMsg | AssistantMsg | ToolResultMsg
 export type StopReason = "stop" | "length" | "tool_use" | "error" | "aborted"
 
-// ── Usage ─────────────────────────────────────────────────────
+/** Usage */
 
 export interface Usage {
 	in: number
@@ -65,7 +65,7 @@ export interface Usage {
 	cacheWrite?: number
 }
 
-// ── Provider ──────────────────────────────────────────────────
+/** Provider */
 
 export type ApiFormat = "openai" | "gemini"
 
@@ -86,7 +86,7 @@ export interface Model {
 	supportsThinking: boolean
 }
 
-// ── Tools ─────────────────────────────────────────────────────
+/** Tools */
 
 export interface ToolDef {
 	name: string
@@ -121,7 +121,7 @@ export interface Tool {
 	execute: ToolExecuteFn
 }
 
-// ── Agent Events ──────────────────────────────────────────────
+/** Agent Events */
 
 export type AgentEvent =
 	| { type: "start" }
@@ -133,7 +133,7 @@ export type AgentEvent =
 	| { type: "turn_end"; msg: AssistantMsg; results: ToolResultMsg[] }
 	| { type: "done"; stop: StopReason }
 
-// ── Config ────────────────────────────────────────────────────
+/** Config */
 
 export interface NovaConfig {
 	provider: string
@@ -141,7 +141,7 @@ export interface NovaConfig {
 	apiKeys: Record<string, string> // provider -> key
 }
 
-// ── Session ───────────────────────────────────────────────────
+/** Session */
 
 export interface SessionEntry {
 	id: string
