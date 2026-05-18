@@ -1,0 +1,10 @@
+# lefthook.yml — git hooks for forge
+
+pre-commit:
+  commands:
+    lint:
+      run: bun run lint
+      stage_fixed: true
+
+    test:
+      run: bun test

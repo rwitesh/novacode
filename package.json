@@ -1,0 +1,31 @@
+{
+	"name": "forge",
+	"version": "0.1.0",
+	"description": "Open-source multi-provider coding agent. Bun-native.",
+	"type": "module",
+	"module": "src/main.ts",
+	"bin": {
+		"forge": "src/main.ts"
+	},
+	"scripts": {
+		"dev": "bun run --watch src/main.ts",
+		"start": "bun run src/main.ts",
+		"test": "bun test",
+		"test:watch": "bun test --watch",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"format": "biome format --write .",
+		"typecheck": "tsc --noEmit",
+		"build": "bun build src/main.ts --compile --outfile forge",
+		"check": "bun run typecheck && bun run lint && bun test"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.0.0",
+		"@types/bun": "latest",
+		"lefthook": "^2.1.6",
+		"typescript": "^5"
+	},
+	"dependencies": {
+		"@clack/prompts": "^0.11.0"
+	}
+}

@@ -1,0 +1,27 @@
+# dependencies
+node_modules
+
+# build output
+forge
+out
+dist
+*.tgz
+
+# test
+coverage
+*.lcov
+
+# sessions
+*.jsonl
+
+# env
+.env
+.env.*
+
+# caches
+.cache
+*.tsbuildinfo
+
+# OS
+.DS_Store
+.idea
