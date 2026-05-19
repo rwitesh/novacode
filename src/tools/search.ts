@@ -7,7 +7,7 @@ import { resolve } from "node:path"
 import { glob } from "glob"
 import type { Tool, ToolResult } from "../types.ts"
 
-const text = (s: string) => ({ type: "text" as const, text: s })
+import { textPart } from "../util.ts"
 
 /**
  * Tool for finding files by glob pattern.
@@ -33,10 +33,10 @@ export function globTool(cwd: string): Tool {
 				const files = await glob(pattern, { cwd: dir })
 				const sliced = files.slice(0, 500)
 				const out = sliced.length > 0 ? sliced.join("\n") : "No files found"
-				return { content: [text(out)], isError: false }
+				return { content: [textPart(out)], isError: false }
 			} catch (e) {
 				return {
-					content: [text(`Error: ${(e as Error).message}`)],
+					content: [textPart(`Error: ${(e as Error).message}`)],
 					isError: true,
 				}
 			}
@@ -87,7 +87,7 @@ export function grepTool(cwd: string): Tool {
 					if (exitCode === 0) {
 						const out = await new Response(proc.stdout).text()
 						const lines = out.split("\n").slice(0, 200).join("\n")
-						return { content: [text(lines || "No matches")], isError: false }
+						return { content: [textPart(lines || "No matches")], isError: false }
 					}
 				} catch {
 					// rg not available, fall through
@@ -111,12 +111,12 @@ export function grepTool(cwd: string): Tool {
 					}
 				}
 				return {
-					content: [text(matches.join("\n") || "No matches")],
+					content: [textPart(matches.join("\n") || "No matches")],
 					isError: false,
 				}
 			} catch (e) {
 				return {
-					content: [text(`Error: ${(e as Error).message}`)],
+					content: [textPart(`Error: ${(e as Error).message}`)],
 					isError: true,
 				}
 			}
@@ -148,10 +148,10 @@ export function lsTool(cwd: string): Tool {
 					const suffix = e.isDirectory() ? "/" : e.isSymbolicLink() ? "@" : ""
 					return `${e.name}${suffix}`
 				})
-				return { content: [text(lines.join("\n") || "(empty)")], isError: false }
+				return { content: [textPart(lines.join("\n") || "(empty)")], isError: false }
 			} catch (e) {
 				return {
-					content: [text(`Error: ${(e as Error).message}`)],
+					content: [textPart(`Error: ${(e as Error).message}`)],
 					isError: true,
 				}
 			}

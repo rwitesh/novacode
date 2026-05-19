@@ -13,6 +13,7 @@ import type {
 	ToolCallPart,
 	ToolResultMsg,
 } from "../types.ts"
+import { estimateTokens, textPart } from "../util.ts"
 
 // Safety cap so a misbehaving model can't loop forever
 const MAX_TURNS = 50
@@ -43,10 +44,6 @@ export interface LoopOpts {
 
 const isToolCall = (c: unknown): c is ToolCallPart =>
 	typeof c === "object" && c !== null && (c as ToolCallPart).type === "tool_call"
-
-function text(s: string) {
-	return { type: "text" as const, text: s }
-}
 
 /**
  * Start a long-running agent session that yields an EventStream of updates.
@@ -110,7 +107,7 @@ export function run(
 							role: "tool_result",
 							callId: call.id,
 							tool: call.name,
-							content: [text(`Unknown tool: ${call.name}`)],
+							content: [textPart(`Unknown tool: ${call.name}`)],
 							isError: true,
 							ts: Date.now(),
 						}
@@ -127,7 +124,7 @@ export function run(
 							role: "tool_result",
 							callId: call.id,
 							tool: call.name,
-							content: [text(blocked.reason ?? "Blocked")],
+							content: [textPart(blocked.reason ?? "Blocked")],
 							isError: true,
 							ts: Date.now(),
 						}
@@ -198,7 +195,7 @@ async function getReply(ctx: LoopCtx, opts: LoopOpts, signal?: AbortSignal): Pro
 	// have a usable .result depending on how the registry bridge works
 	for await (const ev of providerStream) {
 		if (ev.type === "text_delta") {
-			content.push(text(ev.text))
+			content.push(textPart(ev.text))
 		} else if (ev.type === "tool_call") {
 			content.push(ev.call)
 		}
@@ -213,20 +210,4 @@ async function getReply(ctx: LoopCtx, opts: LoopOpts, signal?: AbortSignal): Pro
 		stop: content.some((c) => c.type === "tool_call") ? "tool_use" : "stop",
 		ts: Date.now(),
 	}
-}
-
-// Rough token estimate: ~4 chars per token for English/code.
-// Real tokenizers vary, but this is close enough for capacity warnings.
-function estimateTokens(messages: Msg[]): number {
-	let chars = 0
-	for (const msg of messages) {
-		if (typeof msg.content === "string") {
-			chars += msg.content.length
-		} else if (Array.isArray(msg.content)) {
-			for (const part of msg.content) {
-				if (part.type === "text") chars += part.text.length
-			}
-		}
-	}
-	return Math.ceil(chars / 4)
 }

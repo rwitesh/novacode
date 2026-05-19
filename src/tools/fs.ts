@@ -5,11 +5,10 @@
 import { mkdir } from "node:fs/promises"
 import { dirname, extname, resolve } from "node:path"
 import type { Tool, ToolResult } from "../types.ts"
+import { textPart } from "../util.ts"
 
 // Extensions we return as base64 images instead of text
 const IMAGES = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"])
-
-const text = (s: string) => ({ type: "text" as const, text: s })
 
 function safePath(cwd: string, p: string): string {
 	const abs = resolve(cwd, p)
@@ -38,7 +37,7 @@ export function readTool(cwd: string): Tool {
 				const filePath = safePath(cwd, args.path as string)
 				const file = Bun.file(filePath)
 				if (!(await file.exists())) {
-					return { content: [text(`File not found: ${args.path}`)], isError: true }
+					return { content: [textPart(`File not found: ${args.path}`)], isError: true }
 				}
 
 				// Return images as base64 so the LLM can process them visually
@@ -63,10 +62,10 @@ export function readTool(cwd: string): Tool {
 					.join("\n")
 				const suffix = truncated ? `\n…${lines.length - offset - limit} more lines` : ""
 
-				return { content: [text(numbered + suffix)], isError: false }
+				return { content: [textPart(numbered + suffix)], isError: false }
 			} catch (e) {
 				return {
-					content: [text(`Error reading file: ${(e as Error).message}`)],
+					content: [textPart(`Error reading file: ${(e as Error).message}`)],
 					isError: true,
 				}
 			}
@@ -95,12 +94,12 @@ export function writeTool(cwd: string): Tool {
 				await mkdir(dirname(filePath), { recursive: true })
 				await Bun.write(filePath, content)
 				return {
-					content: [text(`Wrote ${content.length} bytes → ${args.path}`)],
+					content: [textPart(`Wrote ${content.length} bytes → ${args.path}`)],
 					isError: false,
 				}
 			} catch (e) {
 				return {
-					content: [text(`Error writing file: ${(e as Error).message}`)],
+					content: [textPart(`Error writing file: ${(e as Error).message}`)],
 					isError: true,
 				}
 			}
@@ -141,7 +140,7 @@ export function editTool(cwd: string): Tool {
 				const filePath = safePath(cwd, args.path as string)
 				const file = Bun.file(filePath)
 				if (!(await file.exists())) {
-					return { content: [text(`File not found: ${args.path}`)], isError: true }
+					return { content: [textPart(`File not found: ${args.path}`)], isError: true }
 				}
 
 				let content = await file.text()
@@ -152,7 +151,7 @@ export function editTool(cwd: string): Tool {
 					const count = content.split(edit.oldText).length - 1
 					if (count === 0) {
 						return {
-							content: [text(`oldText not found: "${edit.oldText.slice(0, 80)}…"`)],
+							content: [textPart(`oldText not found: "${edit.oldText.slice(0, 80)}…"`)],
 							isError: true,
 						}
 					}
@@ -160,7 +159,7 @@ export function editTool(cwd: string): Tool {
 					if (count > 1) {
 						return {
 							content: [
-								text(
+								textPart(
 									`oldText found ${count} times — add surrounding context to make it unique: "${edit.oldText.slice(0, 60)}…"`,
 								),
 							],
@@ -177,13 +176,15 @@ export function editTool(cwd: string): Tool {
 				await Bun.write(filePath, content)
 				return {
 					content: [
-						text(`Edited ${args.path} (${edits.length} replacement${edits.length > 1 ? "s" : ""})`),
+						textPart(
+							`Edited ${args.path} (${edits.length} replacement${edits.length > 1 ? "s" : ""})`,
+						),
 					],
 					isError: false,
 				}
 			} catch (e) {
 				return {
-					content: [text(`Error editing file: ${(e as Error).message}`)],
+					content: [textPart(`Error editing file: ${(e as Error).message}`)],
 					isError: true,
 				}
 			}

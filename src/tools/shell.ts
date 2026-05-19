@@ -4,7 +4,7 @@
  */
 import type { Tool, ToolResult } from "../types.ts"
 
-const text = (s: string) => ({ type: "text" as const, text: s })
+import { textPart } from "../util.ts"
 
 export function bashTool(cwd: string): Tool {
 	return {
@@ -77,10 +77,10 @@ export function bashTool(cwd: string): Tool {
 				if (killed) out += `\n[timeout after ${timeoutMs / 1000}s]`
 				out += `\n[exit ${exitCode}]`
 
-				return { content: [text(out)], isError: exitCode !== 0 || killed }
+				return { content: [textPart(out)], isError: exitCode !== 0 || killed }
 			} catch (e) {
 				return {
-					content: [text(`Error: ${(e as Error).message}`)],
+					content: [textPart(`Error: ${(e as Error).message}`)],
 					isError: true,
 				}
 			}

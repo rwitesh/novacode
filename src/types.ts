@@ -153,17 +153,12 @@ export interface NovaAuth {
 
 /** Session */
 
-export interface SessionEntry {
+export interface Session {
 	id: string
-	parentId: string | null
-	role: Msg["role"]
-	content: Msg["content"]
-	model?: string
-	provider?: string
-	usage?: Usage
-	stop?: StopReason
-	tool?: string
-	callId?: string
-	isError?: boolean
-	ts: number
+	cwd: string
+	model: string
+	provider: string
+	title: string | null
+	created: number
+	updated: number
 }
