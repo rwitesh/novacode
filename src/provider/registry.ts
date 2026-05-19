@@ -5,9 +5,6 @@
 import type { AgentEvent, ApiFormat, Model, Msg, ToolDef, Usage } from "../types.ts"
 import { EventStream } from "./stream.ts"
 
-/**
- * Signature for provider-specific streaming implementations.
- */
 export type StreamFn = (opts: StreamOpts) => EventStream<StreamEvent, AssistantResult>
 
 export interface StreamOpts {
@@ -41,17 +38,11 @@ export interface AssistantResult {
 // Internal map of registered provider implementations
 const registry = new Map<ApiFormat, StreamFn>()
 
-/**
- * Register a new provider implementation.
- */
 export function register(api: ApiFormat, fn: StreamFn): void {
 	registry.set(api, fn)
 }
 
-/**
- * Initiate a stream from the appropriate provider.
- * Bridges provider-specific events to the internal AgentEvent format.
- */
+// Bridges provider-specific StreamEvents into AgentEvents so the loop and TUI deal with one type.
 export function stream(opts: StreamOpts): EventStream<AgentEvent, Msg[]> {
 	const fn = registry.get(opts.model.provider as ApiFormat)
 	if (!fn) throw new Error(`No provider registered for: ${opts.model.provider}`)
@@ -60,7 +51,6 @@ export function stream(opts: StreamOpts): EventStream<AgentEvent, Msg[]> {
 	// AgentEvent shape, so the loop and TUI only deal with one event type.
 	const providerStream = fn(opts)
 	const agentStream = new EventStream<AgentEvent, Msg[]>()
-	const results: Msg[] = []
 
 	;(async () => {
 		for await (const event of providerStream) {
@@ -80,7 +70,7 @@ export function stream(opts: StreamOpts): EventStream<AgentEvent, Msg[]> {
 				})
 			}
 		}
-		agentStream.finish(results)
+		agentStream.finish([])
 	})()
 
 	return agentStream

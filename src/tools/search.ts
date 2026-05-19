@@ -97,8 +97,7 @@ export function grepTool(cwd: string): Tool {
 				const files = await glob(globFilter || "**/*", { cwd: dir })
 				const re = new RegExp(pattern, "i")
 				const matches: string[] = []
-				for (const rawFile of files.slice(0, 500)) {
-					const file = rawFile as string
+				for (const file of files.slice(0, 500)) {
 					if (signal?.aborted) break
 					try {
 						const content = await Bun.file(resolve(dir, file)).text()

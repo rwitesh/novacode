@@ -6,9 +6,6 @@ import type { Tool, ToolResult } from "../types.ts"
 
 const text = (s: string) => ({ type: "text" as const, text: s })
 
-/**
- * Tool for running bash commands.
- */
 export function bashTool(cwd: string): Tool {
 	return {
 		def: {

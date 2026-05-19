@@ -119,13 +119,11 @@ export const streamOpenAI: StreamFn = (
 					const delta = chunk.choices?.[0]?.delta
 					if (!delta) continue
 
-					// Text content
 					if (delta.content) {
 						es.push({ type: "text_delta", text: delta.content })
 						textParts.push({ type: "text", text: delta.content })
 					}
 
-					// Tool calls
 					if (delta.tool_calls) {
 						for (const tc of delta.tool_calls) {
 							const idx = tc.index ?? 0
@@ -143,7 +141,6 @@ export const streamOpenAI: StreamFn = (
 						}
 					}
 
-					// Usage
 					if (chunk.usage) {
 						usage = {
 							in: chunk.usage.prompt_tokens ?? 0,

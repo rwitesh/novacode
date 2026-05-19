@@ -11,19 +11,12 @@ const IMAGES = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"])
 
 const text = (s: string) => ({ type: "text" as const, text: s })
 
-/**
- * Ensures the target path is within the project root.
- */
 function safePath(cwd: string, p: string): string {
 	const abs = resolve(cwd, p)
 	if (!abs.startsWith(cwd)) throw new Error(`Path outside project: ${p}`)
 	return abs
 }
 
-/**
- * Tool for reading file contents with line numbers and truncation support.
- * Also handles image files by returning them as base64.
- */
 export function readTool(cwd: string): Tool {
 	return {
 		def: {
@@ -81,10 +74,6 @@ export function readTool(cwd: string): Tool {
 	}
 }
 
-/**
- * Tool for writing full content to a file.
- * Automatically creates parent directories if they don't exist.
- */
 export function writeTool(cwd: string): Tool {
 	return {
 		def: {
@@ -119,10 +108,7 @@ export function writeTool(cwd: string): Tool {
 	}
 }
 
-/**
- * Tool for surgical edits using exact text replacement.
- * Requires oldText to be unique to avoid ambiguous replacements.
- */
+// Requires oldText to be unique to avoid ambiguous replacements.
 export function editTool(cwd: string): Tool {
 	return {
 		def: {

@@ -10,7 +10,6 @@ import { configExists, loadAuth, loadConfig } from "./config/store.ts"
 import { runOnboarding } from "./onboarding/wizard.ts"
 import { getAllTools } from "./tools/index.ts"
 import { runPrintMode } from "./tui/print.ts"
-import type { Model } from "./types.ts"
 
 // Ensure providers are registered
 import "./provider/openai.ts"
@@ -31,7 +30,7 @@ function parseCli() {
 	return { flags: values, args: positionals }
 }
 
-async function findModel(modelId: string, providerId?: string): Promise<Model | undefined> {
+function findModel(modelId: string, providerId?: string) {
 	return MODELS.find((m) => {
 		if (providerId) return m.provider === providerId && m.id === modelId
 		return m.id === modelId
@@ -87,7 +86,7 @@ Options:
 		process.exit(1)
 	}
 
-	const model = await findModel(modelId, providerId)
+	const model = findModel(modelId, providerId)
 	if (!model) {
 		console.error(`Unknown model: ${modelId}`)
 		console.error("Available models:")
