@@ -1,4 +1,4 @@
-import type { Msg, TextPart } from "./types.ts"
+import type { ContentPart, Msg, TextPart } from "./types.ts"
 
 // ~4 chars per token for English/code. Close enough for capacity warnings.
 export function estimateTokens(messages: Msg[]): number {
@@ -17,4 +17,20 @@ export function estimateTokens(messages: Msg[]): number {
 
 export function textPart(s: string): TextPart {
 	return { type: "text", text: s }
+}
+
+export function consolidate(parts: ContentPart[]): ContentPart[] {
+	if (parts.length <= 1) return parts
+	const out: ContentPart[] = []
+	for (const p of parts) {
+		const last = out[out.length - 1]
+		if (last?.type === "text" && p.type === "text") {
+			last.text += p.text
+		} else if (last?.type === "thinking" && p.type === "thinking") {
+			last.text += p.text
+		} else {
+			out.push({ ...p })
+		}
+	}
+	return out
 }

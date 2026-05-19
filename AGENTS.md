@@ -49,7 +49,7 @@ src/
 ├── session/             # (TODO) JSONL session persistence + compaction
 ├── onboarding/
 │   └── wizard.ts        # first-run @clack/prompts setup
-├── commands/            # (TODO) /models, /config, etc
+├── commands/            # (TODO) /models, /providers, etc
 └── tui/
     └── print.ts         # print mode (non-interactive)
 ```

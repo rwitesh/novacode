@@ -153,10 +153,7 @@ describe("agent loop", () => {
 			events.push(ev)
 		}
 
-		const done = events.find((e) => e.type === "done")
-		expect(done).toBeDefined()
-		if (done && done.type === "done") {
-			expect(done.stop).toBe("stop")
-		}
+		expect(stream.isDone).toBe(true)
+		expect(stream.result).toBeDefined()
 	})
 })

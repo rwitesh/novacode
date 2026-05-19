@@ -13,7 +13,7 @@ import type {
 	ToolCallPart,
 	ToolResultMsg,
 } from "../types.ts"
-import { estimateTokens, textPart } from "../util.ts"
+import { consolidate, estimateTokens, textPart } from "../util.ts"
 
 // Safety cap so a misbehaving model can't loop forever
 const MAX_TURNS = 50
@@ -61,6 +61,7 @@ export function run(
 				const reply = await getReply(activeCtx, opts, es, signal)
 				out.push(reply)
 				activeCtx = { ...activeCtx, messages: [...activeCtx.messages, reply] }
+				es.push({ type: "assistant_msg", msg: reply })
 
 				if (reply.stop === "error" || reply.stop === "aborted") {
 					es.push({ type: "turn_end", msg: reply, results: [] })
@@ -125,6 +126,7 @@ export function run(
 					results.push(toolMsg)
 					activeCtx = { ...activeCtx, messages: [...activeCtx.messages, toolMsg] }
 					out.push(toolMsg)
+					es.push({ type: "tool_result", callId: call.id, result: toolMsg })
 
 					await opts.afterTool?.(call, toolMsg, activeCtx)
 				}
@@ -140,14 +142,12 @@ export function run(
 			}
 		} catch (e) {
 			if ((e as Error).name === "AbortError") {
-				es.push({ type: "done", stop: "aborted" })
 				es.finish(out)
 				return
 			}
 			throw e
 		}
 
-		es.push({ type: "done", stop: "stop" })
 		es.finish(out)
 	}
 
@@ -196,7 +196,7 @@ async function getReply(
 	if (res) {
 		return {
 			role: "assistant",
-			content: res.content.length > 0 ? res.content : content,
+			content: consolidate(res.content.length > 0 ? res.content : content),
 			model: opts.model.id,
 			provider: opts.model.provider,
 			usage: res.usage,
@@ -207,7 +207,7 @@ async function getReply(
 
 	return {
 		role: "assistant",
-		content,
+		content: consolidate(content),
 		model: opts.model.id,
 		provider: opts.model.provider,
 		usage,

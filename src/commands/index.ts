@@ -3,12 +3,12 @@ import type { Agent } from "../agent/agent.ts"
 import type { SessionStore } from "../session/store.ts"
 import type { Cmd } from "../types.ts"
 import { handleCompact } from "./compact.ts"
-import { handleConfig } from "./config.ts"
 import { handleModels } from "./models.ts"
+import { handleProviders } from "./providers.ts"
 
 export const COMMANDS: Cmd[] = [
 	{ name: "models", desc: "Switch model", aliases: ["model"] },
-	{ name: "config", desc: "Manage providers", aliases: ["cfg"] },
+	{ name: "providers", desc: "Manage providers", aliases: ["prov", "config", "cfg"] },
 	{ name: "compact", desc: "Compact context" },
 	{ name: "help", desc: "Show help" },
 	{ name: "clear", desc: "Clear screen" },
@@ -37,9 +37,11 @@ export async function dispatch(
 		case "models":
 		case "model":
 			return handleModels(args, agent)
+		case "providers":
+		case "prov":
 		case "config":
 		case "cfg":
-			return handleConfig(agent)
+			return handleProviders(agent)
 		case "compact":
 			if (!store || !sessionId) return chalk.red("Session store not available")
 			return handleCompact(agent, store, sessionId)

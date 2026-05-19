@@ -9,6 +9,7 @@ import type {
 	ToolDef,
 	Usage,
 } from "../types.ts"
+import { consolidate } from "../util.ts"
 import { register } from "./registry.ts"
 import { EventStream } from "./stream.ts"
 
@@ -169,7 +170,7 @@ export const streamOpenAI: StreamFn = (
 				}
 			}
 
-			const content: AssistantResult["content"] = [...textParts]
+			const content: AssistantResult["content"] = consolidate([...textParts])
 			for (const [, tc] of currentToolCalls) {
 				content.push({
 					type: "tool_call",

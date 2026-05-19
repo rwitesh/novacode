@@ -28,7 +28,7 @@ export async function handleModels(args: string, agent: Agent): Promise<string> 
 	}
 
 	if (!options.length)
-		return chalk.yellow("No models available. Use /config to add a provider API key.")
+		return chalk.yellow("No models available. Use /providers to add a provider API key.")
 
 	const pick = await clack.select({ message: "Model", options })
 	if (clack.isCancel(pick)) return ""
@@ -62,7 +62,7 @@ async function switchDirect(id: string, agent: Agent): Promise<string> {
 
 	const pk = m.provider
 	if (!auth.apiKeys[pk]) {
-		return chalk.yellow(`No API key configured for ${pk}. Use /config`)
+		return chalk.yellow(`No API key configured for ${pk}. Use /providers`)
 	}
 
 	const selectedProvider = getProvider(pk)

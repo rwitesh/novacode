@@ -136,10 +136,10 @@ export type AgentEvent =
 	| { type: "text_delta"; text: string }
 	| { type: "thinking_delta"; text: string }
 	| { type: "tool_call"; call: ToolCallPart }
+	| { type: "assistant_msg"; msg: AssistantMsg }
 	| { type: "tool_result"; callId: string; result: ToolResultMsg }
 	| { type: "turn_end"; msg: AssistantMsg; results: ToolResultMsg[] }
 	| { type: "usage"; usage: Usage }
-	| { type: "done"; stop: StopReason }
 
 /** Config */
 

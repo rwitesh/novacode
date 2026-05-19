@@ -38,11 +38,11 @@
 - [x] Session list/resume/delete (CLI/TUI commands)
 
 ## Phase 3: Interactive TUI
-- [ ] src/tui/app.tsx — ink-based interactive TUI
-- [ ] Streaming display (text deltas, tool calls, thinking)
-- [ ] src/commands/models.ts — /models picker
-- [ ] src/commands/config.ts — /config manager
-- [ ] History, autocomplete, keybindings
+- [x] src/tui/app.tsx — ink-based interactive TUI
+- [x] Streaming display (text deltas, tool calls, thinking)
+- [x] src/commands/models.ts — /models picker
+- [x] src/commands/providers.ts — /providers manager
+- [x] History, autocomplete, keybindings
 
 ## Phase 4: Polish
 - [ ] Token tracking, cost display

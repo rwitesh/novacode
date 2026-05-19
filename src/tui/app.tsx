@@ -1,18 +1,34 @@
 import chalk from "chalk"
 import { Box, render, Text, useInput } from "ink"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
 import type { SessionStore } from "../session/store.ts"
 import type { Msg } from "../types.ts"
-
 export async function interactive(
 	agent: Agent,
 	store: SessionStore,
 	sessionId: string,
 ): Promise<void> {
-	const { waitUntilExit } = render(<App agent={agent} store={store} sessionId={sessionId} />)
-	await waitUntilExit()
+	// Hide system cursor during session
+	process.stdout.write("\x1B[?25l")
+
+	try {
+		const { waitUntilExit } = render(<App agent={agent} store={store} sessionId={sessionId} />)
+		await waitUntilExit()
+	} finally {
+		// Restore system cursor on exit
+		process.stdout.write("\x1B[?25h")
+	}
+}
+
+function Cursor() {
+	const [visible, setVisible] = useState(true)
+	useEffect(() => {
+		const timer = setInterval(() => setVisible((v) => !v), 530)
+		return () => clearInterval(timer)
+	}, [])
+	return <Text color="green">{visible ? "│" : " "}</Text>
 }
 
 function App({
@@ -30,11 +46,35 @@ function App({
 	const [busy, setBusy] = useState(false)
 	const [input, setInput] = useState("")
 	const [status, setStatus] = useState("")
+	const [selCmdIdx, setSelCmdIdx] = useState(0)
+	const [cmdRunning, setCmdRunning] = useState(false)
 	const history = useRef<string[]>([])
 	const hIdx = useRef(-1)
 	const abortCtrl = useRef<AbortController | null>(null)
 
+	const isTypingCmd = input.startsWith("/") && !input.includes(" ")
+	const suggestions = isTypingCmd
+		? COMMANDS.filter(
+				(c) =>
+					c.name.startsWith(input.slice(1).toLowerCase()) ||
+					c.aliases?.some((a) => a.startsWith(input.slice(1).toLowerCase())),
+			)
+		: []
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset selection on input change
+	useEffect(() => {
+		setSelCmdIdx(0)
+	}, [input])
+
+	useEffect(() => {
+		if (!cmdRunning) {
+			process.stdout.write("\x1B[?25l")
+		}
+	}, [cmdRunning])
+
 	useInput((ch, key) => {
+		if (cmdRunning) return
+
 		if (key.escape) {
 			if (abortCtrl.current) {
 				abortCtrl.current.abort()
@@ -43,6 +83,10 @@ function App({
 			return
 		}
 		if (key.upArrow) {
+			if (isTypingCmd && suggestions.length > 0) {
+				setSelCmdIdx((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1))
+				return
+			}
 			if (history.current.length > 0) {
 				hIdx.current = Math.min(hIdx.current + 1, history.current.length - 1)
 				setInput(history.current[hIdx.current] ?? "")
@@ -50,18 +94,18 @@ function App({
 			return
 		}
 		if (key.downArrow) {
+			if (isTypingCmd && suggestions.length > 0) {
+				setSelCmdIdx((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0))
+				return
+			}
 			hIdx.current = Math.max(hIdx.current - 1, -1)
 			setInput(hIdx.current >= 0 ? (history.current[hIdx.current] ?? "") : "")
 			return
 		}
 		if (key.tab) {
-			if (input.startsWith("/") && !input.includes(" ")) {
-				const cmd = input.slice(1).toLowerCase()
-				const matches = COMMANDS.filter(
-					(c) => c.name.startsWith(cmd) || c.aliases?.some((a) => a.startsWith(cmd)),
-				)
-				const [match] = matches
-				if (matches.length === 1 && match) {
+			if (isTypingCmd && suggestions.length > 0) {
+				const match = suggestions[selCmdIdx]
+				if (match) {
 					setInput(`/${match.name} `)
 				}
 			}
@@ -75,28 +119,76 @@ function App({
 			return
 		}
 
-		const line = input.trim()
+		let line = input.trim()
 		if (!line) return
+
+		if (isTypingCmd && suggestions.length > 0) {
+			const match = suggestions[selCmdIdx]
+			if (match) {
+				line = `/${match.name}`
+			}
+		}
+
 		setInput("")
 		history.current.unshift(line)
 		hIdx.current = -1
 
 		if (line.startsWith("/")) {
+			const cmdName = line.slice(1).split(" ")[0]?.toLowerCase() ?? ""
+			const isInteractive =
+				["providers", "prov", "config", "cfg", "models", "model"].includes(cmdName) &&
+				!line.includes(" ")
+
+			if (isInteractive) {
+				setCmdRunning(true)
+				// Small delay to let Ink clear
+				setTimeout(() => {
+					dispatch(line, agent, store, sessionId).then((r) => {
+						process.stdin.setRawMode?.(true)
+						setCmdRunning(false)
+						if (r) {
+							setMsgs((prev) => {
+								const updated: Msg[] = [
+									...prev,
+									{
+										role: "assistant",
+										content: [{ type: "text", text: r }],
+										model: "system",
+										provider: "system",
+										usage: { in: 0, out: 0 },
+										stop: "stop",
+										ts: Date.now(),
+									},
+								]
+								agent.setMessages(updated)
+								return updated
+							})
+						}
+					})
+				}, 50)
+				return
+			}
+
 			// Slash commands
 			dispatch(line, agent, store, sessionId).then((r) => {
 				if (r) {
-					setMsgs((prev) => [
-						...prev,
-						{
-							role: "assistant",
-							content: [{ type: "text", text: r }],
-							model: "system",
-							provider: "system",
-							usage: { in: 0, out: 0, total: 0 },
-							stop: "stop",
-							ts: Date.now(),
-						},
-					])
+					setMsgs((prev) => {
+						const updated: Msg[] = [
+							...prev,
+							{
+								role: "assistant",
+								content: [{ type: "text", text: r }],
+								model: "system",
+								provider: "system",
+								usage: { in: 0, out: 0 },
+								stop: "stop",
+								ts: Date.now(),
+							},
+						]
+
+						agent.setMessages(updated)
+						return updated
+					})
 				}
 			})
 			return
@@ -118,111 +210,131 @@ function App({
 					case "text_delta":
 						if (ev.text) setStream((prev) => prev + ev.text)
 						break
-					case "turn_end":
-						if (ev.msg) {
-							setStream("")
-							setMsgs((prev) => [...prev, ev.msg, ...ev.results])
-							// Store assistant msg then its results to preserve causal order
-							store.append(sessionId, ev.msg)
-							for (const r of ev.results) {
-								store.append(sessionId, r)
-							}
-						}
-						setStatus("")
+					case "assistant_msg":
+						setStream("")
+						setMsgs((prev) => {
+							const updated = [...prev, ev.msg]
+							agent.setMessages(updated)
+							return updated
+						})
+						store.append(sessionId, ev.msg)
 						break
 					case "tool_call":
 						setStatus(chalk.dim(`⏳ ${ev.call.name}…`))
 						break
 					case "tool_result":
+						setMsgs((prev) => {
+							const updated = [...prev, ev.result]
+							agent.setMessages(updated)
+							return updated
+						})
+						store.append(sessionId, ev.result)
 						setStatus(
 							ev.result.isError
 								? chalk.red(`✗ ${ev.result.tool}`)
 								: chalk.green(`✓ ${ev.result.tool}`),
 						)
-						// UI updated, store will be updated at turn_end
 						break
-					case "done":
-						setBusy(false)
+					case "turn_end":
+						setStatus("")
 						break
 				}
 			}
 			abortCtrl.current = null
 			setBusy(false)
+			setStatus("")
+			setStream("")
 		})().catch((err) => {
-			setStream((prev) => prev + chalk.red(`\nError: ${err.message}`))
+			const errMsg: Msg = {
+				role: "assistant",
+				model: "system",
+				provider: "system",
+				content: [{ type: "text", text: chalk.red(`Error: ${err.message}`) }],
+				usage: { in: 0, out: 0 },
+				stop: "error",
+				ts: Date.now(),
+			}
+			setMsgs((prev) => [...prev, errMsg])
 			setBusy(false)
 		})
 
 		// Record user msg immediately
 		const userMsg: Msg = { role: "user", content: line, ts: Date.now() }
-		setMsgs((prev) => [...prev, userMsg])
+		setMsgs((prev) => {
+			const updated = [...prev, userMsg]
+			agent.setMessages(updated)
+			return updated
+		})
 		store.append(sessionId, userMsg)
 	})
 
-	const isTypingCmd = input.startsWith("/") && !input.includes(" ")
-	const suggestions = isTypingCmd
-		? COMMANDS.filter(
-				(c) =>
-					c.name.startsWith(input.slice(1).toLowerCase()) ||
-					c.aliases?.some((a) => a.startsWith(input.slice(1).toLowerCase())),
-			)
-		: []
+	if (cmdRunning) return null
 
 	return (
-		<Box flexDirection="column" padding={1}>
+		<Box flexDirection="column" paddingX={1} paddingTop={1}>
 			{/* Header */}
-			<Box marginBottom={1}>
+			<Box>
 				<Text bold color="cyan">
 					⚡ novacode
 				</Text>
 				<Text dimColor> │ {agent.model.id}</Text>
-				<Text dimColor> │ {busy ? chalk.yellow("working…") : chalk.green("ready")}</Text>
 			</Box>
 
 			{/* Messages */}
-			{msgs.map((m, i) => (
-				// biome-ignore lint/suspicious/noArrayIndexKey: stable order
-				<Message key={`${m.ts}-${i}`} msg={m} />
-			))}
+			<Box flexDirection="column">
+				{msgs.map((m, i) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: stable order
+					<Message key={`${m.ts}-${i}`} msg={m} />
+				))}
+			</Box>
 
 			{/* Streaming */}
 			{stream && (
-				<Box flexDirection="column">
-					<Text color="magenta">{stream}</Text>
-					<Text dimColor>▎</Text>
-				</Box>
-			)}
-
-			{/* Status */}
-			{status && (
 				<Box>
-					<Text>{status}</Text>
+					<Text color="magenta">{stream}</Text>
+					{!input && <Cursor />}
 				</Box>
 			)}
 
-			{/* Input */}
-			<Box marginTop={1}>
-				<Text bold color="green">
-					{"> "}{" "}
-				</Text>
-				<Text>{input}</Text>
-				<Text dimColor>▎</Text>
-			</Box>
-
-			{/* Footer / Suggestions */}
+			{/* Input & Footer */}
 			<Box flexDirection="column">
-				{suggestions.length > 0 ? (
-					<Box flexDirection="column" marginLeft={2}>
-						{suggestions.map((s) => (
-							<Box key={s.name}>
-								<Text color="yellow">/{s.name.padEnd(8)}</Text>
-								<Text dimColor>{s.desc}</Text>
+				<Box>
+					<Text bold color="green">
+						{"> "}
+					</Text>
+					<Text>{input}</Text>
+					{!busy && <Cursor />}
+				</Box>
+
+				{/* Dynamic Status / Info Line */}
+				<Box justifyContent="space-between">
+					<Box>
+						{suggestions.length > 0 ? (
+							<Box flexDirection="column" marginLeft={2}>
+								{suggestions.map((s, i) => (
+									<Box key={s.name}>
+										<Text
+											color={i === selCmdIdx ? "black" : "yellow"}
+											backgroundColor={i === selCmdIdx ? "yellow" : undefined}
+										>
+											/{s.name.padEnd(10)}
+										</Text>
+										<Text dimColor> {s.desc}</Text>
+									</Box>
+								))}
 							</Box>
-						))}
+						) : (
+							<Text dimColor>
+								{busy ? chalk.yellow("working…") : "Enter to send · /help for commands"}
+							</Text>
+						)}
 					</Box>
-				) : (
-					<Text dimColor>{busy ? "Esc stop" : "Enter send · /help commands"}</Text>
-				)}
+
+					<Box>
+						<Text>{status}</Text>
+						{busy && <Text dimColor> │ {chalk.dim("Esc to stop")}</Text>}
+					</Box>
+				</Box>
 			</Box>
 		</Box>
 	)
@@ -244,6 +356,16 @@ function Message({ msg }: { msg: Msg }) {
 		)
 	}
 	if (msg.role === "assistant") {
+		if (msg.model === "system") {
+			return (
+				<Box marginBottom={1}>
+					{msg.content.map((c, i) =>
+						// biome-ignore lint/suspicious/noArrayIndexKey: stable turn content
+						c.type === "text" ? <Text key={i}>{c.text}</Text> : null,
+					)}
+				</Box>
+			)
+		}
 		return (
 			<Box flexDirection="column" marginBottom={1}>
 				<Text bold color="magenta">

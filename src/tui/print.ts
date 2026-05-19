@@ -13,15 +13,19 @@ export async function runPrintMode(
 		if (signal?.aborted) break
 		if (event.type === "text_delta") {
 			output += event.text
+			process.stdout.write(event.text)
 		}
 		if (event.type === "tool_call") {
-			process.stderr.write(`[tool: ${event.call.name}]\n`)
+			process.stderr.write(`\n[tool: ${event.call.name}]\n`)
+		}
+		if (event.type === "tool_result") {
+			const status = event.result.isError ? "✗" : "✓"
+			process.stderr.write(`[${status} ${event.result.tool}]\n`)
 		}
 	}
 
-	if (output) {
-		process.stdout.write(output)
-		if (!output.endsWith("\n")) process.stdout.write("\n")
+	if (output && !output.endsWith("\n")) {
+		process.stdout.write("\n")
 	}
 
 	return stream.result
