@@ -7,6 +7,7 @@
 export interface TextPart {
 	type: "text"
 	text: string
+	signature?: string
 }
 
 export interface ImagePart {
@@ -18,6 +19,7 @@ export interface ImagePart {
 export interface ThinkPart {
 	type: "thinking"
 	text: string
+	signature?: string
 }
 
 export interface ToolCallPart {
@@ -25,6 +27,7 @@ export interface ToolCallPart {
 	id: string
 	name: string
 	args: Record<string, unknown>
+	signature?: string
 }
 
 export type ContentPart = TextPart | ImagePart | ThinkPart | ToolCallPart

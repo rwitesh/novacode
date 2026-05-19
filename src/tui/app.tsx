@@ -1,5 +1,5 @@
 import chalk from "chalk"
-import { Box, render, Text, useInput } from "ink"
+import { Box, render, Static, Text, useInput } from "ink"
 import { useEffect, useRef, useState } from "react"
 import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
@@ -43,6 +43,7 @@ function App({
 	const [agent, _setAgent] = useState(initialAgent)
 	const [msgs, setMsgs] = useState<Msg[]>(initialAgent.messages)
 	const [stream, setStream] = useState("")
+	const [thinkStream, setThinkStream] = useState("")
 	const [busy, setBusy] = useState(false)
 	const [input, setInput] = useState("")
 	const [status, setStatus] = useState("")
@@ -205,13 +206,18 @@ function App({
 					case "start":
 						setBusy(true)
 						setStream("")
+						setThinkStream("")
 						setStatus("")
 						break
 					case "text_delta":
 						if (ev.text) setStream((prev) => prev + ev.text)
 						break
+					case "thinking_delta":
+						if (ev.text) setThinkStream((prev) => prev + ev.text)
+						break
 					case "assistant_msg":
 						setStream("")
+						setThinkStream("")
 						setMsgs((prev) => {
 							const updated = [...prev, ev.msg]
 							agent.setMessages(updated)
@@ -244,6 +250,7 @@ function App({
 			setBusy(false)
 			setStatus("")
 			setStream("")
+			setThinkStream("")
 		})().catch((err) => {
 			const errMsg: Msg = {
 				role: "assistant",
@@ -277,26 +284,32 @@ function App({
 				<Text bold color="cyan">
 					⚡ novacode
 				</Text>
-				<Text dimColor> │ {agent.model.id}</Text>
 			</Box>
 
-			{/* Messages */}
-			<Box flexDirection="column">
-				{msgs.map((m, i) => (
-					// biome-ignore lint/suspicious/noArrayIndexKey: stable order
-					<Message key={`${m.ts}-${i}`} msg={m} />
-				))}
-			</Box>
+			{/* Messages - pushed to scrollback as they finish */}
+			<Static items={msgs}>{(m, i) => <Message key={`${m.ts}-${i}`} msg={m} />}</Static>
 
-			{/* Streaming */}
-			{stream && (
-				<Box>
-					<Text color="magenta">{stream}</Text>
-					{!input && <Cursor />}
+			{/* Streaming (Live) */}
+			{(stream || thinkStream) && (
+				<Box flexDirection="column" marginBottom={1}>
+					<Text bold color="magenta">
+						novacode
+					</Text>
+					{thinkStream && (
+						<Text dimColor italic>
+							{thinkStream}
+						</Text>
+					)}
+					{stream && (
+						<Box>
+							<Text>{stream}</Text>
+							{!input && <Cursor />}
+						</Box>
+					)}
 				</Box>
 			)}
 
-			{/* Input & Footer */}
+			{/* Input & Footer (Live) */}
 			<Box flexDirection="column">
 				<Box>
 					<Text bold color="green">
@@ -332,6 +345,10 @@ function App({
 
 					<Box>
 						<Text>{status}</Text>
+						<Text dimColor>
+							{status ? " │ " : ""}
+							{agent.model.id}
+						</Text>
 						{busy && <Text dimColor> │ {chalk.dim("Esc to stop")}</Text>}
 					</Box>
 				</Box>

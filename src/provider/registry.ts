@@ -47,11 +47,9 @@ export function stream(opts: StreamOpts): EventStream<AgentEvent, AssistantResul
 
 		const res = providerStream.result
 		if (res) {
-			agentStream.push({ type: "done", stop: res.stop })
 			agentStream.finish(res)
 		} else {
 			// Fallback for unexpected closure
-			agentStream.push({ type: "done", stop: "stop" })
 			agentStream.finish({ content: [], usage: { in: 0, out: 0 }, stop: "stop" })
 		}
 	})()
