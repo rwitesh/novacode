@@ -2,7 +2,8 @@
 node_modules
 
 # build output
-forge
+novacode
+*.bun-build
 out
 dist
 *.tgz

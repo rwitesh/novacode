@@ -63,6 +63,16 @@ Options:
 		process.exit(0)
 	}
 
+	const controller = new AbortController()
+
+	const onSignal = () => {
+		controller.abort()
+		process.stderr.write("\nAborted.\n")
+		process.exitCode = 130
+	}
+	process.on("SIGINT", onSignal)
+	process.on("SIGTERM", onSignal)
+
 	// First-run onboarding
 	const config = await ((await configExists()) ? loadConfig() : runOnboarding())
 	const auth = await loadAuth()
@@ -111,7 +121,7 @@ Options:
 	// Print mode: prompt provided as arg
 	const prompt = args.join(" ")
 	if (prompt) {
-		await runPrintMode(agent, prompt)
+		await runPrintMode(agent, prompt, controller.signal)
 		return
 	}
 

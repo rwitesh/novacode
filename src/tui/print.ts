@@ -1,10 +1,15 @@
 import type { Agent } from "../agent/agent.ts"
 
-export async function runPrintMode(agent: Agent, prompt: string): Promise<void> {
-	const stream = agent.prompt(prompt)
+export async function runPrintMode(
+	agent: Agent,
+	prompt: string,
+	signal?: AbortSignal,
+): Promise<void> {
+	const stream = agent.prompt(prompt, signal)
 	let output = ""
 
 	for await (const event of stream) {
+		if (signal?.aborted) break
 		if (event.type === "text_delta") {
 			output += event.text
 		}

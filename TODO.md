@@ -50,6 +50,31 @@
 - [ ] README.md
 - [ ] CI (GitHub Actions)
 
+## Phase 5: CLI Best Practices
+
+### High Priority
+- [x] LICENSE file
+- [x] Add `format` to lefthook pre-commit hook
+- [x] CI: add `bun run build` step
+- [x] SIGINT/SIGTERM graceful shutdown handling
+- [x] `engines` field in package.json to pin Bun version
+
+### Medium Priority
+- [ ] CHANGELOG.md (Keep a Changelog format)
+- [ ] `.editorconfig` (tabs, LF, trailing newline)
+- [ ] `--verbose` / `--debug` flag for diagnostics
+- [ ] Config validation on load (required fields, clear error messages)
+- [ ] `NO_COLOR` env support (no-color.org standard)
+- [ ] CONTRIBUTING.md (branch naming, PR process, `bun run check`)
+- [ ] Dependabot or Renovate config
+
+### Nice to Have
+- [ ] Shell completions (`novacode completions bash/zsh/fish`)
+- [ ] Release workflow (multi-platform binary builds: linux/amd64, linux/arm64, macOS/arm64)
+- [ ] Auto-updater / version check on startup
+- [ ] Man page or long-form `--help` with examples
+- [ ] Logging to stderr, output to stdout (pipe-friendly)
+
 ## Backlog (open for later)
 - [ ] Additional providers (Gemini, DeepSeek, OpenAI) — architecture supports them, implement when needed
 - [ ] Key verification in onboarding (test key before saving)
