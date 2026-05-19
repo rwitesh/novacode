@@ -2,7 +2,7 @@ import chalk from "chalk"
 import { Box, render, Text, useInput } from "ink"
 import { useRef, useState } from "react"
 import type { Agent } from "../agent/agent.ts"
-import { dispatch } from "../commands/index.ts"
+import { COMMANDS, dispatch } from "../commands/index.ts"
 import type { SessionStore } from "../session/store.ts"
 import type { Msg } from "../types.ts"
 
@@ -11,7 +11,8 @@ export async function interactive(
 	store: SessionStore,
 	sessionId: string,
 ): Promise<void> {
-	render(<App agent={agent} store={store} sessionId={sessionId} />)
+	const { waitUntilExit } = render(<App agent={agent} store={store} sessionId={sessionId} />)
+	await waitUntilExit()
 }
 
 function App({
@@ -51,6 +52,19 @@ function App({
 		if (key.downArrow) {
 			hIdx.current = Math.max(hIdx.current - 1, -1)
 			setInput(hIdx.current >= 0 ? (history.current[hIdx.current] ?? "") : "")
+			return
+		}
+		if (key.tab) {
+			if (input.startsWith("/") && !input.includes(" ")) {
+				const cmd = input.slice(1).toLowerCase()
+				const matches = COMMANDS.filter(
+					(c) => c.name.startsWith(cmd) || c.aliases?.some((a) => a.startsWith(cmd)),
+				)
+				const [match] = matches
+				if (matches.length === 1 && match) {
+					setInput(`/${match.name} `)
+				}
+			}
 			return
 		}
 		if (!key.return) {
@@ -145,6 +159,15 @@ function App({
 		store.append(sessionId, userMsg)
 	})
 
+	const isTypingCmd = input.startsWith("/") && !input.includes(" ")
+	const suggestions = isTypingCmd
+		? COMMANDS.filter(
+				(c) =>
+					c.name.startsWith(input.slice(1).toLowerCase()) ||
+					c.aliases?.some((a) => a.startsWith(input.slice(1).toLowerCase())),
+			)
+		: []
+
 	return (
 		<Box flexDirection="column" padding={1}>
 			{/* Header */}
@@ -186,9 +209,20 @@ function App({
 				<Text dimColor>▎</Text>
 			</Box>
 
-			{/* Footer */}
+			{/* Footer / Suggestions */}
 			<Box>
-				<Text dimColor>{busy ? "Esc stop" : "Enter send · /help commands"}</Text>
+				{suggestions.length > 0 ? (
+					<Box marginLeft={2}>
+						{suggestions.map((s) => (
+							<Box key={s.name} marginRight={2}>
+								<Text color="yellow">/{s.name}</Text>
+								<Text dimColor> {s.desc}</Text>
+							</Box>
+						))}
+					</Box>
+				) : (
+					<Text dimColor>{busy ? "Esc stop" : "Enter send · /help commands"}</Text>
+				)}
 			</Box>
 		</Box>
 	)

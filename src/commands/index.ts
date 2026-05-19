@@ -1,18 +1,23 @@
 import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
 import type { SessionStore } from "../session/store.ts"
+import type { Cmd } from "../types.ts"
 import { handleCompact } from "./compact.ts"
 import { handleConfig } from "./config.ts"
 import { handleModels } from "./models.ts"
 
+export const COMMANDS: Cmd[] = [
+	{ name: "models", desc: "Switch model", aliases: ["model"] },
+	{ name: "config", desc: "Manage providers", aliases: ["cfg"] },
+	{ name: "compact", desc: "Compact context" },
+	{ name: "help", desc: "Show help" },
+	{ name: "clear", desc: "Clear screen" },
+	{ name: "quit", desc: "Exit (Ctrl+D)", aliases: ["exit"] },
+]
+
 const HELP = `
 ${chalk.bold("Commands:")}
-  /models [id]    Switch model
-  /config         Manage providers
-  /compact        Compact context
-  /help           This help
-  /clear          Clear screen
-  /quit           Exit (Ctrl+D)
+${COMMANDS.map((c) => `  /${c.name.padEnd(12)} ${c.desc}`).join("\n")}
 
 ${chalk.dim("Keys:")}
   Esc             Abort

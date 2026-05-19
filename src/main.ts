@@ -78,7 +78,7 @@ Options:
 	const onSignal = () => {
 		controller.abort()
 		process.stderr.write("\nAborted.\n")
-		process.exitCode = 130
+		process.exit(130)
 	}
 	process.on("SIGINT", onSignal)
 	process.on("SIGTERM", onSignal)
@@ -155,6 +155,8 @@ Options:
 	}
 
 	// Interactive TUI mode (Phase 3)
+	process.off("SIGINT", onSignal)
+	process.off("SIGTERM", onSignal)
 	const { interactive } = await import("./tui/app.tsx")
 	await interactive(agent, store, sessionId)
 }

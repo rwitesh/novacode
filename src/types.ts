@@ -219,3 +219,11 @@ export interface AssistantResult {
 	usage: Usage
 	stop: StopReason
 }
+
+/** Commands */
+
+export interface Cmd {
+	name: string
+	desc: string
+	aliases?: string[]
+}
