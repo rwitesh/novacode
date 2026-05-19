@@ -14,16 +14,16 @@ const mkdtemp = async () => {
 	await mkdir(dir, { recursive: true })
 	return dir
 }
-
 describe("tool registration", () => {
-	it("getAllTools returns 7 tools", () => {
+	it("getAllTools returns 8 tools", () => {
 		const tools = getAllTools("/tmp")
-		expect(tools).toHaveLength(7)
+		expect(tools).toHaveLength(8)
 		expect(tools.map((t) => t.def.name)).toEqual([
 			"read",
 			"write",
 			"edit",
 			"bash",
+			"find",
 			"glob",
 			"grep",
 			"ls",

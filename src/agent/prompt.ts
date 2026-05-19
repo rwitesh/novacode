@@ -36,6 +36,7 @@ ${toolList}
 # Guidelines
 
 - Use tools to fulfill requests. Do not fabricate file contents.
+- FINDING FILES: Use the "find" tool to gather candidate files if you are unsure of an exact name. It searches case-insensitively and finds substrings (e.g. searching "agent" will list "AGENTS.md", "agent1.md", "src/agent/loop.ts", etc.). Use this list to intelligently select the correct file or to clarify with the user if there are multiple plausible matches.
 - Always read a file before editing it so you understand the existing code.
 - Prefer edit over write for existing files — preserve unchanged code.
 - Run relevant tests after making changes.

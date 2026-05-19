@@ -22,6 +22,7 @@ export function globTool(cwd: string): Tool {
 				properties: {
 					pattern: { type: "string", description: "Glob pattern (e.g. **/*.ts)" },
 					path: { type: "string", description: "Directory to search in (default .)" },
+					nocase: { type: "boolean", description: "Case-insensitive search (default false)" },
 				},
 				required: ["pattern"],
 			},
@@ -30,9 +31,52 @@ export function globTool(cwd: string): Tool {
 			try {
 				const dir = resolve(cwd, (args.path as string) || ".")
 				const pattern = args.pattern as string
-				const files = await glob(pattern, { cwd: dir })
+				const nocase = !!args.nocase
+				const files = await glob(pattern, { cwd: dir, nocase })
 				const sliced = files.slice(0, 500)
 				const out = sliced.length > 0 ? sliced.join("\n") : "No files found"
+				return { content: [textPart(out)], isError: false }
+			} catch (e) {
+				return {
+					content: [textPart(`Error: ${(e as Error).message}`)],
+					isError: true,
+				}
+			}
+		},
+	}
+}
+
+/**
+ * Tool for finding files by name (fuzzy/case-insensitive).
+ */
+export function findTool(cwd: string): Tool {
+	return {
+		def: {
+			name: "find",
+			description:
+				"Find files by name. Useful for finding files with typos or case-sensitivity issues.",
+			parameters: {
+				type: "object",
+				properties: {
+					query: { type: "string", description: "Filename or substring to search for" },
+					path: { type: "string", description: "Directory to search in (default .)" },
+				},
+				required: ["query"],
+			},
+		},
+		async execute(args): Promise<ToolResult> {
+			try {
+				const dir = resolve(cwd, (args.path as string) || ".")
+				const query = (args.query as string).toLowerCase()
+				const files = await glob("**/*", { cwd: dir, nodir: true })
+
+				const matches = files.filter((f) => {
+					const lf = f.toLowerCase().split("/").pop() || ""
+					return lf.includes(query)
+				})
+
+				const sliced = matches.slice(0, 200)
+				const out = sliced.length > 0 ? sliced.join("\n") : "No matches found"
 				return { content: [textPart(out)], isError: false }
 			} catch (e) {
 				return {
