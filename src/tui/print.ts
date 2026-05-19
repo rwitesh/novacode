@@ -1,3 +1,4 @@
+import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
 import type { Msg } from "../types.ts"
 
@@ -16,11 +17,11 @@ export async function runPrintMode(
 			process.stdout.write(event.text)
 		}
 		if (event.type === "tool_call") {
-			process.stderr.write(`\n[tool: ${event.call.name}]\n`)
+			process.stderr.write(chalk.dim(`\n  ⏳ ${event.call.name}…\n`))
 		}
 		if (event.type === "tool_result") {
-			const status = event.result.isError ? "✗" : "✓"
-			process.stderr.write(`[${status} ${event.result.tool}]\n`)
+			const status = event.result.isError ? chalk.red("✗") : chalk.green("✓")
+			process.stderr.write(`  ${status} ${chalk.dim(event.result.tool)}\n`)
 		}
 	}
 

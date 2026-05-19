@@ -12,6 +12,7 @@ export async function interactive(
 ): Promise<void> {
 	// Hide system cursor during session
 	process.stdout.write("\x1B[?25l")
+	process.stdout.write(chalk.bold.cyan("⚡ novacode\n"))
 
 	try {
 		const { waitUntilExit } = render(<App agent={agent} store={store} sessionId={sessionId} />)
@@ -235,11 +236,24 @@ function App({
 							return updated
 						})
 						store.append(sessionId, ev.result)
-						setStatus(
-							ev.result.isError
-								? chalk.red(`✗ ${ev.result.tool}`)
-								: chalk.green(`✓ ${ev.result.tool}`),
-						)
+						{
+							const args = ev.args
+								? `(${Object.values(ev.args)
+										.map((v) =>
+											typeof v === "string"
+												? v.length > 20
+													? `${v.slice(0, 20)}…`
+													: v
+												: JSON.stringify(v),
+										)
+										.join(", ")})`
+								: ""
+							setStatus(
+								ev.result.isError
+									? chalk.red(`✗ ${ev.result.tool}${args}`)
+									: chalk.green(`✓ ${ev.result.tool}${args}`),
+							)
+						}
 						break
 					case "turn_end":
 						setStatus("")
@@ -278,23 +292,15 @@ function App({
 	if (cmdRunning) return null
 
 	return (
-		<Box flexDirection="column" paddingX={1} paddingTop={1}>
-			{/* Header */}
-			<Box>
-				<Text bold color="cyan">
-					⚡ novacode
-				</Text>
-			</Box>
-
+		<Box flexDirection="column" paddingX={1}>
 			{/* Messages - pushed to scrollback as they finish */}
-			<Static items={msgs}>{(m, i) => <Message key={`${m.ts}-${i}`} msg={m} />}</Static>
+			<Static items={msgs}>
+				{(m, i) => <Message key={`${m.ts}-${i}`} msg={m} isFirst={i === 0} />}
+			</Static>
 
 			{/* Streaming (Live) */}
 			{(stream || thinkStream) && (
-				<Box flexDirection="column" marginBottom={1}>
-					<Text bold color="magenta">
-						novacode
-					</Text>
+				<Box flexDirection="column">
 					{thinkStream && (
 						<Text dimColor italic>
 							{thinkStream}
@@ -310,7 +316,7 @@ function App({
 			)}
 
 			{/* Input & Footer (Live) */}
-			<Box flexDirection="column">
+			<Box flexDirection="column" marginTop={msgs.length > 0 ? 1 : 0}>
 				<Box>
 					<Text bold color="green">
 						{"> "}
@@ -357,12 +363,12 @@ function App({
 	)
 }
 
-function Message({ msg }: { msg: Msg }) {
+function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
 	if (msg.role === "user") {
 		return (
-			<Box flexDirection="column" marginBottom={1}>
-				<Text bold color="cyan">
-					You
+			<Box marginTop={isFirst ? 0 : 1}>
+				<Text bold color="green">
+					{"> "}
 				</Text>
 				<Text>
 					{typeof msg.content === "string"
@@ -372,10 +378,11 @@ function Message({ msg }: { msg: Msg }) {
 			</Box>
 		)
 	}
+
 	if (msg.role === "assistant") {
 		if (msg.model === "system") {
 			return (
-				<Box marginBottom={1}>
+				<Box marginTop={1}>
 					{msg.content.map((c, i) =>
 						// biome-ignore lint/suspicious/noArrayIndexKey: stable turn content
 						c.type === "text" ? <Text key={i}>{c.text}</Text> : null,
@@ -383,11 +390,13 @@ function Message({ msg }: { msg: Msg }) {
 				</Box>
 			)
 		}
+
+		// Don't render empty assistant messages (often just tool call containers)
+		const hasVisibleContent = msg.content.some((c) => c.type === "text" || c.type === "thinking")
+		if (!hasVisibleContent) return null
+
 		return (
-			<Box flexDirection="column" marginBottom={1}>
-				<Text bold color="magenta">
-					novacode
-				</Text>
+			<Box flexDirection="column" marginTop={1}>
 				{msg.content.map((c, i) => {
 					if (c.type === "thinking") {
 						return (
@@ -401,34 +410,60 @@ function Message({ msg }: { msg: Msg }) {
 						// biome-ignore lint/suspicious/noArrayIndexKey: stable turn content
 						return <Text key={i}>{c.text}</Text>
 					}
-					if (c.type === "tool_call") {
-						return (
-							// biome-ignore lint/suspicious/noArrayIndexKey: stable turn content
-							<Text key={i} color="yellow">
-								🔧 {c.name}({JSON.stringify(c.args)})
-							</Text>
-						)
-					}
 					return null
 				})}
 			</Box>
 		)
 	}
+
 	if (msg.role === "tool_result") {
+		const args = msg.args
+			? Object.entries(msg.args)
+					.map(([k, v]) => {
+						const val =
+							typeof v === "string" ? (v.length > 40 ? `${v.slice(0, 40)}…` : v) : JSON.stringify(v)
+						return `${chalk.dim(`${k}:`)} ${val}`
+					})
+					.join(" ")
+			: ""
+
+		const resText = msg.content
+			.map((c) => (c.type === "text" ? c.text : ""))
+			.join("")
+			.trim()
+
+		const isRead = msg.tool === "read"
+		const previewLines = isRead
+			? resText.split("\n").slice(0, 5) // Show first 5 lines for read
+			: [resText.replace(/\n/g, " ")] // Flatten for others
+
+		const preview = isRead
+			? previewLines.map((l) => (l.length > 80 ? `${l.slice(0, 80)}…` : l)).join("\n") +
+				(resText.split("\n").length > 5 ? "\n…" : "")
+			: previewLines[0] && previewLines[0].length > 60
+				? `${previewLines[0].slice(0, 60)}…`
+				: previewLines[0]
+
 		return (
-			<Box marginBottom={1} paddingLeft={2}>
-				<Text dimColor>
-					{msg.isError ? "❌" : "✅"} {msg.tool}:{" "}
-				</Text>
-				<Text dimColor>
-					{msg.content
-						.map((c) => (c.type === "text" ? c.text : "[binary]"))
-						.join("")
-						.slice(0, 500)}
-					{msg.content.map((c) => (c.type === "text" ? c.text : "")).join("").length > 500
-						? "..."
-						: ""}
-				</Text>
+			<Box paddingLeft={2} flexDirection="column">
+				<Box>
+					<Text color={msg.isError ? "red" : "green"}>{msg.isError ? "✗" : "✓"}</Text>
+					<Text bold> {msg.tool}</Text>
+					{args && <Text> {args}</Text>}
+				</Box>
+				{preview && (
+					<Box paddingLeft={2} flexDirection="column">
+						{preview.split("\n").map((line, i) => (
+							// biome-ignore lint/suspicious/noArrayIndexKey: stable turn content
+							<Box key={i}>
+								<Text dimColor>{i === 0 ? "└ " : "  "}</Text>
+								<Text dimColor italic>
+									{line}
+								</Text>
+							</Box>
+						))}
+					</Box>
+				)}
 			</Box>
 		)
 	}

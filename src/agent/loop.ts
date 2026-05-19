@@ -118,6 +118,7 @@ export function run(
 						role: "tool_result",
 						callId: call.id,
 						tool: call.name,
+						args: call.args,
 						content: result.content,
 						isError: result.isError,
 						ts: Date.now(),
@@ -126,7 +127,7 @@ export function run(
 					results.push(toolMsg)
 					activeCtx = { ...activeCtx, messages: [...activeCtx.messages, toolMsg] }
 					out.push(toolMsg)
-					es.push({ type: "tool_result", callId: call.id, result: toolMsg })
+					es.push({ type: "tool_result", callId: call.id, result: toolMsg, args: call.args })
 
 					await opts.afterTool?.(call, toolMsg, activeCtx)
 				}

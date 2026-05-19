@@ -55,6 +55,7 @@ export interface ToolResultMsg {
 	role: "tool_result"
 	callId: string
 	tool: string
+	args?: Record<string, unknown>
 	content: ContentPart[]
 	isError: boolean
 	ts: number
@@ -140,7 +141,7 @@ export type AgentEvent =
 	| { type: "thinking_delta"; text: string }
 	| { type: "tool_call"; call: ToolCallPart }
 	| { type: "assistant_msg"; msg: AssistantMsg }
-	| { type: "tool_result"; callId: string; result: ToolResultMsg }
+	| { type: "tool_result"; callId: string; result: ToolResultMsg; args?: Record<string, unknown> }
 	| { type: "turn_end"; msg: AssistantMsg; results: ToolResultMsg[] }
 	| { type: "usage"; usage: Usage }
 
