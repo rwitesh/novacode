@@ -210,13 +210,13 @@ function App({
 			</Box>
 
 			{/* Footer / Suggestions */}
-			<Box>
+			<Box flexDirection="column">
 				{suggestions.length > 0 ? (
-					<Box marginLeft={2}>
+					<Box flexDirection="column" marginLeft={2}>
 						{suggestions.map((s) => (
-							<Box key={s.name} marginRight={2}>
-								<Text color="yellow">/{s.name}</Text>
-								<Text dimColor> {s.desc}</Text>
+							<Box key={s.name}>
+								<Text color="yellow">/{s.name.padEnd(8)}</Text>
+								<Text dimColor>{s.desc}</Text>
 							</Box>
 						))}
 					</Box>

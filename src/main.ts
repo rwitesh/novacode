@@ -15,6 +15,7 @@ import { runPrintMode } from "./tui/print.ts"
 
 // Ensure providers are registered
 import "./provider/openai.ts"
+import "./provider/gemini.ts"
 
 function parseCli() {
 	const { values, positionals } = parseArgs({
