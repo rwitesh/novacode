@@ -24,6 +24,7 @@
   - [x] glob tool — file search by pattern (glob wrapper)
   - [x] grep tool — content search across files (rg/grep wrapper)
   - [x] ls tool — directory listing
+  - [x] Standardize tool helpers — migrate to shared `textPart` utility
 - [x] Agent loop hardening:
   - [x] Max turns limit (prevent infinite loops)
   - [x] Context window tracking — warn when approaching limit
@@ -32,9 +33,9 @@
 - [x] Error handling — provider errors (rate limits, auth, context overflow) surfaced cleanly
 
 ## Phase 2: Session Management
-- [ ] src/session/store.ts — JSONL session persistence
-- [ ] src/session/compact.ts — context compaction when approaching context limit
-- [ ] Session list/resume/delete
+- [x] src/session/store.ts — SQLite session persistence (migration from JSONL)
+- [x] src/session/compact.ts — context compaction when approaching context limit
+- [ ] Session list/resume/delete (CLI/TUI commands)
 - [ ] Tree branching (id/parentId entries)
 
 ## Phase 3: Interactive TUI
