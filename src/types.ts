@@ -145,6 +145,9 @@ export type AgentEvent =
 export interface NovaConfig {
 	provider: string
 	model: string
+}
+
+export interface NovaAuth {
 	apiKeys: Record<string, string> // provider -> key
 }
 

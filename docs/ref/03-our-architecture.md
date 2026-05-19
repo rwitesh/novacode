@@ -20,7 +20,7 @@ novacode/
 │   ├── types.ts                   # ALL shared types in one file
 │   │
 │   ├── config/
-│   │   ├── store.ts               # config.json + auth.json (0600)
+│   │   ├── store.ts               # config.json (settings) + auth.json (API keys, 0600)
 │   │   └── providers.ts           # provider catalog (GLM, Gemini)
 │   │
 │   ├── provider/
@@ -104,8 +104,8 @@ $ novacode
 
 ```
 ~/.novacode/
-├── config.json     # providers, default model
-├── auth.json       # API keys (chmod 600)
+├── config.json     # provider, default model (no secrets)
+├── auth.json       # API keys (chmod 600, never in config.json)
 └── sessions/
     └── *.jsonl     # one file per session
 ```

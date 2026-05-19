@@ -6,7 +6,7 @@ import { parseArgs } from "node:util"
 import { Agent } from "./agent/agent.ts"
 import { buildSystemPrompt } from "./agent/prompt.ts"
 import { getProvider, MODELS } from "./config/providers.ts"
-import { configExists, loadConfig } from "./config/store.ts"
+import { configExists, loadAuth, loadConfig } from "./config/store.ts"
 import { runOnboarding } from "./onboarding/wizard.ts"
 import { getAllTools } from "./tools/index.ts"
 import { runPrintMode } from "./tui/print.ts"
@@ -66,11 +66,12 @@ Options:
 
 	// First-run onboarding
 	const config = await ((await configExists()) ? loadConfig() : runOnboarding())
+	const auth = await loadAuth()
 
 	// CLI overrides
 	const providerId = (flags.provider as string) || config.provider
 	const modelId = (flags.model as string) || config.model
-	const apiKey = (flags["api-key"] as string) || config.apiKeys[providerId]
+	const apiKey = (flags["api-key"] as string) || auth.apiKeys[providerId]
 
 	const provider = getProvider(providerId)
 	if (!provider) {

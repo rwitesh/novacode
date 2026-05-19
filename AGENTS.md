@@ -31,7 +31,7 @@ src/
 ├── main.ts              # entry: CLI parse → onboarding → print/interactive mode
 ├── types.ts             # ALL shared types (single source of truth)
 ├── config/
-│   ├── store.ts         # config.json + auth.json persistence
+│   ├── store.ts         # config.json (settings) + auth.json (API keys, 0600)
 │   └── providers.ts     # provider catalog (GLM, Gemini, DeepSeek, OpenAI)
 ├── provider/
 │   ├── stream.ts        # EventStream<T,R> — push-based async event stream

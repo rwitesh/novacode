@@ -1,6 +1,6 @@
 import * as clack from "@clack/prompts"
 import { getModelsForProvider, getProvider, PROVIDERS } from "../config/providers.ts"
-import { saveConfig } from "../config/store.ts"
+import { saveAuth, saveConfig } from "../config/store.ts"
 import type { NovaConfig } from "../types.ts"
 
 export async function runOnboarding(): Promise<NovaConfig> {
@@ -48,10 +48,10 @@ export async function runOnboarding(): Promise<NovaConfig> {
 	const config: NovaConfig = {
 		provider: providerId as string,
 		model: modelId as string,
-		apiKeys: { [providerId as string]: apiKey as string },
 	}
 
 	await saveConfig(config)
+	await saveAuth({ apiKeys: { [providerId as string]: apiKey as string } })
 
 	clack.note("Ready. Type your prompt or /help for commands")
 	return config

@@ -1,5 +1,5 @@
 import { join } from "node:path"
-import type { NovaConfig } from "../types.ts"
+import type { NovaAuth, NovaConfig } from "../types.ts"
 
 const NOVA_DIR = () => join(process.env.HOME ?? "~", ".novacode")
 const CONFIG_PATH = () => join(NOVA_DIR(), "config.json")
@@ -8,6 +8,9 @@ const AUTH_PATH = () => join(NOVA_DIR(), "auth.json")
 const defaultConfig: NovaConfig = {
 	provider: "",
 	model: "",
+}
+
+const defaultAuth: NovaAuth = {
 	apiKeys: {},
 }
 
@@ -29,16 +32,28 @@ export async function loadConfig(): Promise<NovaConfig> {
 	}
 }
 
-export async function saveConfig(config: NovaConfig): Promise<void> {
-	const dir = NOVA_DIR()
-	const { mkdir } = await import("node:fs/promises")
-	await mkdir(dir, { recursive: true })
-	await Bun.write(CONFIG_PATH(), JSON.stringify(config, null, 2))
+export async function loadAuth(): Promise<NovaAuth> {
+	try {
+		const raw = await Bun.file(AUTH_PATH()).json()
+		return { ...defaultAuth, ...raw }
+	} catch {
+		return { ...defaultAuth }
+	}
+}
 
-	// Save API keys separately with restricted permissions
-	const authData = { apiKeys: config.apiKeys }
-	await Bun.write(AUTH_PATH(), JSON.stringify(authData, null, 2))
-	// chmod 0600 on auth file (Node.js for cross-platform compat)
+async function ensureDir(): Promise<void> {
+	const { mkdir } = await import("node:fs/promises")
+	await mkdir(NOVA_DIR(), { recursive: true })
+}
+
+export async function saveConfig(config: NovaConfig): Promise<void> {
+	await ensureDir()
+	await Bun.write(CONFIG_PATH(), JSON.stringify(config, null, 2))
+}
+
+export async function saveAuth(auth: NovaAuth): Promise<void> {
+	await ensureDir()
+	await Bun.write(AUTH_PATH(), JSON.stringify(auth, null, 2))
 	try {
 		const { chmod } = await import("node:fs/promises")
 		await chmod(AUTH_PATH(), 0o600)

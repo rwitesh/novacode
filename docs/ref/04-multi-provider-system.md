@@ -152,6 +152,10 @@ export interface AppConfig {
   model: string
   providers: Record<string, ProviderConfig>
 }
+
+export interface AppAuth {
+  apiKeys: Record<string, string>  // provider -> key
+}
 ```
 
 ## Event Stream
