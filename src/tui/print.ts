@@ -1,10 +1,11 @@
 import type { Agent } from "../agent/agent.ts"
+import type { Msg } from "../types.ts"
 
 export async function runPrintMode(
 	agent: Agent,
 	prompt: string,
 	signal?: AbortSignal,
-): Promise<void> {
+): Promise<Msg[] | undefined> {
 	const stream = agent.prompt(prompt, signal)
 	let output = ""
 
@@ -22,4 +23,6 @@ export async function runPrintMode(
 		process.stdout.write(output)
 		if (!output.endsWith("\n")) process.stdout.write("\n")
 	}
+
+	return stream.result
 }

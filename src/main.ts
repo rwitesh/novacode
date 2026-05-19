@@ -5,9 +5,11 @@
 import { parseArgs } from "node:util"
 import { Agent } from "./agent/agent.ts"
 import { buildSystemPrompt } from "./agent/prompt.ts"
+import { handleSessionCommand } from "./commands/session.ts"
 import { getProvider, MODELS } from "./config/providers.ts"
 import { configExists, loadAuth, loadConfig } from "./config/store.ts"
 import { runOnboarding } from "./onboarding/wizard.ts"
+import { getSessionStore } from "./session/store.ts"
 import { getAllTools } from "./tools/index.ts"
 import { runPrintMode } from "./tui/print.ts"
 
@@ -22,6 +24,7 @@ function parseCli() {
 			provider: { type: "string" },
 			model: { type: "string" },
 			"api-key": { type: "string" },
+			session: { type: "string", short: "s" },
 		},
 		strict: false,
 		allowPositionals: true,
@@ -51,16 +54,23 @@ async function main() {
 Usage:
   novacode                Interactive mode
   novacode "prompt"       Print mode (non-interactive)
-  novacode --provider     Set provider
-  novacode --model        Set model
+  novacode session <cmd>  Session management (list, delete)
+  novacode --session <id> Resume a session
 
 Options:
   -h, --help              Show help
   -v, --version           Show version
   --provider <id>         Provider to use
   --model <id>            Model to use
-  --api-key <key>         API key override`)
+  --api-key <key>         API key override
+  -s, --session <id>      Resume session by ID`)
 		process.exit(0)
+	}
+
+	// Handle session subcommand
+	if (args[0] === "session") {
+		await handleSessionCommand(args.slice(1))
+		return
 	}
 
 	const controller = new AbortController()
@@ -110,24 +120,43 @@ Options:
 	const tools = getAllTools(cwd)
 	const system = buildSystemPrompt(cwd, tools)
 
+	// Session persistence
+	const store = getSessionStore()
+	const session = flags.session
+		? store.get(flags.session as string)
+		: store.create(cwd, model.id, providerId)
+
+	if (flags.session && !session) {
+		console.error(`Session not found: ${flags.session}`)
+		process.exit(1)
+	}
+
+	const sessionId = session!.id
+	const existingMessages = store.messages(sessionId)
+
 	const agent = new Agent({
+		api: provider.api,
 		model,
 		apiKey,
 		baseUrl: provider.baseUrl,
 		system,
 		tools,
+		messages: existingMessages,
 	})
 
 	// Print mode: prompt provided as arg
 	const prompt = args.join(" ")
 	if (prompt) {
-		await runPrintMode(agent, prompt, controller.signal)
+		const result = await runPrintMode(agent, prompt, controller.signal)
+		if (result) {
+			store.appendMany(sessionId, result)
+		}
 		return
 	}
 
-	// TODO: Interactive TUI mode (Phase 3)
-	console.log('Interactive mode coming soon. Use: novacode "your prompt"')
-	process.exit(0)
+	// Interactive TUI mode (Phase 3)
+	const { interactive } = await import("./tui/app.tsx")
+	await interactive(agent, store, sessionId)
 }
 
 main().catch((e) => {

@@ -3,7 +3,7 @@ import { run } from "../src/agent/loop.ts"
 import type { AssistantResult, StreamEvent } from "../src/provider/registry.ts"
 import { register } from "../src/provider/registry.ts"
 import { EventStream } from "../src/provider/stream.ts"
-import type { AgentEvent, Msg, Tool } from "../src/types.ts"
+import type { AgentEvent, ApiFormat, Msg, Tool } from "../src/types.ts"
 
 // Use a unique api format to avoid clashing with real providers
 const MOCK_API = "mock_test" as const
@@ -26,7 +26,12 @@ function mockProvider(responses: AssistantResult[]) {
 				if (c.type === "tool_call" && c.id && c.name) {
 					es.push({
 						type: "tool_call",
-						call: { id: c.id, name: c.name, args: c.args ?? {} },
+						call: {
+							type: "tool_call",
+							id: c.id,
+							name: c.name,
+							args: (c.args as Record<string, unknown>) ?? {},
+						},
 					})
 				}
 			}
@@ -85,6 +90,7 @@ describe("agent loop", () => {
 
 		const ctx = { system: "", messages: [] as Msg[], tools: [noopTool] }
 		const opts = {
+			api: MOCK_API as unknown as ApiFormat,
 			model: fakeModel,
 			apiKey: "test",
 			baseUrl: "http://test",
@@ -111,6 +117,7 @@ describe("agent loop", () => {
 			tools: [noopTool],
 		}
 		const opts = {
+			api: MOCK_API as unknown as ApiFormat,
 			model: fakeModel,
 			apiKey: "test",
 			baseUrl: "http://test",
@@ -133,7 +140,12 @@ describe("agent loop", () => {
 		mockProvider([makeTextResult("hello")])
 
 		const ctx = { system: "", messages: [] as Msg[], tools: [] }
-		const opts = { model: fakeModel, apiKey: "test", baseUrl: "http://test" }
+		const opts = {
+			api: MOCK_API as unknown as ApiFormat,
+			model: fakeModel,
+			apiKey: "test",
+			baseUrl: "http://test",
+		}
 
 		const events: AgentEvent[] = []
 		const stream = run("test", ctx, opts)

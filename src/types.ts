@@ -138,6 +138,7 @@ export type AgentEvent =
 	| { type: "tool_call"; call: ToolCallPart }
 	| { type: "tool_result"; callId: string; result: ToolResultMsg }
 	| { type: "turn_end"; msg: AssistantMsg; results: ToolResultMsg[] }
+	| { type: "usage"; usage: Usage }
 	| { type: "done"; stop: StopReason }
 
 /** Config */
@@ -161,4 +162,60 @@ export interface Session {
 	title: string | null
 	created: number
 	updated: number
+}
+
+/** Loop & Provider Types */
+
+export interface LoopCtx {
+	system: string
+	messages: Msg[]
+	tools: Tool[]
+}
+
+export interface LoopOpts {
+	api: ApiFormat
+	model: Model
+	apiKey: string
+	baseUrl: string
+	maxTurns?: number
+	// Intercept tool calls before they execute
+	beforeTool?: (
+		call: ToolCallPart,
+		args: Record<string, unknown>,
+		ctx: LoopCtx,
+	) => Promise<{ block?: boolean; reason?: string } | undefined>
+	// Run logic after a tool completes
+	afterTool?: (call: ToolCallPart, result: ToolResultMsg, ctx: LoopCtx) => Promise<void>
+}
+
+export interface StreamOpts {
+	api: ApiFormat
+	model: Model
+	apiKey: string
+	baseUrl: string
+	system: string
+	messages: Msg[]
+	tools: ToolDef[]
+	signal?: AbortSignal
+}
+
+export interface IEventStream<T, R> {
+	[Symbol.asyncIterator](): AsyncGenerator<T>
+	result: R | undefined
+	isDone: boolean
+}
+
+export type StreamFn = (opts: StreamOpts) => IEventStream<StreamEvent, AssistantResult>
+
+export interface StreamEvent {
+	type: "text_delta" | "thinking_delta" | "tool_call" | "usage"
+	text?: string
+	call?: ToolCallPart
+	usage?: Usage
+}
+
+export interface AssistantResult {
+	content: ContentPart[]
+	usage: Usage
+	stop: StopReason
 }

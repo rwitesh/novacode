@@ -35,8 +35,7 @@
 ## Phase 2: Session Management
 - [x] src/session/store.ts — SQLite session persistence (migration from JSONL)
 - [x] src/session/compact.ts — context compaction when approaching context limit
-- [ ] Session list/resume/delete (CLI/TUI commands)
-- [ ] Tree branching (id/parentId entries)
+- [x] Session list/resume/delete (CLI/TUI commands)
 
 ## Phase 3: Interactive TUI
 - [ ] src/tui/app.tsx — ink-based interactive TUI
@@ -79,4 +78,4 @@
 ## Backlog (open for later)
 - [ ] Additional providers (Gemini, DeepSeek, OpenAI) — architecture supports them, implement when needed
 - [ ] Key verification in onboarding (test key before saving)
-- [ ] Provider-specific error handling (rate limits, context overflow)
+- [x] Provider-specific error handling (rate limits, context overflow)

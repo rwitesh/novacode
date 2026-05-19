@@ -1,8 +1,9 @@
 import type { EventStream } from "../provider/stream.ts"
-import type { AgentEvent, Model, Msg, Tool } from "../types.ts"
-import { type LoopCtx, type LoopOpts, run } from "./loop.ts"
+import type { AgentEvent, ApiFormat, LoopCtx, LoopOpts, Model, Msg, Tool } from "../types.ts"
+import { run } from "./loop.ts"
 
 export class Agent {
+	#api: ApiFormat
 	#model: Model
 	#system: string
 	#messages: Msg[] = []
@@ -11,17 +12,21 @@ export class Agent {
 	#baseUrl: string
 
 	constructor(opts: {
+		api: ApiFormat
 		model: Model
 		apiKey: string
 		baseUrl: string
 		system: string
 		tools: Tool[]
+		messages?: Msg[]
 	}) {
+		this.#api = opts.api
 		this.#model = opts.model
 		this.#apiKey = opts.apiKey
 		this.#baseUrl = opts.baseUrl
 		this.#system = opts.system
 		this.#tools = opts.tools
+		this.#messages = opts.messages ?? []
 	}
 
 	get model(): Model {
@@ -36,8 +41,27 @@ export class Agent {
 		return this.#tools
 	}
 
+	get apiKey(): string {
+		return this.#apiKey
+	}
+
+	get baseUrl(): string {
+		return this.#baseUrl
+	}
+
+	updateConfig(opts: { api: ApiFormat; model: Model; apiKey: string; baseUrl: string }): void {
+		this.#api = opts.api
+		this.#model = opts.model
+		this.#apiKey = opts.apiKey
+		this.#baseUrl = opts.baseUrl
+	}
+
 	setTools(tools: Tool[]): void {
 		this.#tools = tools
+	}
+
+	setMessages(msgs: Msg[]): void {
+		this.#messages = msgs
 	}
 
 	setModel(model: Model): void {
@@ -52,24 +76,12 @@ export class Agent {
 		}
 
 		const opts: LoopOpts = {
+			api: this.#api,
 			model: this.#model,
 			apiKey: this.#apiKey,
 			baseUrl: this.#baseUrl,
 		}
 
-		const stream = run(input, ctx, opts, signal)
-
-		// Update messages when done
-		;(async () => {
-			for await (const _event of stream) {
-				// Events are consumed externally
-			}
-			const result = stream.result
-			if (result) {
-				this.#messages = [...result]
-			}
-		})()
-
-		return stream
+		return run(input, ctx, opts, signal)
 	}
 }

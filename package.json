@@ -23,6 +23,7 @@
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.15",
 		"@types/bun": "latest",
+		"@types/react": "^19.2.14",
 		"lefthook": "^2.1.6",
 		"typescript": "^6.0.3"
 	},
@@ -31,6 +32,9 @@
 	},
 	"dependencies": {
 		"@clack/prompts": "^1.4.0",
-		"glob": "^13.0.6"
+		"chalk": "^5.6.2",
+		"glob": "^13.0.6",
+		"ink": "^7.0.3",
+		"react": "^19.2.6"
 	}
 }

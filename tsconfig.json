@@ -5,6 +5,7 @@
 		"module": "Preserve",
 		"moduleDetection": "force",
 		"allowJs": true,
+		"jsx": "react-jsx",
 		"types": ["bun"],
 
 		"moduleResolution": "bundler",
@@ -25,6 +26,6 @@
 			"@/*": ["./src/*"]
 		}
 	},
-	"include": ["src/**/*.ts", "test/**/*.ts"],
+	"include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts"],
 	"exclude": ["node_modules"]
 }

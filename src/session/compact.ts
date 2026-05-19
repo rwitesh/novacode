@@ -1,3 +1,4 @@
+import { getProvider } from "../config/providers.ts"
 import { stream } from "../provider/registry.ts"
 import type { Model, Msg } from "../types.ts"
 import { estimateTokens } from "../util.ts"
@@ -100,7 +101,11 @@ async function generateSummary(
 	apiKey: string,
 	baseUrl: string,
 ): Promise<string | null> {
+	const provider = getProvider(model.provider)
+	if (!provider) return null
+
 	const es = stream({
+		api: provider.api,
 		model,
 		apiKey,
 		baseUrl,

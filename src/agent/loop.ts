@@ -7,9 +7,9 @@ import { EventStream } from "../provider/stream.ts"
 import type {
 	AgentEvent,
 	AssistantMsg,
-	Model,
+	LoopCtx,
+	LoopOpts,
 	Msg,
-	Tool,
 	ToolCallPart,
 	ToolResultMsg,
 } from "../types.ts"
@@ -17,30 +17,6 @@ import { estimateTokens, textPart } from "../util.ts"
 
 // Safety cap so a misbehaving model can't loop forever
 const MAX_TURNS = 50
-
-export interface LoopCtx {
-	system: string
-	messages: Msg[]
-	tools: Tool[]
-}
-
-/**
- * Execution options for the loop, including safety hooks.
- */
-export interface LoopOpts {
-	model: Model
-	apiKey: string
-	baseUrl: string
-	maxTurns?: number
-	// Intercept tool calls before they execute
-	beforeTool?: (
-		call: ToolCallPart,
-		args: unknown,
-		ctx: LoopCtx,
-	) => Promise<{ block?: boolean; reason?: string } | undefined>
-	// Run logic after a tool completes
-	afterTool?: (call: ToolCallPart, result: ToolResultMsg, ctx: LoopCtx) => Promise<void>
-}
 
 const isToolCall = (c: unknown): c is ToolCallPart =>
 	typeof c === "object" && c !== null && (c as ToolCallPart).type === "tool_call"
@@ -59,7 +35,7 @@ export function run(
 	const maxTurns = opts.maxTurns ?? MAX_TURNS
 
 	const userMsg: Msg = { role: "user", content: input, ts: Date.now() }
-	ctx.messages.push(userMsg)
+	let activeCtx: LoopCtx = { ...ctx, messages: [...ctx.messages, userMsg] }
 	out.push(userMsg)
 
 	const tick = async () => {
@@ -74,7 +50,7 @@ export function run(
 				es.push({ type: "turn" })
 
 				// Warn before hitting the hard limit so the caller can compact/summarize
-				const approxTokens = estimateTokens(ctx.messages)
+				const approxTokens = estimateTokens(activeCtx.messages)
 				if (approxTokens > opts.model.contextWindow * 0.9) {
 					es.push({
 						type: "text_delta",
@@ -82,8 +58,9 @@ export function run(
 					})
 				}
 
-				const reply = await getReply(ctx, opts, signal)
+				const reply = await getReply(activeCtx, opts, es, signal)
 				out.push(reply)
+				activeCtx = { ...activeCtx, messages: [...activeCtx.messages, reply] }
 
 				if (reply.stop === "error" || reply.stop === "aborted") {
 					es.push({ type: "turn_end", msg: reply, results: [] })
@@ -101,7 +78,7 @@ export function run(
 				for (const call of calls) {
 					if (signal?.aborted) break
 
-					const tool = ctx.tools.find((t) => t.def.name === call.name)
+					const tool = activeCtx.tools.find((t) => t.def.name === call.name)
 					if (!tool) {
 						const errResult: ToolResultMsg = {
 							role: "tool_result",
@@ -112,13 +89,13 @@ export function run(
 							ts: Date.now(),
 						}
 						results.push(errResult)
-						ctx.messages.push(errResult)
+						activeCtx = { ...activeCtx, messages: [...activeCtx.messages, errResult] }
 						out.push(errResult)
 						continue
 					}
 
 					// beforeTool lets callers block dangerous operations (e.g. rm -rf)
-					const blocked = await opts.beforeTool?.(call, call.args, ctx)
+					const blocked = await opts.beforeTool?.(call, call.args, activeCtx)
 					if (blocked?.block) {
 						const blockResult: ToolResultMsg = {
 							role: "tool_result",
@@ -129,7 +106,7 @@ export function run(
 							ts: Date.now(),
 						}
 						results.push(blockResult)
-						ctx.messages.push(blockResult)
+						activeCtx = { ...activeCtx, messages: [...activeCtx.messages, blockResult] }
 						out.push(blockResult)
 						continue
 					}
@@ -146,10 +123,10 @@ export function run(
 					}
 
 					results.push(toolMsg)
-					ctx.messages.push(toolMsg)
+					activeCtx = { ...activeCtx, messages: [...activeCtx.messages, toolMsg] }
 					out.push(toolMsg)
 
-					await opts.afterTool?.(call, toolMsg, ctx)
+					await opts.afterTool?.(call, toolMsg, activeCtx)
 				}
 
 				es.push({ type: "turn_end", msg: reply, results })
@@ -178,8 +155,14 @@ export function run(
 	return es
 }
 
-async function getReply(ctx: LoopCtx, opts: LoopOpts, signal?: AbortSignal): Promise<AssistantMsg> {
+async function getReply(
+	ctx: LoopCtx,
+	opts: LoopOpts,
+	es: EventStream<AgentEvent, Msg[]>,
+	signal?: AbortSignal,
+): Promise<AssistantMsg> {
 	const providerStream = stream({
+		api: opts.api,
 		model: opts.model,
 		apiKey: opts.apiKey,
 		baseUrl: opts.baseUrl,
@@ -190,14 +173,35 @@ async function getReply(ctx: LoopCtx, opts: LoopOpts, signal?: AbortSignal): Pro
 	})
 
 	const content: AssistantMsg["content"] = []
+	let usage = { in: 0, out: 0 }
 
-	// Accumulate content by consuming provider events — the stream may not
-	// have a usable .result depending on how the registry bridge works
+	// Accumulate content and proxy events to the outer stream
 	for await (const ev of providerStream) {
-		if (ev.type === "text_delta") {
+		if (ev.type === "text_delta" && ev.text) {
 			content.push(textPart(ev.text))
-		} else if (ev.type === "tool_call") {
+			es.push({ type: "text_delta", text: ev.text })
+		} else if (ev.type === "thinking_delta" && ev.text) {
+			content.push({ type: "thinking", text: ev.text })
+			es.push({ type: "thinking_delta", text: ev.text })
+		} else if (ev.type === "tool_call" && ev.call) {
 			content.push(ev.call)
+			es.push({ type: "tool_call", call: ev.call })
+		} else if (ev.type === "usage" && ev.usage) {
+			usage = ev.usage
+			es.push({ type: "usage", usage })
+		}
+	}
+
+	const res = providerStream.result
+	if (res) {
+		return {
+			role: "assistant",
+			content: res.content.length > 0 ? res.content : content,
+			model: opts.model.id,
+			provider: opts.model.provider,
+			usage: res.usage,
+			stop: res.stop,
+			ts: Date.now(),
 		}
 	}
 
@@ -206,7 +210,7 @@ async function getReply(ctx: LoopCtx, opts: LoopOpts, signal?: AbortSignal): Pro
 		content,
 		model: opts.model.id,
 		provider: opts.model.provider,
-		usage: { in: 0, out: 0 },
+		usage,
 		stop: content.some((c) => c.type === "tool_call") ? "tool_use" : "stop",
 		ts: Date.now(),
 	}
