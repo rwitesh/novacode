@@ -6,6 +6,7 @@ import { COMMANDS, dispatch } from "../commands/index.ts"
 import type { SessionStore } from "../session/store.ts"
 import type { Msg } from "../types.ts"
 import { formatToolArgs, makeRelative } from "../util.ts"
+import { formatMarkdown } from "./markdown.ts"
 export async function interactive(
 	agent: Agent,
 	store: SessionStore,
@@ -326,7 +327,7 @@ function App({
 						<Box flexDirection="row">
 							<Box flexGrow={1} flexShrink={1}>
 								<Text>
-									{stream}
+									{formatMarkdown(stream)}
 									{!input && <Cursor />}
 								</Text>
 							</Box>
@@ -441,7 +442,7 @@ function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
 				<Box flexDirection="column" marginTop={0}>
 					{msg.content.map((c, i) =>
 						// biome-ignore lint/suspicious/noArrayIndexKey: stable turn content
-						c.type === "text" ? <Text key={i}>{c.text}</Text> : null,
+						c.type === "text" ? <Text key={i}>{formatMarkdown(c.text)}</Text> : null,
 					)}
 				</Box>
 			)
@@ -464,7 +465,7 @@ function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
 					}
 					if (c.type === "text") {
 						// biome-ignore lint/suspicious/noArrayIndexKey: stable turn content
-						return <Text key={i}>{c.text}</Text>
+						return <Text key={i}>{formatMarkdown(c.text)}</Text>
 					}
 					return null
 				})}

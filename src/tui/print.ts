@@ -2,6 +2,7 @@ import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
 import type { Msg } from "../types.ts"
 import { formatToolArgs } from "../util.ts"
+import { MarkdownRenderer } from "./markdown.ts"
 
 const TOOL_STYLE: Record<string, (s: string) => string> = {
 	read: (s) => chalk.blue.bold(s),
@@ -27,11 +28,22 @@ export async function runPrintMode(
 	let output = ""
 	let lastEventWasTool = false
 
+	const renderer = new MarkdownRenderer()
+	let lineBuffer = ""
+
 	for await (const event of stream) {
 		if (signal?.aborted) break
 		if (event.type === "text_delta") {
 			output += event.text
-			process.stdout.write(event.text)
+			lineBuffer += event.text
+
+			if (lineBuffer.includes("\n")) {
+				const lines = lineBuffer.split("\n")
+				lineBuffer = lines.pop() ?? ""
+				for (const line of lines) {
+					process.stdout.write(`${renderer.renderLine(line)}\n`)
+				}
+			}
 			lastEventWasTool = false
 		}
 		if (event.type === "tool_call") {
@@ -49,6 +61,10 @@ export async function runPrintMode(
 			const argsStr = argsObj ? ` ${formatToolArgs(argsObj, true)}` : ""
 			process.stderr.write(`\r${status} ${stylizeTool(event.result.tool)}${argsStr}\x1B[K\n`)
 		}
+	}
+
+	if (lineBuffer) {
+		process.stdout.write(renderer.renderLine(lineBuffer))
 	}
 
 	if (output && !output.endsWith("\n")) {
