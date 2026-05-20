@@ -1,7 +1,8 @@
-import { describe, expect, it } from "bun:test"
+import { execSync } from "node:child_process"
 import { mkdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { describe, expect, it } from "vitest"
 import { editTool, readTool, writeTool } from "../src/tools/fs.ts"
 import { gitTool } from "../src/tools/git.ts"
 import { globTool, grepTool, lsTool, treeTool } from "../src/tools/search.ts"
@@ -278,8 +279,7 @@ describe("git tool", () => {
 		const cwd = await mkdtemp()
 
 		// Initialize a dummy git repo inside the test directory
-		const procInit = Bun.spawn(["git", "init"], { cwd })
-		await procInit.exited
+		execSync("git init", { cwd, stdio: "ignore" })
 
 		const git = gitTool(cwd)
 		const result = await git.execute({ action: "status" })

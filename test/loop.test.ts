@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test"
+import { describe, expect, it } from "vitest"
 import { run } from "../src/agent/loop.ts"
 import type { AssistantResult, StreamEvent } from "../src/provider/registry.ts"
 import { register } from "../src/provider/registry.ts"

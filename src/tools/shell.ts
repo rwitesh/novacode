@@ -2,6 +2,7 @@
  * Tool for executing shell commands within the project root.
  * Supports timeouts and output truncation to protect the context window.
  */
+import { spawn } from "node:child_process"
 import type { Tool, ToolResult } from "../types.ts"
 
 import { textPart } from "../util.ts"
@@ -26,43 +27,34 @@ export function bashTool(cwd: string): Tool {
 			const timeoutMs = (Number(args.timeout) || 120) * 1000
 
 			try {
-				const proc = Bun.spawn(["sh", "-c", command], {
-					cwd,
-					stdout: "pipe",
-					stderr: "pipe",
+				const proc = spawn("sh", ["-c", command], { cwd, stdio: ["ignore", "pipe", "pipe"] })
+
+				let stdout = ""
+				let stderr = ""
+				proc.stdout.on("data", (chunk: Buffer) => {
+					stdout += chunk.toString()
+				})
+				proc.stderr.on("data", (chunk: Buffer) => {
+					stderr += chunk.toString()
 				})
 
-				// Start reading pipes immediately so they don't block the process
-				const stdoutPromise = new Response(proc.stdout).text()
-				const stderrPromise = new Response(proc.stderr).text()
-
-				// Track whether we killed it vs normal exit, so the output reflects the cause
 				let killed = false
 				const timer = setTimeout(() => {
 					killed = true
-					proc.kill(9) // SIGKILL to be more aggressive against orphans
+					proc.kill("SIGKILL")
 				}, timeoutMs)
 
 				const onAbort = () => {
 					killed = true
-					proc.kill(9)
+					proc.kill("SIGKILL")
 				}
 				signal?.addEventListener("abort", onAbort, { once: true })
 
-				const exitCode = await proc.exited
+				const exitCode = await new Promise<number>((resolve) => {
+					proc.on("close", resolve)
+				})
 				clearTimeout(timer)
 				signal?.removeEventListener("abort", onAbort)
-
-				// After exitCode, pipes should close. We give them a tiny grace period
-				// to avoid hanging on orphans.
-				const stdout = await Promise.race([
-					stdoutPromise,
-					new Promise<string>((r) => setTimeout(() => r(""), 500)),
-				])
-				const stderr = await Promise.race([
-					stderrPromise,
-					new Promise<string>((r) => setTimeout(() => r(""), 500)),
-				])
 
 				// Prevent context-window blowout from noisy commands
 				const MAX = 50_000

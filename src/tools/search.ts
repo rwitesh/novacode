@@ -2,7 +2,9 @@
  * Search tools for finding files and content.
  * Uses 'rg' (ripgrep) if available, falling back to a pure JS implementation.
  */
-import { readdir } from "node:fs/promises"
+
+import { spawn } from "node:child_process"
+import { readdir, readFile } from "node:fs/promises"
 import { relative, resolve } from "node:path"
 import { glob } from "glob"
 import type { Tool, ToolResult } from "../types.ts"
@@ -91,18 +93,28 @@ export function grepTool(cwd: string): Tool {
 					if (globFilter) cmd.push(`--glob=${globFilter}`)
 					cmd.push("--", pattern, relSearchPath)
 
-					const proc = Bun.spawn(cmd, {
+					const proc = spawn(cmd[0]!, cmd.slice(1), {
 						cwd,
-						stdout: "pipe",
-						stderr: "pipe",
+						stdio: ["ignore", "pipe", "pipe"],
 					})
 					signal?.addEventListener("abort", () => proc.kill(), { once: true })
-					const exitCode = await proc.exited
+
+					let stdout = ""
+					let _stderr = ""
+					proc.stdout.on("data", (chunk: Buffer) => {
+						stdout += chunk.toString()
+					})
+					proc.stderr.on("data", (chunk: Buffer) => {
+						_stderr += chunk.toString()
+					})
+
+					const exitCode = await new Promise<number>((r) => {
+						proc.on("close", r)
+					})
 					signal?.removeEventListener("abort", () => proc.kill())
 
 					if (exitCode === 0) {
-						const out = await new Response(proc.stdout).text()
-						const lines = out.split("\n").slice(0, 200).join("\n")
+						const lines = stdout.split("\n").slice(0, 200).join("\n")
 						return { content: [textPart(lines || "No matches")], isError: false }
 					}
 				} catch {
@@ -117,7 +129,7 @@ export function grepTool(cwd: string): Tool {
 				for (const file of files.slice(0, 500)) {
 					if (signal?.aborted) break
 					try {
-						const content = await Bun.file(resolve(dir, file)).text()
+						const content = await readFile(resolve(dir, file), "utf-8")
 						const lines = content.split("\n")
 						for (let i = 0; i < lines.length && matches.length < 200; i++) {
 							const line = lines[i]

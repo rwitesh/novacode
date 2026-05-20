@@ -7,9 +7,14 @@ Open-source, multi-provider coding agent.
 <img width="1164" height="720" alt="result" src="https://github.com/user-attachments/assets/a456c41a-ec19-4a4d-b3b7-180e6b83acc3" />
 
 ## Install
-Requires [Bun](https://bun.sh) >= 1.3.
+
+Requires [Node.js](https://nodejs.org) >= 22.
 
 ```bash
+# With npm
+npm install -g novacode
+
+# With bun
 bun add -g novacode
 ```
 
@@ -19,7 +24,15 @@ Then use it anywhere:
 nova
 ```
 
-You can also run without installing using `bunx novacode`.
+You can also run without installing:
+
+```bash
+# With npx
+npx novacode
+
+# With bunx
+bunx novacode
+```
 
 ## Quick Start
 
@@ -60,4 +73,15 @@ Run `nova -h` or type `/help` in interactive mode to see everything.
 
 GLM (Z.AI), Gemini (Google), DeepSeek, OpenAI
 
+## Development
 
+```bash
+npm install          # install dependencies
+npm run dev          # dev with watch
+npm test             # run tests
+npm run lint         # biome lint check
+npm run lint:fix     # biome lint + auto-fix
+npm run format       # biome format
+npm run typecheck    # tsc --noEmit
+npm run check        # typecheck + lint + test (run this before committing)
+```

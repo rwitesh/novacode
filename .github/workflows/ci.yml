@@ -9,15 +9,21 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22, 24]
     steps:
       - uses: actions/checkout@v4
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
 
-      - run: bun install --frozen-lockfile
+      - run: npm ci
 
-      - run: bun run typecheck
+      - run: npm run typecheck
 
-      - run: bun run lint
+      - run: npm run lint
 
-      - run: bun test
+      - run: npm test

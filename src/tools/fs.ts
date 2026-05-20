@@ -2,7 +2,7 @@
  * Filesystem tools for reading, writing, and editing files.
  * Includes safety checks to prevent path traversal.
  */
-import { mkdir } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, extname, resolve } from "node:path"
 import type { Tool, ToolResult } from "../types.ts"
 import { getRelativeIfInside, textPart } from "../util.ts"
@@ -37,22 +37,16 @@ export function readTool(cwd: string): Tool {
 		async execute(args): Promise<ToolResult> {
 			try {
 				const filePath = safePath(cwd, args.path as string)
-				const relPath = getRelativeIfInside(cwd, filePath)
-				const file = Bun.file(filePath)
-				if (!(await file.exists())) {
-					return { content: [textPart(`File not found: ${relPath}`)], isError: true }
-				}
-
 				// Return images as base64 so the LLM can process them visually
 				const ext = extname(filePath).toLowerCase()
 				if (IMAGES.has(ext)) {
-					const buf = await file.arrayBuffer()
-					const b64 = Buffer.from(buf).toString("base64")
+					const buf = await readFile(filePath)
+					const b64 = buf.toString("base64")
 					const mime = ext === ".jpg" ? "image/jpeg" : `image/${ext.slice(1)}`
 					return { content: [{ type: "image", data: b64, mime }], isError: false }
 				}
 
-				const content = await file.text()
+				const content = await readFile(filePath, "utf-8")
 				const lines = content.split("\n")
 				const offset = Math.max(0, (Number(args.offset ?? 1) || 1) - 1)
 				const limit = Number(args.limit ?? 2000) || 2000
@@ -92,7 +86,7 @@ export function writeTool(cwd: string): Tool {
 				const filePath = safePath(cwd, args.path as string)
 				const content = args.content as string
 				await mkdir(dirname(filePath), { recursive: true })
-				await Bun.write(filePath, content)
+				await writeFile(filePath, content)
 				const relPath = getRelativeIfInside(cwd, filePath)
 				return {
 					content: [textPart(`Wrote ${content.length} bytes → ${relPath}`)],
@@ -139,12 +133,12 @@ export function editTool(cwd: string): Tool {
 		async execute(args): Promise<ToolResult> {
 			try {
 				const filePath = safePath(cwd, args.path as string)
-				const file = Bun.file(filePath)
-				if (!(await file.exists())) {
+				let content: string
+				try {
+					content = await readFile(filePath, "utf-8")
+				} catch {
 					return { content: [textPart(`File not found: ${args.path}`)], isError: true }
 				}
-
-				let content = await file.text()
 				const edits = args.edits as Array<{ oldText: string; newText: string }>
 
 				// Validate all edits before applying any — avoids partial writes on bad input
@@ -174,7 +168,7 @@ export function editTool(cwd: string): Tool {
 					content = content.replace(edit.oldText, edit.newText)
 				}
 
-				await Bun.write(filePath, content)
+				await writeFile(filePath, content)
 				const relPath = getRelativeIfInside(cwd, filePath)
 				return {
 					content: [

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test"
+import { describe, expect, it } from "vitest"
 import { SessionStore } from "../src/session/store.ts"
 import type { Msg } from "../src/types.ts"
 
@@ -7,7 +7,7 @@ describe("SessionStore", () => {
 		const store = new SessionStore(":memory:")
 		const session = store.create("/test/dir", "test-model", "test-provider")
 
-		expect(session.id).toBeString()
+		expect(typeof session.id).toBe("string")
 		expect(session.cwd).toBe("/test/dir")
 		expect(session.model).toBe("test-model")
 		expect(session.provider).toBe("test-provider")
@@ -54,7 +54,7 @@ describe("SessionStore", () => {
 
 		expect(store.get(session.id)).not.toBeNull()
 		const deleted = store.delete(session.id)
-		expect(deleted).toBeTrue()
+		expect(deleted).toBe(true)
 		expect(store.get(session.id)).toBeNull()
 	})
 })

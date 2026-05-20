@@ -13,7 +13,6 @@ export async function interactive(
 	store: SessionStore,
 	sessionId: string,
 ): Promise<void> {
-	// Hide system cursor during session
 	process.stdout.write("\x1B[?25l")
 	const version = await getCurrentVersion()
 	process.stdout.write(`${chalk.cyan.bold("⚡ novacode")} ${chalk.gray(`v${version}`)}\n`)
@@ -22,7 +21,6 @@ export async function interactive(
 		const { waitUntilExit } = render(<App agent={agent} store={store} sessionId={sessionId} />)
 		await waitUntilExit()
 	} finally {
-		// Restore system cursor on exit
 		process.stdout.write("\x1B[?25h")
 	}
 }

@@ -1,6 +1,7 @@
 /**
  * Git tools for executing safe repository operations programmatically.
  */
+import { spawn } from "node:child_process"
 import type { Tool, ToolResult } from "../types.ts"
 import { textPart } from "../util.ts"
 
@@ -41,21 +42,28 @@ export function gitTool(cwd: string): Tool {
 
 			try {
 				const cmd = ["git", action, ...extraArgs]
-				const proc = Bun.spawn(cmd, {
+				const proc = spawn(cmd[0]!, cmd.slice(1), {
 					cwd,
-					stdout: "pipe",
-					stderr: "pipe",
+					stdio: ["ignore", "pipe", "pipe"],
 					env: { ...process.env, PAGER: "cat" },
 				})
 
-				const onAbort = () => proc.kill()
+				let stdout = ""
+				let stderr = ""
+				proc.stdout.on("data", (chunk: Buffer) => {
+					stdout += chunk.toString()
+				})
+				proc.stderr.on("data", (chunk: Buffer) => {
+					stderr += chunk.toString()
+				})
+
+				const onAbort = () => proc.kill("SIGKILL")
 				signal?.addEventListener("abort", onAbort, { once: true })
 
-				const exitCode = await proc.exited
+				const exitCode = await new Promise<number>((resolve) => {
+					proc.on("close", resolve)
+				})
 				signal?.removeEventListener("abort", onAbort)
-
-				const stdout = await new Response(proc.stdout).text()
-				const stderr = await new Response(proc.stderr).text()
 
 				// Prevent context window blowout by truncating very large outputs
 				const MAX = 50_000

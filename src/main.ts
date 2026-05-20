@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { parseArgs } from "node:util"
 /**
  * Entry point for the nova CLI.
@@ -168,7 +168,12 @@ Options:
 	await interactive(agent, store, sessionId)
 }
 
+process.on("unhandledRejection", (reason) => {
+	console.error("Unhandled rejection:", reason)
+	process.exit(1)
+})
+
 main().catch((e) => {
-	console.error("Fatal:", e.message)
+	console.error("Fatal:", e)
 	process.exit(1)
 })

@@ -1,9 +1,9 @@
 {
 	"name": "novacode",
 	"version": "0.5.2",
-	"description": "Open-source multi-provider coding agent. Bun-native.",
+	"description": "Open-source multi-provider coding agent.",
 	"type": "module",
-	"module": "src/main.ts",
+	"main": "src/main.ts",
 	"bin": {
 		"nova": "src/main.ts"
 	},
@@ -11,22 +11,21 @@
 		"src"
 	],
 	"scripts": {
-		"dev": "bun run --watch src/main.ts",
-		"start": "bun run src/main.ts",
-		"test": "bun test",
-		"test:watch": "bun test --watch",
+		"start": "node --import tsx/esm src/main.ts",
+		"dev": "node --import tsx/esm src/main.ts",
+		"test": "vitest run",
+		"test:watch": "vitest",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"format": "biome format --write .",
 		"typecheck": "tsc --noEmit",
-		"build": "bun build src/main.ts --compile --outfile nova",
-		"check": "bun run typecheck && bun run lint && bun test"
+		"check": "npm run typecheck && npm run lint && npm test"
 	},
 	"keywords": [
 		"coding-agent",
 		"ai",
 		"cli",
-		"bun",
+		"node",
 		"llm"
 	],
 	"license": "Apache-2.0",
@@ -39,19 +38,25 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.15",
-		"@types/bun": "latest",
+		"@types/better-sqlite3": "^7.6.13",
+		"@types/node": "^24.5.2",
 		"@types/react": "^19.2.14",
+		"@types/semver": "^7.7.1",
 		"lefthook": "^2.1.6",
-		"typescript": "^6.0.3"
+		"tsx": "^4.19.4",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.7"
 	},
 	"engines": {
-		"bun": ">=1.3"
+		"node": ">=22"
 	},
 	"dependencies": {
 		"@clack/prompts": "^1.4.0",
+		"better-sqlite3": "^12.10.0",
 		"chalk": "^5.6.2",
 		"glob": "^13.0.6",
 		"ink": "^7.0.3",
-		"react": "^19.2.6"
+		"react": "^19.2.6",
+		"semver": "^7.8.0"
 	}
 }

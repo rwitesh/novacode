@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test"
+import { describe, expect, it } from "vitest"
 import { buildSystemPrompt } from "../src/agent/prompt.ts"
 import { EventStream } from "../src/provider/stream.ts"
 import { getAllTools, getDefaultTools } from "../src/tools/index.ts"

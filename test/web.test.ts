@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test"
+import { describe, expect, it } from "vitest"
 import { webFetchTool, webSearchTool } from "../src/tools/web.ts"
 
 const mockFetch = (responseFn: (input: unknown, init?: unknown) => Promise<Response>) => {

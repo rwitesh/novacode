@@ -1,5 +1,5 @@
-import { Database } from "bun:sqlite"
 import { join } from "node:path"
+import BetterSqlite3 from "better-sqlite3"
 import type { Msg, Session } from "../types.ts"
 
 const SCHEMA = `
@@ -40,12 +40,12 @@ function generateId(): string {
 }
 
 export class SessionStore {
-	#db: Database
+	#db: BetterSqlite3.Database
 
 	constructor(dbPath: string) {
-		this.#db = new Database(dbPath, { create: true })
-		this.#db.run("PRAGMA journal_mode = WAL")
-		this.#db.run("PRAGMA foreign_keys = ON")
+		this.#db = new BetterSqlite3(dbPath)
+		this.#db.pragma("journal_mode = WAL")
+		this.#db.pragma("foreign_keys = ON")
 		this.#db.exec(SCHEMA)
 	}
 
@@ -57,13 +57,13 @@ export class SessionStore {
 				"INSERT INTO sessions (id, cwd, model, provider, title, created, updated) VALUES ($id, $cwd, $model, $provider, $title, $created, $updated)",
 			)
 			.run({
-				$id: id,
-				$cwd: cwd,
-				$model: model,
-				$provider: provider,
-				$title: null,
-				$created: now,
-				$updated: now,
+				id: id,
+				cwd: cwd,
+				model: model,
+				provider: provider,
+				title: null,
+				created: now,
+				updated: now,
 			})
 		return { id, cwd, model, provider, title: null, created: now, updated: now }
 	}
@@ -74,7 +74,7 @@ export class SessionStore {
 				.prepare(
 					"SELECT id, cwd, model, provider, title, created, updated FROM sessions WHERE id = $id",
 				)
-				.get({ $id: id }) as Session | null) ?? null
+				.get({ id: id }) as Session | null) ?? null
 		)
 	}
 
@@ -83,11 +83,11 @@ export class SessionStore {
 			.prepare(
 				"SELECT id, cwd, model, provider, title, created, updated FROM sessions ORDER BY updated DESC LIMIT $limit",
 			)
-			.all({ $limit: limit }) as Session[]
+			.all({ limit: limit }) as Session[]
 	}
 
 	delete(id: string): boolean {
-		const result = this.#db.prepare("DELETE FROM sessions WHERE id = $id").run({ $id: id })
+		const result = this.#db.prepare("DELETE FROM sessions WHERE id = $id").run({ id: id })
 		return result.changes > 0
 	}
 
@@ -98,15 +98,15 @@ export class SessionStore {
 				"INSERT INTO messages (session_id, seq, role, content, ts) VALUES ($sid, $seq, $role, $content, $ts)",
 			)
 			.run({
-				$sid: sessionId,
-				$seq: seq,
-				$role: msg.role,
-				$content: JSON.stringify(msg),
-				$ts: msg.ts,
+				sid: sessionId,
+				seq: seq,
+				role: msg.role,
+				content: JSON.stringify(msg),
+				ts: msg.ts,
 			})
 		this.#db
 			.prepare("UPDATE sessions SET updated = $now WHERE id = $id")
-			.run({ $now: Date.now(), $id: sessionId })
+			.run({ now: Date.now(), id: sessionId })
 	}
 
 	appendMany(sessionId: string, msgs: Msg[]): void {
@@ -121,7 +121,7 @@ export class SessionStore {
 	messages(sessionId: string): Msg[] {
 		const rows = this.#db
 			.prepare("SELECT content FROM messages WHERE session_id = $sid ORDER BY seq ASC")
-			.all({ $sid: sessionId }) as { content: string }[]
+			.all({ sid: sessionId }) as { content: string }[]
 		return rows.map((r) => JSON.parse(r.content) as Msg)
 	}
 
@@ -130,20 +130,20 @@ export class SessionStore {
 			.prepare(
 				"SELECT content FROM messages WHERE session_id = $sid AND seq > $seq ORDER BY seq ASC",
 			)
-			.all({ $sid: sessionId, $seq: afterSeq }) as { content: string }[]
+			.all({ sid: sessionId, seq: afterSeq }) as { content: string }[]
 		return rows.map((r) => JSON.parse(r.content) as Msg)
 	}
 
 	setTitle(sessionId: string, title: string): void {
 		this.#db
 			.prepare("UPDATE sessions SET title = $title WHERE id = $id")
-			.run({ $title: title, $id: sessionId })
+			.run({ title: title, id: sessionId })
 	}
 
 	messageCount(sessionId: string): number {
 		const row = this.#db
 			.prepare("SELECT COUNT(*) as count FROM messages WHERE session_id = $sid")
-			.get({ $sid: sessionId }) as { count: number }
+			.get({ sid: sessionId }) as { count: number }
 		return row.count
 	}
 
@@ -159,12 +159,12 @@ export class SessionStore {
 				"INSERT INTO compactions (session_id, summary, files_read, files_wrote, seq_before, ts) VALUES ($sid, $summary, $read, $wrote, $seq, $ts)",
 			)
 			.run({
-				$sid: sessionId,
-				$summary: summary,
-				$read: JSON.stringify(filesRead),
-				$wrote: JSON.stringify(filesWrote),
-				$seq: seqBefore,
-				$ts: Date.now(),
+				sid: sessionId,
+				summary: summary,
+				read: JSON.stringify(filesRead),
+				wrote: JSON.stringify(filesWrote),
+				seq: seqBefore,
+				ts: Date.now(),
 			})
 	}
 
@@ -174,24 +174,24 @@ export class SessionStore {
 				.prepare(
 					"SELECT summary, seq_before FROM compactions WHERE session_id = $sid ORDER BY ts DESC LIMIT 1",
 				)
-				.get({ $sid: sessionId }) as { summary: string; seqBefore: number } | null) ?? null
+				.get({ sid: sessionId }) as { summary: string; seqBefore: number } | null) ?? null
 		)
 	}
 
 	truncateBeforeSeq(sessionId: string, seq: number): void {
 		this.#db
 			.prepare("DELETE FROM messages WHERE session_id = $sid AND seq < $seq")
-			.run({ $sid: sessionId, $seq: seq })
+			.run({ sid: sessionId, seq: seq })
 	}
 
 	close(): void {
-		this.#db.close(false)
+		this.#db.close()
 	}
 
 	#nextSeq(sessionId: string): number {
 		const row = this.#db
 			.prepare("SELECT MAX(seq) as maxSeq FROM messages WHERE session_id = $sid")
-			.get({ $sid: sessionId }) as { maxSeq: number | null }
+			.get({ sid: sessionId }) as { maxSeq: number | null }
 		return (row.maxSeq ?? 0) + 1
 	}
 }
