@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 /**
  * Entry point for the novacode CLI.
  * Handles configuration, CLI flags, and switches between interactive/print modes.
