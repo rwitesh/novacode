@@ -5,7 +5,7 @@ import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
 import type { SessionStore } from "../session/store.ts"
 import type { Msg } from "../types.ts"
-import { checkForUpdate } from "../update.ts"
+import { checkForUpdate, getCurrentVersion } from "../update.ts"
 import { formatToolArgs, makeRelative } from "../util.ts"
 import { formatMarkdown } from "./markdown.ts"
 export async function interactive(
@@ -15,7 +15,8 @@ export async function interactive(
 ): Promise<void> {
 	// Hide system cursor during session
 	process.stdout.write("\x1B[?25l")
-	process.stdout.write(chalk.bold.cyan("⚡ novacode\n"))
+	const version = await getCurrentVersion()
+	process.stdout.write(`${chalk.cyan.bold("⚡ novacode")} ${chalk.gray(`v${version}`)}\n`)
 
 	try {
 		const { waitUntilExit } = render(<App agent={agent} store={store} sessionId={sessionId} />)

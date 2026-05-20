@@ -1,9 +1,8 @@
 #!/usr/bin/env bun
-import { join } from "node:path"
 import { parseArgs } from "node:util"
 /**
  * Entry point for the nova CLI.
- * Handles configuration, CLI flags, and switches between interactive/print modes.
+ * Handles configuration, CLI flags, and runs interactive TUI mode.
  */
 import chalk from "chalk"
 import { Agent } from "./agent/agent.ts"
@@ -14,7 +13,7 @@ import { configExists, loadAuth, loadConfig } from "./config/store.ts"
 import { runOnboarding } from "./onboarding/wizard.ts"
 import { getSessionStore } from "./session/store.ts"
 import { getAllTools } from "./tools/index.ts"
-import { runUpdate } from "./update.ts"
+import { getCurrentVersion, runUpdate } from "./update.ts"
 
 // Ensure providers are registered
 import "./provider/openai.ts"
@@ -48,8 +47,8 @@ async function main() {
 	const { flags, args } = parseCli()
 
 	if (flags.version) {
-		const pkg = await Bun.file(join(import.meta.dir, "..", "package.json")).json()
-		console.log(`nova ${pkg.version}`)
+		const version = await getCurrentVersion()
+		console.log(`nova ${version}`)
 		process.exit(0)
 	}
 

@@ -38,22 +38,15 @@ On first launch, nova walks you through a quick setup:
 
 That's it. You're ready to go.
 
-### 3. Two ways to use it
+### 3. Start chatting
 
-**Interactive mode** — just run `nova` and chat:
+Just run `nova` to start chatting:
 
 ```bash
 nova
 ```
 
 You'll get a prompt where you can ask questions, give coding tasks, and use `/help` for available commands.
-
-**Print mode** — pass a prompt as an argument (non-interactive, streams output to stdout):
-
-```bash
-nova "explain the auth module in this project"
-nova "fix the type error in src/utils.ts"
-```
 
 ### 4. Flags & commands
 

@@ -28,7 +28,7 @@ bun run build        # compile to binary (outputs `nova`)
 
 ```
 src/
-├── main.ts              # entry: CLI parse → onboarding → print/interactive mode
+├── main.ts              # entry: CLI parse → onboarding → interactive mode
 ├── types.ts             # ALL shared types (single source of truth)
 ├── config/
 │   ├── store.ts         # config.json (settings) + auth.json (API keys, 0600)
@@ -51,7 +51,8 @@ src/
 │   └── wizard.ts        # first-run @clack/prompts setup
 ├── commands/            # (TODO) /models, /providers, etc
 └── tui/
-    └── print.ts         # print mode (non-interactive)
+    ├── app.tsx          # interactive TUI application using Ink
+    └── markdown.ts      # markdown terminal renderer
 ```
 
 ## Design Rules

@@ -2,11 +2,14 @@ import { join } from "node:path"
 import { semver } from "bun"
 
 let cachedLatest: string | null = null
+let cachedCurrent: string | null = null
 
 export async function getCurrentVersion(): Promise<string> {
+	if (cachedCurrent) return cachedCurrent
 	try {
 		const pkg = await Bun.file(join(import.meta.dir, "..", "package.json")).json()
-		return pkg.version ?? "0.0.0"
+		cachedCurrent = (pkg.version as string) ?? "0.0.0"
+		return cachedCurrent
 	} catch {
 		return "0.0.0"
 	}

@@ -1,6 +1,6 @@
 {
 	"name": "novacode",
-	"version": "0.5.1",
+	"version": "0.5.2",
 	"description": "Open-source multi-provider coding agent. Bun-native.",
 	"type": "module",
 	"module": "src/main.ts",
@@ -20,8 +20,7 @@
 		"format": "biome format --write .",
 		"typecheck": "tsc --noEmit",
 		"build": "bun build src/main.ts --compile --outfile nova",
-		"check": "bun run typecheck && bun run lint && bun test",
-		"prepublishOnly": "bun run check"
+		"check": "bun run typecheck && bun run lint && bun test"
 	},
 	"keywords": [
 		"coding-agent",
@@ -30,7 +29,10 @@
 		"bun",
 		"llm"
 	],
-	"license": "MIT",
+	"license": "Apache-2.0",
+	"publishConfig": {
+		"access": "public"
+	},
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/rwitesh/novacode"
