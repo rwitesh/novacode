@@ -3,6 +3,7 @@
  * Entry point for the nova CLI.
  * Handles configuration, CLI flags, and switches between interactive/print modes.
  */
+import { join } from "node:path"
 import { parseArgs } from "node:util"
 import { Agent } from "./agent/agent.ts"
 import { buildSystemPrompt } from "./agent/prompt.ts"
@@ -46,7 +47,7 @@ async function main() {
 	const { flags, args } = parseCli()
 
 	if (flags.version) {
-		const pkg = await Bun.file("package.json").json()
+		const pkg = await Bun.file(join(import.meta.dir, "..", "package.json")).json()
 		console.log(`nova ${pkg.version}`)
 		process.exit(0)
 	}
