@@ -45,7 +45,8 @@ async function main() {
 	const { flags, args } = parseCli()
 
 	if (flags.version) {
-		console.log("novacode 0.1.0")
+		const pkg = await Bun.file("package.json").json()
+		console.log(`novacode ${pkg.version}`)
 		process.exit(0)
 	}
 

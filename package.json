@@ -1,6 +1,6 @@
 {
 	"name": "novacode",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "Open-source multi-provider coding agent. Bun-native.",
 	"type": "module",
 	"module": "src/main.ts",
@@ -8,6 +8,9 @@
 		"novacode": "src/main.ts",
 		"nova": "src/main.ts"
 	},
+	"files": [
+		"src"
+	],
 	"scripts": {
 		"dev": "bun run --watch src/main.ts",
 		"start": "bun run src/main.ts",
@@ -18,7 +21,20 @@
 		"format": "biome format --write .",
 		"typecheck": "tsc --noEmit",
 		"build": "bun build src/main.ts --compile --outfile novacode",
-		"check": "bun run typecheck && bun run lint && bun test"
+		"check": "bun run typecheck && bun run lint && bun test",
+		"prepublishOnly": "bun run check"
+	},
+	"keywords": [
+		"coding-agent",
+		"ai",
+		"cli",
+		"bun",
+		"llm"
+	],
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/rwitesh/novacode"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.15",
