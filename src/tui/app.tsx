@@ -65,6 +65,7 @@ function App({
 	const [busy, setBusy] = useState(false)
 	const [input, setInput] = useState("")
 	const [status, setStatus] = useState("")
+	const [usage, setUsage] = useState<{ in: number; out: number }>({ in: 0, out: 0 })
 	const [selCmdIdx, setSelCmdIdx] = useState(0)
 	const [cmdRunning, setCmdRunning] = useState(false)
 	const history = useRef<string[]>([])
@@ -272,6 +273,8 @@ function App({
 					case "turn_end":
 						setStatus("")
 						break
+					case "usage":
+						if (ev.usage) setUsage(ev.usage)
 				}
 			}
 			abortCtrl.current = null
@@ -383,13 +386,26 @@ function App({
 					</Box>
 
 					<Box>
+						<Text dimColor>{formatTokenUsage(usage.in, agent.model.contextWindow)}</Text>
+						<Text dimColor> │ </Text>
 						<Text dimColor>{agent.model.id}</Text>
-						{busy && <Text dimColor> │ {chalk.dim("Esc to stop")}</Text>}
+						{busy && <Text dimColor> │ Esc to stop</Text>}
 					</Box>
 				</Box>
 			</Box>
 		</Box>
 	)
+}
+
+function fmtK(n: number): string {
+	const k = n / 1000
+	return k >= 100 ? `${Math.round(k)}K` : `${k.toFixed(1)}K`
+}
+
+function formatTokenUsage(used: number, contextWindow: number): string {
+	if (used === 0) return `0/${fmtK(contextWindow)}`
+	const pct = Math.round((used / contextWindow) * 100)
+	return `${fmtK(used)}/${fmtK(contextWindow)} (${pct}%)`
 }
 
 const TOOL_STYLE: Record<string, string> = {

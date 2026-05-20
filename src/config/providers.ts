@@ -5,7 +5,7 @@ export const PROVIDERS: ProviderDef[] = [
 		id: "glm",
 		name: "GLM (Z.AI)",
 		api: "openai",
-		baseUrl: "https://api.z.ai/api/paas/v4",
+		baseUrl: "https://api.z.ai/api/coding/paas/v4",
 		envKey: "GLM_API_KEY",
 	},
 	{
