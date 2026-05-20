@@ -21,7 +21,7 @@ bun run lint:fix     # biome lint + auto-fix
 bun run format       # biome format
 bun run typecheck    # tsc --noEmit
 bun run check        # typecheck + lint + test (run this before committing)
-bun run build        # compile to binary (outputs `novacode`, accessible as `nova` too)
+bun run build        # compile to binary (outputs `nova`)
 ```
 
 ## Architecture

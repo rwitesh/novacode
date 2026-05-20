@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Entry point for the novacode CLI.
+ * Entry point for the nova CLI.
  * Handles configuration, CLI flags, and switches between interactive/print modes.
  */
 import { parseArgs } from "node:util"
@@ -47,18 +47,18 @@ async function main() {
 
 	if (flags.version) {
 		const pkg = await Bun.file("package.json").json()
-		console.log(`novacode ${pkg.version}`)
+		console.log(`nova ${pkg.version}`)
 		process.exit(0)
 	}
 
 	if (flags.help) {
-		console.log(`novacode — open-source coding agent
+		console.log(`nova — open-source coding agent
 
 Usage:
-  novacode                Interactive mode
-  novacode "prompt"       Print mode (non-interactive)
-  novacode session <cmd>  Session management (list, delete)
-  novacode --session <id> Resume a session
+  nova                Interactive mode
+  nova "prompt"       Print mode (non-interactive)
+  nova session <cmd>  Session management (list, delete)
+  nova --session <id> Resume a session
 
 Options:
   -h, --help              Show help
@@ -104,7 +104,7 @@ Options:
 
 	if (!apiKey) {
 		console.error(
-			`No API key for ${provider.name}. Set ${provider.envKey} or run novacode for onboarding.`,
+			`No API key for ${provider.name}. Set ${provider.envKey} or run nova for onboarding.`,
 		)
 		process.exit(1)
 	}

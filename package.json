@@ -5,7 +5,6 @@
 	"type": "module",
 	"module": "src/main.ts",
 	"bin": {
-		"novacode": "src/main.ts",
 		"nova": "src/main.ts"
 	},
 	"files": [
@@ -20,7 +19,7 @@
 		"lint:fix": "biome check --write .",
 		"format": "biome format --write .",
 		"typecheck": "tsc --noEmit",
-		"build": "bun build src/main.ts --compile --outfile novacode",
+		"build": "bun build src/main.ts --compile --outfile nova",
 		"check": "bun run typecheck && bun run lint && bun test",
 		"prepublishOnly": "bun run check"
 	},

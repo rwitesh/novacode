@@ -22,17 +22,15 @@ You can also run without installing using `bunx novacode`.
 
 ## Quick Start
 
-### 1. Launch novacode
+### 1. Launch nova
 
 ```bash
 nova
 ```
 
-`novacode` and `nova` are the same command — use whichever you prefer.
-
 ### 2. First-run setup
 
-On first launch, novacode walks you through a quick setup:
+On first launch, nova walks you through a quick setup:
 
 1. **Pick a provider** — GLM (Z.AI), Gemini (Google), DeepSeek, or OpenAI
 2. **Enter your API key** — stored securely in `~/.novacode/auth.json`
