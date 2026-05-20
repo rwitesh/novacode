@@ -5,9 +5,9 @@ import { getAllTools, getDefaultTools } from "../src/tools/index.ts"
 import { consolidate, formatToolArgs, getRelativeIfInside, makeRelative } from "../src/util.ts"
 
 describe("tool registration", () => {
-	it("getAllTools returns 9 tools", () => {
+	it("getAllTools returns 11 tools", () => {
 		const tools = getAllTools("/tmp")
-		expect(tools).toHaveLength(9)
+		expect(tools).toHaveLength(11)
 		expect(tools.map((t) => t.def.name)).toEqual([
 			"read",
 			"write",
@@ -18,12 +18,14 @@ describe("tool registration", () => {
 			"ls",
 			"tree",
 			"git",
+			"web_search",
+			"web_fetch",
 		])
 	})
 
-	it("getDefaultTools returns 4 core tools", () => {
+	it("getDefaultTools returns 6 core tools", () => {
 		const tools = getDefaultTools("/tmp")
-		expect(tools).toHaveLength(4)
+		expect(tools).toHaveLength(6)
 	})
 })
 
