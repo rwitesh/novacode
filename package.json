@@ -1,6 +1,6 @@
 {
 	"name": "novacode",
-	"version": "0.5.0",
+	"version": "0.5.1",
 	"description": "Open-source multi-provider coding agent. Bun-native.",
 	"type": "module",
 	"module": "src/main.ts",
