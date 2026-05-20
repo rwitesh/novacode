@@ -372,6 +372,16 @@ function App({
 	)
 }
 
+const TOOL_STYLE: Record<string, { bg: string; fg: string }> = {
+	read: { bg: "blue", fg: "white" },
+	write: { bg: "magenta", fg: "white" },
+	edit: { bg: "yellow", fg: "black" },
+	bash: { bg: "cyan", fg: "black" },
+	glob: { bg: "green", fg: "black" },
+	find: { bg: "green", fg: "black" },
+	grep: { bg: "green", fg: "black" },
+}
+
 function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
 	if (msg.role === "user") {
 		return (
@@ -446,37 +456,19 @@ function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
 			.trim()
 
 		const isRead = msg.tool === "read"
-		const previewLines = isRead
-			? resText.split("\n").slice(0, 5) // Show first 5 lines for read
-			: [resText.replace(/\n/g, " ")] // Flatten for others
-
-		const preview = isRead
-			? previewLines.map((l) => (l.length > 80 ? `${l.slice(0, 80)}…` : l)).join("\n") +
-				(resText.split("\n").length > 5 ? "\n…" : "")
-			: previewLines[0] && previewLines[0].length > 60
-				? `${previewLines[0].slice(0, 60)}…`
-				: previewLines[0]
+		const lineCount = isRead ? resText.split("\n").length : 0
+		const style = TOOL_STYLE[msg.tool] || { bg: "gray", fg: "white" }
 
 		return (
-			<Box paddingLeft={2} flexDirection="column">
-				<Box>
-					<Text color={msg.isError ? "red" : "green"}>{msg.isError ? "✗" : "✓"}</Text>
-					<Text bold> {msg.tool}</Text>
-					{args && <Text> {args}</Text>}
-				</Box>
-				{preview && (
-					<Box paddingLeft={2} flexDirection="column">
-						{preview.split("\n").map((line, i) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: stable turn content
-							<Box key={i}>
-								<Text dimColor>{i === 0 ? "└ " : "  "}</Text>
-								<Text dimColor italic>
-									{line}
-								</Text>
-							</Box>
-						))}
-					</Box>
-				)}
+			<Box flexDirection="row">
+				<Text color={msg.isError ? "red" : "green"}>{msg.isError ? "✗" : "✓"} </Text>
+				<Text backgroundColor={style.bg} color={style.fg} bold>
+					{" "}
+					{msg.tool}{" "}
+				</Text>
+				{args && <Text> {args}</Text>}
+				{isRead && !msg.isError && <Text dimColor> ({lineCount} lines)</Text>}
+				{msg.isError && resText && <Text color="red"> {resText.slice(0, 80)}</Text>}
 			</Box>
 		)
 	}

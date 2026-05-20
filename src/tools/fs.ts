@@ -21,7 +21,7 @@ export function readTool(cwd: string): Tool {
 		def: {
 			name: "read",
 			description:
-				"Read file contents. Supports text and images (jpg, png, gif, webp). Text output is truncated to 2000 lines with line numbers.",
+				"Read file contents. Supports text and images (jpg, png, gif, webp). Text output is truncated to 2000 lines.",
 			parameters: {
 				type: "object",
 				properties: {
@@ -56,13 +56,10 @@ export function readTool(cwd: string): Tool {
 				const slice = lines.slice(offset, offset + limit)
 				const truncated = offset + limit < lines.length
 
-				// Line numbers help the LLM reference specific lines when editing
-				const numbered = slice
-					.map((l, i) => `${String(offset + i + 1).padStart(4)}│${l}`)
-					.join("\n")
+				const out = slice.join("\n")
 				const suffix = truncated ? `\n…${lines.length - offset - limit} more lines` : ""
 
-				return { content: [textPart(numbered + suffix)], isError: false }
+				return { content: [textPart(out + suffix)], isError: false }
 			} catch (e) {
 				return {
 					content: [textPart(`Error reading file: ${(e as Error).message}`)],

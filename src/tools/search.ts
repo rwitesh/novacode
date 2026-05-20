@@ -47,48 +47,6 @@ export function globTool(cwd: string): Tool {
 }
 
 /**
- * Tool for finding files by name (fuzzy/case-insensitive).
- */
-export function findTool(cwd: string): Tool {
-	return {
-		def: {
-			name: "find",
-			description:
-				"Find files by name. Useful for finding files with typos or case-sensitivity issues.",
-			parameters: {
-				type: "object",
-				properties: {
-					query: { type: "string", description: "Filename or substring to search for" },
-					path: { type: "string", description: "Directory to search in (default .)" },
-				},
-				required: ["query"],
-			},
-		},
-		async execute(args): Promise<ToolResult> {
-			try {
-				const dir = resolve(cwd, (args.path as string) || ".")
-				const query = (args.query as string).toLowerCase()
-				const files = await glob("**/*", { cwd: dir, nodir: true })
-
-				const matches = files.filter((f) => {
-					const lf = f.toLowerCase().split("/").pop() || ""
-					return lf.includes(query)
-				})
-
-				const sliced = matches.slice(0, 200)
-				const out = sliced.length > 0 ? sliced.join("\n") : "No matches found"
-				return { content: [textPart(out)], isError: false }
-			} catch (e) {
-				return {
-					content: [textPart(`Error: ${(e as Error).message}`)],
-					isError: true,
-				}
-			}
-		},
-	}
-}
-
-/**
  * Tool for searching file contents using regex.
  */
 export function grepTool(cwd: string): Tool {
@@ -193,6 +151,81 @@ export function lsTool(cwd: string): Tool {
 					return `${e.name}${suffix}`
 				})
 				return { content: [textPart(lines.join("\n") || "(empty)")], isError: false }
+			} catch (e) {
+				return {
+					content: [textPart(`Error: ${(e as Error).message}`)],
+					isError: true,
+				}
+			}
+		},
+	}
+}
+
+/**
+ * Tool for visualizing a truncated directory tree.
+ */
+export function treeTool(cwd: string): Tool {
+	return {
+		def: {
+			name: "tree",
+			description:
+				"Print a visual directory tree structure, ignoring common ignored folders like node_modules and .git.",
+			parameters: {
+				type: "object",
+				properties: {
+					path: { type: "string", description: "Directory to start tree from (default .)" },
+					depth: { type: "number", description: "Maximum depth to traverse (default 3)" },
+				},
+				required: [],
+			},
+		},
+		async execute(args): Promise<ToolResult> {
+			try {
+				const startDir = resolve(cwd, (args.path as string) || ".")
+				const maxDepth = Number(args.depth ?? 3) || 3
+
+				const ignoreList = new Set([
+					".git",
+					"node_modules",
+					"dist",
+					"build",
+					".svelte-kit",
+					".next",
+					"out",
+					".scannerwork",
+					"coverage",
+				])
+
+				async function walk(dir: string, currentDepth: number, prefix: string): Promise<string> {
+					if (currentDepth > maxDepth) return ""
+					let result = ""
+
+					const entries = await readdir(dir, { withFileTypes: true })
+					const sorted = entries
+						.filter((e) => !ignoreList.has(e.name))
+						.sort((a, b) => {
+							if (a.isDirectory() && !b.isDirectory()) return -1
+							if (!a.isDirectory() && b.isDirectory()) return 1
+							return a.name.localeCompare(b.name)
+						})
+
+					for (let i = 0; i < sorted.length; i++) {
+						const entry = sorted[i]!
+						const isLast = i === sorted.length - 1
+						const connector = isLast ? "└── " : "├── "
+						const childPrefix = prefix + (isLast ? "    " : "│   ")
+
+						result += `${prefix}${connector}${entry.name}${entry.isDirectory() ? "/" : ""}\n`
+
+						if (entry.isDirectory()) {
+							result += await walk(resolve(dir, entry.name), currentDepth + 1, childPrefix)
+						}
+					}
+					return result
+				}
+
+				const treeText = await walk(startDir, 1, "")
+				return { content: [textPart(treeText || "(empty)")], isError: false }
 			} catch (e) {
 				return {
 					content: [textPart(`Error: ${(e as Error).message}`)],

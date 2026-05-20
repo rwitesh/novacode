@@ -31,7 +31,7 @@ ${toolList}
 # Guidelines
 
 - Use tools to fulfill requests. Do not fabricate file contents.
-- Use the "find" tool to locate files if you are unsure of exact names. It searches case-insensitively and finds substrings.
+- Use the "bash" tool for ls, git, and other shell operations.
 - Always read a file before editing it.
 - Prefer edit over write for existing files.
 - Run relevant tests after making changes.
