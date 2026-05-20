@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
+import { join } from "node:path"
+import { parseArgs } from "node:util"
 /**
  * Entry point for the nova CLI.
  * Handles configuration, CLI flags, and switches between interactive/print modes.
  */
-import { join } from "node:path"
-import { parseArgs } from "node:util"
+import chalk from "chalk"
 import { Agent } from "./agent/agent.ts"
 import { buildSystemPrompt } from "./agent/prompt.ts"
 import { handleSessionCommand } from "./commands/session.ts"
@@ -13,7 +14,7 @@ import { configExists, loadAuth, loadConfig } from "./config/store.ts"
 import { runOnboarding } from "./onboarding/wizard.ts"
 import { getSessionStore } from "./session/store.ts"
 import { getAllTools } from "./tools/index.ts"
-import { runPrintMode } from "./tui/print.ts"
+import { runUpdate } from "./update.ts"
 
 // Ensure providers are registered
 import "./provider/openai.ts"
@@ -29,7 +30,7 @@ function parseCli() {
 			"api-key": { type: "string" },
 			session: { type: "string", short: "s" },
 		},
-		strict: false,
+		strict: true,
 		allowPositionals: true,
 	})
 
@@ -57,7 +58,7 @@ async function main() {
 
 Usage:
   nova                Interactive mode
-  nova "prompt"       Print mode (non-interactive)
+  nova update         Update to latest version
   nova session <cmd>  Session management (list, delete)
   nova --session <id> Resume a session
 
@@ -75,6 +76,19 @@ Options:
 	if (args[0] === "session") {
 		await handleSessionCommand(args.slice(1))
 		return
+	}
+
+	// Handle update subcommand
+	if (args[0] === "update") {
+		await runUpdate()
+		return
+	}
+
+	// Reject positional args — use interactive mode with / commands
+	if (args.length > 0) {
+		console.error(chalk.yellow(`Unknown command: ${args.join(" ")}`))
+		console.error("Run `nova --help` for usage.")
+		process.exit(1)
 	}
 
 	const controller = new AbortController()
@@ -148,17 +162,7 @@ Options:
 		messages: existingMessages,
 	})
 
-	// Print mode: prompt provided as arg
-	const prompt = args.join(" ")
-	if (prompt) {
-		const result = await runPrintMode(agent, prompt, controller.signal)
-		if (result) {
-			store.appendMany(sessionId, result)
-		}
-		return
-	}
-
-	// Interactive TUI mode (Phase 3)
+	// Interactive TUI mode
 	process.off("SIGINT", onSignal)
 	process.off("SIGTERM", onSignal)
 	const { interactive } = await import("./tui/app.tsx")

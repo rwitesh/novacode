@@ -5,6 +5,7 @@ import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
 import type { SessionStore } from "../session/store.ts"
 import type { Msg } from "../types.ts"
+import { checkForUpdate } from "../update.ts"
 import { formatToolArgs, makeRelative } from "../util.ts"
 import { formatMarkdown } from "./markdown.ts"
 export async function interactive(
@@ -71,6 +72,17 @@ function App({
 	const history = useRef<string[]>([])
 	const hIdx = useRef(-1)
 	const abortCtrl = useRef<AbortController | null>(null)
+	const [updateInfo, setUpdateInfo] = useState<{ current: string; latest: string } | null>(null)
+
+	useEffect(() => {
+		const check = async () => {
+			const info = await checkForUpdate()
+			if (info?.hasUpdate) {
+				setUpdateInfo({ current: info.current, latest: info.latest })
+			}
+		}
+		check()
+	}, [])
 
 	const isTypingCmd = input.startsWith("/") && !input.includes(" ")
 	const suggestions = isTypingCmd
@@ -349,6 +361,23 @@ function App({
 
 			{/* Input & Footer (Live) */}
 			<Box flexDirection="column" marginTop={visibleMsgs.length > 0 || isLiveActive ? 1 : 0}>
+				{updateInfo && (
+					<Box
+						borderStyle="round"
+						borderColor="yellow"
+						paddingX={1}
+						marginBottom={1}
+						flexDirection="column"
+					>
+						<Text color="yellow" bold>
+							⬆ Update Available (v{updateInfo.current} → v{updateInfo.latest})
+						</Text>
+						<Text dimColor>
+							Run <Text color="cyan">/update</Text> or <Text color="cyan">nova update</Text> to
+							upgrade.
+						</Text>
+					</Box>
+				)}
 				<Box flexDirection="row">
 					<Box flexShrink={0} marginRight={1}>
 						<Text bold color="green">
