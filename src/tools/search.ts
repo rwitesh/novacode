@@ -3,7 +3,7 @@
  * Uses 'rg' (ripgrep) if available, falling back to a pure JS implementation.
  */
 import { readdir } from "node:fs/promises"
-import { resolve } from "node:path"
+import { relative, resolve } from "node:path"
 import { glob } from "glob"
 import type { Tool, ToolResult } from "../types.ts"
 
@@ -29,12 +29,20 @@ export function globTool(cwd: string): Tool {
 		},
 		async execute(args): Promise<ToolResult> {
 			try {
-				const dir = resolve(cwd, (args.path as string) || ".")
+				const rawPath = (args.path as string) || "."
+				const dir = resolve(cwd, rawPath)
+				if (dir !== cwd && !dir.startsWith(`${cwd}/`)) {
+					throw new Error(`Path outside project: ${rawPath}`)
+				}
+
 				const pattern = args.pattern as string
 				const nocase = !!args.nocase
 				const files = await glob(pattern, { cwd: dir, nocase })
 				const sliced = files.slice(0, 500)
-				const out = sliced.length > 0 ? sliced.join("\n") : "No files found"
+				const relSearchPath = relative(cwd, dir)
+				const prefix = relSearchPath ? `${relSearchPath}/` : ""
+				const relFiles = sliced.map((f) => prefix + f)
+				const out = relFiles.length > 0 ? relFiles.join("\n") : "No files found"
 				return { content: [textPart(out)], isError: false }
 			} catch (e) {
 				return {
@@ -67,15 +75,21 @@ export function grepTool(cwd: string): Tool {
 		},
 		async execute(args, signal): Promise<ToolResult> {
 			try {
-				const dir = resolve(cwd, (args.path as string) || ".")
+				const rawPath = (args.path as string) || "."
+				const dir = resolve(cwd, rawPath)
+				if (dir !== cwd && !dir.startsWith(`${cwd}/`)) {
+					throw new Error(`Path outside project: ${rawPath}`)
+				}
+
 				const pattern = args.pattern as string
 				const globFilter = args.glob as string | undefined
+				const relSearchPath = relative(cwd, dir) || "."
 
 				// rg is 10-100x faster than our JS fallback, but isn't always installed
 				try {
 					const cmd = ["rg", "--line-number", "--max-count", "200"]
 					if (globFilter) cmd.push(`--glob=${globFilter}`)
-					cmd.push("--", pattern, dir)
+					cmd.push("--", pattern, relSearchPath)
 
 					const proc = Bun.spawn(cmd, {
 						cwd,
@@ -97,6 +111,7 @@ export function grepTool(cwd: string): Tool {
 
 				// Pure JS fallback when rg is not available
 				const files = await glob(globFilter || "**/*", { cwd: dir })
+				const prefix = relSearchPath === "." ? "" : `${relSearchPath}/`
 				const re = new RegExp(pattern, "i")
 				const matches: string[] = []
 				for (const file of files.slice(0, 500)) {
@@ -106,7 +121,7 @@ export function grepTool(cwd: string): Tool {
 						const lines = content.split("\n")
 						for (let i = 0; i < lines.length && matches.length < 200; i++) {
 							const line = lines[i]
-							if (line && re.test(line)) matches.push(`${file}:${i + 1}:${line}`)
+							if (line && re.test(line)) matches.push(`${prefix}${file}:${i + 1}:${line}`)
 						}
 					} catch {
 						// Skip binary/unreadable files silently

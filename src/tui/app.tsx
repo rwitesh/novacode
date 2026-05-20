@@ -5,6 +5,7 @@ import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
 import type { SessionStore } from "../session/store.ts"
 import type { Msg } from "../types.ts"
+import { formatToolArgs, makeRelative } from "../util.ts"
 export async function interactive(
 	agent: Agent,
 	store: SessionStore,
@@ -21,6 +22,21 @@ export async function interactive(
 		// Restore system cursor on exit
 		process.stdout.write("\x1B[?25h")
 	}
+}
+
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+function Spinner() {
+	const [frame, setFrame] = useState(0)
+
+	useEffect(() => {
+		const timer = setInterval(() => {
+			setFrame((f) => (f + 1) % SPINNER_FRAMES.length)
+		}, 80)
+		return () => clearInterval(timer)
+	}, [])
+
+	return <Text color="yellow">{SPINNER_FRAMES[frame]}</Text>
 }
 
 function Cursor() {
@@ -239,13 +255,10 @@ function App({
 						{
 							const args = ev.args
 								? `(${Object.values(ev.args)
-										.map((v) =>
-											typeof v === "string"
-												? v.length > 20
-													? `${v.slice(0, 20)}…`
-													: v
-												: JSON.stringify(v),
-										)
+										.map((v) => {
+											const val = typeof v === "string" ? makeRelative(v) : JSON.stringify(v)
+											return val.length > 20 ? `${val.slice(0, 20)}…` : val
+										})
 										.join(", ")})`
 								: ""
 							setStatus(
@@ -291,16 +304,19 @@ function App({
 
 	if (cmdRunning) return null
 
+	const visibleMsgs = msgs.filter(hasMeaningfulContent)
+	const isLiveActive = !!(stream || thinkStream || busy)
+
 	return (
 		<Box flexDirection="column" paddingX={1}>
 			{/* Messages - pushed to scrollback as they finish */}
-			<Static items={msgs}>
+			<Static items={visibleMsgs}>
 				{(m, i) => <Message key={`${m.ts}-${i}`} msg={m} isFirst={i === 0} />}
 			</Static>
 
 			{/* Live Area (Streaming, active tool calls, working indicator) */}
-			{(stream || thinkStream || busy) && (
-				<Box flexDirection="column">
+			{isLiveActive && (
+				<Box flexDirection="column" marginTop={visibleMsgs.length > 0 ? 1 : 0}>
 					{thinkStream && (
 						<Text dimColor italic>
 							{thinkStream}
@@ -317,15 +333,18 @@ function App({
 						</Box>
 					)}
 					{busy && !stream && (
-						<Box>
-							<Text dimColor>{status || chalk.yellow("working…")}</Text>
+						<Box flexDirection="row">
+							<Box marginRight={1}>
+								<Spinner />
+							</Box>
+							<Text dimColor>{status ? status.replace("⏳ ", "") : chalk.yellow("working…")}</Text>
 						</Box>
 					)}
 				</Box>
 			)}
 
 			{/* Input & Footer (Live) */}
-			<Box flexDirection="column" marginTop={msgs.length > 0 ? 1 : 0}>
+			<Box flexDirection="column" marginTop={visibleMsgs.length > 0 || isLiveActive ? 1 : 0}>
 				<Box flexDirection="row">
 					<Box flexShrink={0} marginRight={1}>
 						<Text bold color="green">
@@ -372,14 +391,28 @@ function App({
 	)
 }
 
-const TOOL_STYLE: Record<string, { bg: string; fg: string }> = {
-	read: { bg: "blue", fg: "white" },
-	write: { bg: "magenta", fg: "white" },
-	edit: { bg: "yellow", fg: "black" },
-	bash: { bg: "cyan", fg: "black" },
-	glob: { bg: "green", fg: "black" },
-	find: { bg: "green", fg: "black" },
-	grep: { bg: "green", fg: "black" },
+const TOOL_STYLE: Record<string, string> = {
+	read: "blue",
+	write: "magenta",
+	edit: "yellow",
+	bash: "cyan",
+	glob: "green",
+	find: "green",
+	grep: "green",
+}
+
+function hasMeaningfulContent(msg: Msg): boolean {
+	if (msg.role === "user") return true
+	if (msg.role === "tool_result") return true
+	if (msg.role === "assistant") {
+		if (msg.model === "system") return true
+		return msg.content.some((c) => {
+			if (c.type === "thinking") return c.text.trim().length > 0
+			if (c.type === "text") return c.text.trim().length > 0
+			return false
+		})
+	}
+	return false
 }
 
 function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
@@ -440,15 +473,7 @@ function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
 	}
 
 	if (msg.role === "tool_result") {
-		const args = msg.args
-			? Object.entries(msg.args)
-					.map(([k, v]) => {
-						const val =
-							typeof v === "string" ? (v.length > 40 ? `${v.slice(0, 40)}…` : v) : JSON.stringify(v)
-						return `${chalk.dim(`${k}:`)} ${val}`
-					})
-					.join(" ")
-			: ""
+		const args = msg.args ? formatToolArgs(msg.args, true) : ""
 
 		const resText = msg.content
 			.map((c) => (c.type === "text" ? c.text : ""))
@@ -457,14 +482,13 @@ function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
 
 		const isRead = msg.tool === "read"
 		const lineCount = isRead ? resText.split("\n").length : 0
-		const style = TOOL_STYLE[msg.tool] || { bg: "gray", fg: "white" }
+		const color = TOOL_STYLE[msg.tool] || "white"
 
 		return (
 			<Box flexDirection="row">
 				<Text color={msg.isError ? "red" : "green"}>{msg.isError ? "✗" : "✓"} </Text>
-				<Text backgroundColor={style.bg} color={style.fg} bold>
-					{" "}
-					{msg.tool}{" "}
+				<Text color={color} bold>
+					{msg.tool}
 				</Text>
 				{args && <Text> {args}</Text>}
 				{isRead && !msg.isError && <Text dimColor> ({lineCount} lines)</Text>}

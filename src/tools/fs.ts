@@ -5,14 +5,16 @@
 import { mkdir } from "node:fs/promises"
 import { dirname, extname, resolve } from "node:path"
 import type { Tool, ToolResult } from "../types.ts"
-import { textPart } from "../util.ts"
+import { getRelativeIfInside, textPart } from "../util.ts"
 
 // Extensions we return as base64 images instead of text
 const IMAGES = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"])
 
 function safePath(cwd: string, p: string): string {
 	const abs = resolve(cwd, p)
-	if (!abs.startsWith(cwd)) throw new Error(`Path outside project: ${p}`)
+	if (abs !== cwd && !abs.startsWith(`${cwd}/`)) {
+		throw new Error(`Path outside project: ${p}`)
+	}
 	return abs
 }
 
@@ -35,9 +37,10 @@ export function readTool(cwd: string): Tool {
 		async execute(args): Promise<ToolResult> {
 			try {
 				const filePath = safePath(cwd, args.path as string)
+				const relPath = getRelativeIfInside(cwd, filePath)
 				const file = Bun.file(filePath)
 				if (!(await file.exists())) {
-					return { content: [textPart(`File not found: ${args.path}`)], isError: true }
+					return { content: [textPart(`File not found: ${relPath}`)], isError: true }
 				}
 
 				// Return images as base64 so the LLM can process them visually
@@ -90,8 +93,9 @@ export function writeTool(cwd: string): Tool {
 				const content = args.content as string
 				await mkdir(dirname(filePath), { recursive: true })
 				await Bun.write(filePath, content)
+				const relPath = getRelativeIfInside(cwd, filePath)
 				return {
-					content: [textPart(`Wrote ${content.length} bytes → ${args.path}`)],
+					content: [textPart(`Wrote ${content.length} bytes → ${relPath}`)],
 					isError: false,
 				}
 			} catch (e) {
@@ -171,10 +175,11 @@ export function editTool(cwd: string): Tool {
 				}
 
 				await Bun.write(filePath, content)
+				const relPath = getRelativeIfInside(cwd, filePath)
 				return {
 					content: [
 						textPart(
-							`Edited ${args.path} (${edits.length} replacement${edits.length > 1 ? "s" : ""})`,
+							`Edited ${relPath} (${edits.length} replacement${edits.length > 1 ? "s" : ""})`,
 						),
 					],
 					isError: false,

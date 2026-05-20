@@ -31,6 +31,7 @@ ${toolList}
 # Guidelines
 
 - Use tools to fulfill requests. Do not fabricate file contents.
+- Explain what you are doing and why before each tool call.
 - Use the "bash" tool for ls, git, and other shell operations.
 - Always read a file before editing it.
 - Prefer edit over write for existing files.

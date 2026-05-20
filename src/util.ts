@@ -1,3 +1,5 @@
+import { isAbsolute, relative } from "node:path"
+import chalk from "chalk"
 import type { ContentPart, Msg, TextPart } from "./types.ts"
 
 // ~4 chars per token for English/code. Close enough for capacity warnings.
@@ -20,7 +22,7 @@ export function textPart(s: string): TextPart {
 }
 
 export function consolidate(parts: ContentPart[]): ContentPart[] {
-	if (parts.length <= 1) return parts
+	if (parts.length === 0) return parts
 	const out: ContentPart[] = []
 	for (const p of parts) {
 		const last = out[out.length - 1]
@@ -32,5 +34,55 @@ export function consolidate(parts: ContentPart[]): ContentPart[] {
 			out.push({ ...p })
 		}
 	}
+
+	const hasTool = out.some((p) => p.type === "tool_call")
+	if (hasTool) {
+		return out.filter((p) => {
+			if (p.type === "text") {
+				return p.text.trim().length > 0
+			}
+			return true
+		})
+	}
+
 	return out
+}
+
+export function getRelativeIfInside(cwd: string, filePath: string): string {
+	if (filePath === cwd || filePath.startsWith(`${cwd}/`)) {
+		return relative(cwd, filePath) || "."
+	}
+	return filePath
+}
+
+export function makeRelative(val: string): string {
+	if (typeof val !== "string") return val
+
+	let pathVal = val
+	let prefix = ""
+	if (val.startsWith("file://")) {
+		pathVal = val.slice(7)
+		prefix = "file://"
+	}
+
+	if (isAbsolute(pathVal)) {
+		const cwd = process.cwd()
+		return prefix + getRelativeIfInside(cwd, pathVal)
+	}
+	return val
+}
+
+export function formatToolArgs(
+	args: Record<string, unknown> | undefined,
+	useChalk = false,
+): string {
+	if (!args) return ""
+	return Object.entries(args)
+		.map(([k, v]) => {
+			const val = typeof v === "string" ? makeRelative(v) : JSON.stringify(v)
+			const valStr = val.length > 40 ? `${val.slice(0, 40)}…` : val
+			const keyStr = useChalk ? chalk.dim(`${k}:`) : `${k}:`
+			return `${keyStr} ${valStr}`
+		})
+		.join(" ")
 }
