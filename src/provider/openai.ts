@@ -29,18 +29,26 @@ function msgToOpenAI(msg: Msg): Record<string, unknown> {
 		}
 	}
 	if (msg.role === "assistant") {
-		const parts: unknown[] = []
+		const textParts: string[] = []
+		const toolCalls: unknown[] = []
+
 		for (const c of msg.content) {
-			if (c.type === "text") parts.push({ type: "text", text: c.text })
-			if (c.type === "thinking") parts.push({ type: "thinking", thinking: c.text })
+			if (c.type === "text") textParts.push(c.text)
+			// thinking parts are internal — never sent back to the API
 			if (c.type === "tool_call")
-				parts.push({
+				toolCalls.push({
 					type: "function",
 					id: c.id,
 					function: { name: c.name, arguments: JSON.stringify(c.args) },
 				})
 		}
-		return { role: "assistant", content: parts }
+
+		const result: Record<string, unknown> = {
+			role: "assistant",
+			content: textParts.length > 0 ? textParts.join("") : null,
+		}
+		if (toolCalls.length > 0) result.tool_calls = toolCalls
+		return result
 	}
 	// tool_result
 	if (msg.role === "tool_result") {

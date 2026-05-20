@@ -160,7 +160,3 @@ These rules prevent the most common mistakes AI agents make when editing this co
 | Gemini (Google) | Gemini | 🔜 needs gemini.ts |
 | DeepSeek | OpenAI-compat | ✅ registered (via openai.ts) |
 | OpenAI | OpenAI | ✅ registered (via openai.ts) |
-
-## Reference Docs
-
-Full architecture docs from the original design are in `docs/ref/`. These are the planning documents, not source code.

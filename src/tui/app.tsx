@@ -121,6 +121,8 @@ function App({
 			return
 		}
 
+		if (busy) return
+
 		let line = input.trim()
 		if (!line) return
 
@@ -195,8 +197,6 @@ function App({
 			})
 			return
 		}
-
-		if (busy) return
 
 		abortCtrl.current = new AbortController()
 		const stream = agent.prompt(line, abortCtrl.current.signal)
@@ -298,8 +298,8 @@ function App({
 				{(m, i) => <Message key={`${m.ts}-${i}`} msg={m} isFirst={i === 0} />}
 			</Static>
 
-			{/* Streaming (Live) */}
-			{(stream || thinkStream) && (
+			{/* Live Area (Streaming, active tool calls, working indicator) */}
+			{(stream || thinkStream || busy) && (
 				<Box flexDirection="column">
 					{thinkStream && (
 						<Text dimColor italic>
@@ -307,9 +307,18 @@ function App({
 						</Text>
 					)}
 					{stream && (
+						<Box flexDirection="row">
+							<Box flexGrow={1} flexShrink={1}>
+								<Text>
+									{stream}
+									{!input && <Cursor />}
+								</Text>
+							</Box>
+						</Box>
+					)}
+					{busy && !stream && (
 						<Box>
-							<Text>{stream}</Text>
-							{!input && <Cursor />}
+							<Text dimColor>{status || chalk.yellow("working…")}</Text>
 						</Box>
 					)}
 				</Box>
@@ -317,12 +326,18 @@ function App({
 
 			{/* Input & Footer (Live) */}
 			<Box flexDirection="column" marginTop={msgs.length > 0 ? 1 : 0}>
-				<Box>
-					<Text bold color="green">
-						{"> "}
-					</Text>
-					<Text>{input}</Text>
-					{!busy && <Cursor />}
+				<Box flexDirection="row">
+					<Box flexShrink={0} marginRight={1}>
+						<Text bold color="green">
+							{">"}
+						</Text>
+					</Box>
+					<Box flexGrow={1} flexShrink={1}>
+						<Text>
+							{input}
+							<Cursor />
+						</Text>
+					</Box>
 				</Box>
 
 				{/* Dynamic Status / Info Line */}
@@ -343,18 +358,12 @@ function App({
 								))}
 							</Box>
 						) : (
-							<Text dimColor>
-								{busy ? chalk.yellow("working…") : "Enter to send · /help for commands"}
-							</Text>
+							<Text dimColor>Enter to send · /help for commands</Text>
 						)}
 					</Box>
 
 					<Box>
-						<Text>{status}</Text>
-						<Text dimColor>
-							{status ? " │ " : ""}
-							{agent.model.id}
-						</Text>
+						<Text dimColor>{agent.model.id}</Text>
 						{busy && <Text dimColor> │ {chalk.dim("Esc to stop")}</Text>}
 					</Box>
 				</Box>
@@ -366,15 +375,19 @@ function App({
 function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
 	if (msg.role === "user") {
 		return (
-			<Box marginTop={isFirst ? 0 : 1}>
-				<Text bold color="green">
-					{"> "}
-				</Text>
-				<Text>
-					{typeof msg.content === "string"
-						? msg.content
-						: msg.content.map((c) => (c.type === "text" ? c.text : "")).join("")}
-				</Text>
+			<Box marginTop={isFirst ? 0 : 1} flexDirection="row">
+				<Box flexShrink={0} marginRight={1}>
+					<Text bold color="green">
+						{">"}
+					</Text>
+				</Box>
+				<Box flexGrow={1} flexShrink={1}>
+					<Text>
+						{typeof msg.content === "string"
+							? msg.content
+							: msg.content.map((c) => (c.type === "text" ? c.text : "")).join("")}
+					</Text>
+				</Box>
 			</Box>
 		)
 	}
@@ -382,7 +395,7 @@ function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
 	if (msg.role === "assistant") {
 		if (msg.model === "system") {
 			return (
-				<Box marginTop={1}>
+				<Box flexDirection="column" marginTop={0}>
 					{msg.content.map((c, i) =>
 						// biome-ignore lint/suspicious/noArrayIndexKey: stable turn content
 						c.type === "text" ? <Text key={i}>{c.text}</Text> : null,
@@ -396,7 +409,7 @@ function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
 		if (!hasVisibleContent) return null
 
 		return (
-			<Box flexDirection="column" marginTop={1}>
+			<Box flexDirection="column" marginTop={0}>
 				{msg.content.map((c, i) => {
 					if (c.type === "thinking") {
 						return (
