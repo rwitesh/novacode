@@ -1,11 +1,10 @@
-# novacode
+# NovaCode
 
-Open-source, multi-provider coding agent. Built with Bun.
+Open-source, multi-provider coding agent. 
 
 > **Currently in early development.**
 
 ## Install
-
 Requires [Bun](https://bun.sh) >= 1.3.
 
 ```bash
@@ -31,10 +30,9 @@ nova
 ### 2. First-run setup
 
 On first launch, nova walks you through a quick setup:
-
-1. **Pick a provider** — GLM (Z.AI), Gemini (Google), DeepSeek, or OpenAI
-2. **Enter your API key** — stored securely in `~/.novacode/auth.json`
-3. **Pick a default model** — choose from the provider's available models
+1. **Pick a provider** 
+2. **Enter your API key**
+3. **Pick a default model** 
 
 That's it. You're ready to go.
 
@@ -55,33 +53,16 @@ nova "explain the auth module in this project"
 nova "fix the type error in src/utils.ts"
 ```
 
-### 4. CLI flags
+### 4. Flags & commands
 
-```bash
-nova                              # interactive mode
-nova "your prompt"                # print mode
-nova --provider gemini            # override provider
-nova --model gemini-2.5-pro       # override model
-nova --api-key <key>              # override API key
-nova -s <session-id>              # resume a previous session
-nova session list                 # list saved sessions
-nova session delete <id>          # delete a session
-nova -v                           # show version
-nova -h                           # show help
-```
+Available flags: `--provider`, `--model`, `--api-key`, `-s` (resume session)
+
+Session commands: `nova session list`, `nova session delete <id>`
+
+Run `nova -h` or type `/help` in interactive mode to see everything.
 
 ### Supported Providers
 
 GLM (Z.AI), Gemini (Google), DeepSeek, OpenAI
 
-You can set API keys via environment variables or let the onboarding wizard store them in `~/.novacode/auth.json`.
 
-## Build from Source
-
-```bash
-git clone https://github.com/rwitesh/novacode.git
-cd novacode
-bun install
-bun run dev          # run with watch mode
-bun run build        # compile to binary
-```
