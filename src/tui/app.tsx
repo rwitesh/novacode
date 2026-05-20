@@ -1,13 +1,26 @@
 import chalk from "chalk"
 import { Box, render, Static, Text, useInput } from "ink"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
 import type { SessionStore } from "../session/store.ts"
-import type { Msg } from "../types.ts"
+import type { Msg, Prompts } from "../types.ts"
 import { checkForUpdate, getCurrentVersion } from "../update.ts"
 import { formatToolArgs, makeRelative } from "../util.ts"
 import { formatMarkdown } from "./markdown.ts"
+import { ConfirmPrompt, PasswordPrompt, SelectPrompt } from "./prompts.tsx"
+
+type PromptMode =
+	| { type: "chat" }
+	| {
+			type: "select"
+			message: string
+			options: Array<{ value: string; label: string; hint?: string }>
+			header?: string
+	  }
+	| { type: "password"; message: string; validate?: (v: string) => string | undefined }
+	| { type: "confirm"; message: string }
+
 export async function interactive(
 	agent: Agent,
 	store: SessionStore,
@@ -67,7 +80,8 @@ function App({
 	const [status, setStatus] = useState("")
 	const [usage, setUsage] = useState<{ in: number; out: number }>({ in: 0, out: 0 })
 	const [selCmdIdx, setSelCmdIdx] = useState(0)
-	const [cmdRunning, setCmdRunning] = useState(false)
+	const [mode, setMode] = useState<PromptMode>({ type: "chat" })
+	const resolveRef = useRef<((v: unknown) => void) | null>(null)
 	const history = useRef<string[]>([])
 	const hIdx = useRef(-1)
 	const abortCtrl = useRef<AbortController | null>(null)
@@ -92,19 +106,47 @@ function App({
 			)
 		: []
 
+	const prompts: Prompts = {
+		select: useCallback(
+			(config) =>
+				new Promise((resolve) => {
+					resolveRef.current = resolve as (v: unknown) => void
+					setMode({ type: "select", ...config })
+				}),
+			[],
+		),
+		password: useCallback(
+			(config) =>
+				new Promise((resolve) => {
+					resolveRef.current = resolve as (v: unknown) => void
+					setMode({ type: "password", ...config })
+				}),
+			[],
+		),
+		confirm: useCallback(
+			(config) =>
+				new Promise((resolve) => {
+					resolveRef.current = resolve as (v: unknown) => void
+					setMode({ type: "confirm", ...config })
+				}),
+			[],
+		),
+	}
+
+	function resolvePrompt(value: unknown) {
+		const fn = resolveRef.current
+		resolveRef.current = null
+		setMode({ type: "chat" })
+		fn?.(value)
+	}
+
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reset selection on input change
 	useEffect(() => {
 		setSelCmdIdx(0)
 	}, [input])
 
-	useEffect(() => {
-		if (!cmdRunning) {
-			process.stdout.write("\x1B[?25l")
-		}
-	}, [cmdRunning])
-
 	useInput((ch, key) => {
-		if (cmdRunning) return
+		if (mode.type !== "chat") return
 
 		if (key.escape) {
 			if (abortCtrl.current) {
@@ -167,43 +209,7 @@ function App({
 		hIdx.current = -1
 
 		if (line.startsWith("/")) {
-			const cmdName = line.slice(1).split(" ")[0]?.toLowerCase() ?? ""
-			const isInteractive =
-				["providers", "prov", "config", "cfg", "models", "model"].includes(cmdName) &&
-				!line.includes(" ")
-
-			if (isInteractive) {
-				setCmdRunning(true)
-				// Small delay to let Ink clear
-				setTimeout(() => {
-					dispatch(line, agent, store, sessionId).then((r) => {
-						process.stdin.setRawMode?.(true)
-						setCmdRunning(false)
-						if (r) {
-							setMsgs((prev) => {
-								const updated: Msg[] = [
-									...prev,
-									{
-										role: "assistant",
-										content: [{ type: "text", text: r }],
-										model: "system",
-										provider: "system",
-										usage: { in: 0, out: 0 },
-										stop: "stop",
-										ts: Date.now(),
-									},
-								]
-								agent.setMessages(updated)
-								return updated
-							})
-						}
-					})
-				}, 50)
-				return
-			}
-
-			// Slash commands
-			dispatch(line, agent, store, sessionId).then((r) => {
+			dispatch(line, agent, store, sessionId, prompts).then((r) => {
 				if (r) {
 					setMsgs((prev) => {
 						const updated: Msg[] = [
@@ -317,7 +323,24 @@ function App({
 		store.append(sessionId, userMsg)
 	})
 
-	if (cmdRunning) return null
+	if (mode.type === "select") {
+		return (
+			<SelectPrompt
+				message={mode.message}
+				options={mode.options}
+				header={mode.header}
+				onSelect={resolvePrompt}
+			/>
+		)
+	}
+	if (mode.type === "password") {
+		return (
+			<PasswordPrompt message={mode.message} validate={mode.validate} onSubmit={resolvePrompt} />
+		)
+	}
+	if (mode.type === "confirm") {
+		return <ConfirmPrompt message={mode.message} onConfirm={resolvePrompt} />
+	}
 
 	const visibleMsgs = msgs.filter(hasMeaningfulContent)
 	const isLiveActive = !!(stream || thinkStream || busy)

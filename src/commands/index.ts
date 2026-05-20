@@ -1,7 +1,7 @@
 import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
 import type { SessionStore } from "../session/store.ts"
-import type { Cmd } from "../types.ts"
+import type { Cmd, Prompts } from "../types.ts"
 import { checkForUpdate, runUpdate } from "../update.ts"
 import { handleCompact } from "./compact.ts"
 import { handleModels } from "./models.ts"
@@ -35,6 +35,7 @@ export async function dispatch(
 	agent: Agent,
 	store?: SessionStore,
 	sessionId?: string,
+	prompts?: Prompts,
 ): Promise<string | null> {
 	const [cmd, ...rest] = input.slice(1).split(" ")
 	const args = rest.join(" ")
@@ -42,12 +43,12 @@ export async function dispatch(
 	switch (cmd) {
 		case "models":
 		case "model":
-			return handleModels(args, agent)
+			return handleModels(args, agent, prompts)
 		case "providers":
 		case "prov":
 		case "config":
 		case "cfg":
-			return handleProviders(agent)
+			return handleProviders(agent, prompts)
 		case "compact":
 			if (!store || !sessionId) return chalk.red("Session store not available")
 			return handleCompact(agent, store, sessionId)

@@ -47,10 +47,11 @@ src/
 │   └── search.ts        # glob, grep, ls tools
 ├── session/             # (TODO) JSONL session persistence + compaction
 ├── onboarding/
-│   └── wizard.ts        # first-run @clack/prompts setup
-├── commands/            # (TODO) /models, /providers, etc
+│   └── wizard.ts        # first-run setup using Ink standalone prompts
+├── commands/            # slash command handlers (/models, /providers, /compact, etc)
 └── tui/
     ├── app.tsx          # interactive TUI application using Ink
+    ├── prompts.tsx      # Ink-based select/password/confirm prompt components
     └── markdown.ts      # markdown terminal renderer
 ```
 
@@ -63,6 +64,7 @@ src/
 5. **No comments unless "why"** — code explains "what", comments explain "why". Do not add JSDoc to every function. Only add JSDoc when the function's purpose is non-obvious or has subtle behavior.
 6. **Short names** — `Msg` not `AgentMessage`, `StreamFn` not `StreamFunction`.
 7. **Private fields** — `#field` not `private field`. True encapsulation.
+8. **Single rendering context** — All interactive UI (chat, prompts, menus) runs inside one Ink app. Never unmount/remount Ink to switch between modes. Use state-based mode switching instead.
 
 ## Coding Conventions
 
@@ -128,7 +130,9 @@ These rules prevent the most common mistakes AI agents make when editing this co
 - **`tools/`** — tool definitions only. No agent loop logic. Tools receive `cwd` as a parameter, they don't read config.
 - **`agent/`** — orchestrates providers and tools. No direct HTTP calls or file I/O (those live in tools and providers).
 - **`config/`** — reads/writes config files. No agent or provider logic.
-- **Cross-module imports go one direction:** `main → agent → provider`, `main → tools`, `main → config`. Never `tools → agent` or `provider → agent`.
+- **`commands/`** — slash command handlers. Receive a `Prompts` interface from the TUI for interactive menus. Never import Ink or render directly — use the injected `Prompts` object.
+- **`tui/`** — all rendering lives here. `app.tsx` owns the Ink app and exposes a `Prompts` implementation. `prompts.tsx` has reusable Ink prompt components plus standalone wrappers for onboarding (outside the main TUI).
+- **Cross-module imports go one direction:** `main → agent → provider`, `main → tools`, `main → config`, `main → tui`. Never `tools → agent` or `provider → agent` or `commands → tui`.
 
 ## Before Every Commit
 
@@ -151,3 +155,4 @@ These rules prevent the most common mistakes AI agents make when editing this co
 | Nesting `if/else` 3+ levels deep | Use early returns and guard clauses |
 | Using callback-style `node:fs` | Use `node:fs/promises` for all file I/O. Prefer async APIs. |
 | Creating a new interface in a tool file | Add it to `types.ts` if shared, or keep it local with a clear `/** ... */` doc if it's file-scoped |
+| Adding a new prompt/interactive library (e.g. clack, inquirer, prompts) | Use the existing Ink-based `Prompts` interface in `tui/prompts.tsx`. All interactive UI runs inside one Ink app. |

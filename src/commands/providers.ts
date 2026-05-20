@@ -1,33 +1,33 @@
-import * as clack from "@clack/prompts"
 import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
 import { getProvider, MODELS, PROVIDERS } from "../config/providers.ts"
 import { loadAuth, loadConfig, saveAuth, saveConfig } from "../config/store.ts"
+import type { Prompts } from "../types.ts"
 
-export async function handleProviders(agent: Agent): Promise<string> {
+export async function handleProviders(agent: Agent, prompts?: Prompts): Promise<string> {
+	if (!prompts) return chalk.red("Prompts not available in this context")
+
 	const config = await loadConfig()
 	const auth = await loadAuth()
-
 	const configured = PROVIDERS.filter((p) => !!auth.apiKeys[p.id])
 
-	console.log(chalk.bold("\n  ⚙  Configured Providers:\n"))
-	if (configured.length === 0) {
-		console.log(chalk.dim("    No providers configured. Use 'Add Provider' below.\n"))
-	} else {
-		for (const p of configured) {
-			const isDefault = p.id === config.provider
-			const active = isDefault ? chalk.green(" ●") : ""
-			const key = chalk.green("✅")
-			const currentModel = isDefault
-				? config.model
-				: (MODELS.find((m) => m.provider === p.id)?.id ?? "")
-			console.log(`    ${key} ${p.name.padEnd(24)} ${currentModel}${active}`)
-		}
-		console.log("") // Spacer
-	}
+	const headerLines =
+		configured.length === 0
+			? chalk.dim("No providers configured. Use 'Add Provider' below.")
+			: configured
+					.map((p) => {
+						const isDefault = p.id === config.provider
+						const active = isDefault ? chalk.green(" ●") : ""
+						const currentModel = isDefault
+							? config.model
+							: (MODELS.find((m) => m.provider === p.id)?.id ?? "")
+						return `  ✅ ${p.name.padEnd(24)} ${currentModel}${active}`
+					})
+					.join("\n")
 
-	const act = await clack.select({
+	const act = await prompts.select({
 		message: "Action",
+		header: headerLines,
 		options: [
 			{ value: "add", label: "Add Provider" },
 			{ value: "update", label: "Update API Key" },
@@ -36,16 +36,16 @@ export async function handleProviders(agent: Agent): Promise<string> {
 			{ value: "back", label: "Back" },
 		],
 	})
-	if (clack.isCancel(act) || act === "back") return ""
+	if (!act || act === "back") return ""
 
-	if (act === "add") return addProvider(agent)
-	if (act === "update") return updateKey(agent)
-	if (act === "remove") return removeKey(agent)
-	if (act === "default") return setDefault(agent)
+	if (act === "add") return addProvider(agent, prompts)
+	if (act === "update") return updateKey(agent, prompts)
+	if (act === "remove") return removeKey(agent, prompts)
+	if (act === "default") return setDefault(agent, prompts)
 	return ""
 }
 
-async function addProvider(agent: Agent): Promise<string> {
+async function addProvider(agent: Agent, prompts: Prompts): Promise<string> {
 	const auth = await loadAuth()
 	const config = await loadConfig()
 
@@ -54,25 +54,24 @@ async function addProvider(agent: Agent): Promise<string> {
 		return chalk.yellow("All providers already have API keys configured.")
 	}
 
-	const pick = await clack.select({
+	const pick = await prompts.select({
 		message: "Add Provider",
 		options: available.map((p) => ({ value: p.id, label: p.name })),
 	})
-	if (clack.isCancel(pick)) return ""
+	if (!pick) return ""
 
-	const pDef = getProvider(pick as string)
+	const pDef = getProvider(pick)
 	if (!pDef) return chalk.red("Error: Provider not found")
 
-	const key = await clack.password({
+	const key = await prompts.password({
 		message: `${pDef.name} API Key`,
 		validate: (v) => (!v || v.length < 8 ? "Enter a valid key" : undefined),
 	})
-	if (clack.isCancel(key)) return ""
+	if (!key) return ""
 
-	auth.apiKeys[pDef.id] = key as string
+	auth.apiKeys[pDef.id] = key
 	await saveAuth(auth)
 
-	// Set as active if no provider is currently set
 	if (!config.provider) {
 		config.provider = pDef.id
 		const mDef = MODELS.find((m) => m.provider === pDef.id)
@@ -83,7 +82,7 @@ async function addProvider(agent: Agent): Promise<string> {
 		agent.updateConfig({
 			api: pDef.api,
 			model: MODELS.find((m) => m.id === config.model)!,
-			apiKey: key as string,
+			apiKey: key,
 			baseUrl: pDef.baseUrl,
 		})
 	}
@@ -91,7 +90,7 @@ async function addProvider(agent: Agent): Promise<string> {
 	return chalk.green(`✓ ${pDef.name} configured`)
 }
 
-async function updateKey(agent: Agent): Promise<string> {
+async function updateKey(agent: Agent, prompts: Prompts): Promise<string> {
 	const auth = await loadAuth()
 
 	const configured = PROVIDERS.filter((p) => !!auth.apiKeys[p.id])
@@ -99,22 +98,21 @@ async function updateKey(agent: Agent): Promise<string> {
 		return chalk.yellow("No providers configured. Use 'Add Provider' first.")
 	}
 
-	const pick = await clack.select({
+	const pick = await prompts.select({
 		message: "Update API Key",
 		options: configured.map((p) => ({ value: p.id, label: p.name })),
 	})
-	if (clack.isCancel(pick)) return ""
+	if (!pick) return ""
 
-	const pDef = getProvider(pick as string)
+	const pDef = getProvider(pick)
 	if (!pDef) return chalk.red("Error: Provider not found")
 
-	const key = await clack.password({ message: `New key for ${pDef.name}` })
-	if (clack.isCancel(key)) return ""
+	const key = await prompts.password({ message: `New key for ${pDef.name}` })
+	if (!key) return ""
 
-	auth.apiKeys[pDef.id] = key as string
+	auth.apiKeys[pDef.id] = key
 	await saveAuth(auth)
 
-	// If this is the active provider, update the agent's key
 	const config = await loadConfig()
 	if (config.provider === pDef.id) {
 		const currentModel = MODELS.find((m) => m.id === config.model && m.provider === config.provider)
@@ -122,7 +120,7 @@ async function updateKey(agent: Agent): Promise<string> {
 			agent.updateConfig({
 				api: pDef.api,
 				model: currentModel,
-				apiKey: key as string,
+				apiKey: key,
 				baseUrl: pDef.baseUrl,
 			})
 		}
@@ -131,7 +129,7 @@ async function updateKey(agent: Agent): Promise<string> {
 	return chalk.green("✓ Key updated")
 }
 
-async function removeKey(agent: Agent): Promise<string> {
+async function removeKey(agent: Agent, prompts: Prompts): Promise<string> {
 	const auth = await loadAuth()
 	const config = await loadConfig()
 
@@ -140,26 +138,23 @@ async function removeKey(agent: Agent): Promise<string> {
 		return chalk.yellow("No configured providers to remove.")
 	}
 
-	const pick = await clack.select({
+	const pick = await prompts.select({
 		message: "Remove API Key",
 		options: configured.map((p) => ({ value: p.id, label: p.name })),
 	})
-	if (clack.isCancel(pick)) return ""
+	if (!pick) return ""
 
-	const pId = pick as string
-	const confirm = await clack.confirm({
-		message: `Are you sure you want to remove the API key for ${pId}?`,
+	const confirm = await prompts.confirm({
+		message: `Are you sure you want to remove the API key for ${pick}?`,
 	})
-	if (clack.isCancel(confirm) || !confirm) return ""
+	if (!confirm) return ""
 
-	delete auth.apiKeys[pId]
+	delete auth.apiKeys[pick]
 	await saveAuth(auth)
 
-	// If removing the active provider's key
-	if (config.provider === pId) {
+	if (config.provider === pick) {
 		config.provider = ""
 		config.model = ""
-		// Try to find another configured provider
 		const next = Object.keys(auth.apiKeys)[0]
 		if (next) {
 			const pDef = getProvider(next)
@@ -178,43 +173,39 @@ async function removeKey(agent: Agent): Promise<string> {
 		await saveConfig(config)
 	}
 
-	return chalk.green(`✓ Removed API key for ${pId}`)
+	return chalk.green(`✓ Removed API key for ${pick}`)
 }
 
-async function setDefault(agent: Agent): Promise<string> {
+async function setDefault(agent: Agent, prompts: Prompts): Promise<string> {
 	const config = await loadConfig()
 	const auth = await loadAuth()
 
-	const pick = await clack.select({
+	const pick = await prompts.select({
 		message: "Default Provider",
-		options: PROVIDERS.map((p) => {
-			const hasKey = !!auth.apiKeys[p.id]
-			return {
-				value: p.id,
-				label: `${hasKey ? "✅" : "❌"} ${p.name}`,
-			}
-		}),
+		options: PROVIDERS.map((p) => ({
+			value: p.id,
+			label: `${auth.apiKeys[p.id] ? "✅" : "❌"} ${p.name}`,
+		})),
 	})
-	if (clack.isCancel(pick)) return ""
+	if (!pick) return ""
 
-	const pId = pick as string
-	if (!auth.apiKeys[pId]) {
-		return chalk.yellow(`No API key for ${pId}. Please set one first.`)
+	if (!auth.apiKeys[pick]) {
+		return chalk.yellow(`No API key for ${pick}. Please set one first.`)
 	}
 
-	const pDef = getProvider(pId)
-	const mDef = MODELS.find((m) => m.provider === pId)
+	const pDef = getProvider(pick)
+	const mDef = MODELS.find((m) => m.provider === pick)
 
 	if (!pDef || !mDef) return chalk.red("Error: Provider or model not found")
 
-	config.provider = pId
+	config.provider = pick
 	config.model = mDef.id
 	await saveConfig(config)
 
 	agent.updateConfig({
 		api: pDef.api,
 		model: mDef,
-		apiKey: auth.apiKeys[pId],
+		apiKey: auth.apiKeys[pick],
 		baseUrl: pDef.baseUrl,
 	})
 

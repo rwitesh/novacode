@@ -1,22 +1,23 @@
-import * as clack from "@clack/prompts"
 import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
 import { getProvider, MODELS } from "../config/providers.ts"
 import { loadAuth, loadConfig, saveConfig } from "../config/store.ts"
+import type { Prompts } from "../types.ts"
 
-export async function handleModels(args: string, agent: Agent): Promise<string> {
+export async function handleModels(args: string, agent: Agent, prompts?: Prompts): Promise<string> {
 	const config = await loadConfig()
 	const auth = await loadAuth()
 
 	if (args) return await switchDirect(args.trim(), agent)
 
-	const options: clack.Option<string>[] = []
+	if (!prompts) return chalk.red("Prompts not available in this context")
+
+	const options: Array<{ value: string; label: string; hint?: string }> = []
 	for (const m of MODELS) {
 		const cur = m.id === config.model && m.provider === config.provider
 		const pDef = getProvider(m.provider)
 		if (!pDef) continue
 
-		// Ensure we have an API key for the provider
 		const hasKey = !!auth.apiKeys[m.provider]
 		if (!hasKey) continue
 
@@ -30,10 +31,10 @@ export async function handleModels(args: string, agent: Agent): Promise<string> 
 	if (!options.length)
 		return chalk.yellow("No models available. Use /providers to add a provider API key.")
 
-	const pick = await clack.select({ message: "Model", options })
-	if (clack.isCancel(pick)) return ""
+	const pick = await prompts.select({ message: "Model", options })
+	if (!pick) return ""
 
-	const [pk, mid] = (pick as string).split(":")
+	const [pk, mid] = pick.split(":")
 	const selectedModel = MODELS.find((m) => m.provider === pk && m.id === mid)
 	const selectedProvider = getProvider(pk!)
 
@@ -43,7 +44,6 @@ export async function handleModels(args: string, agent: Agent): Promise<string> 
 	config.model = mid!
 	await saveConfig(config)
 
-	// Update agent
 	agent.updateConfig({
 		api: selectedProvider.api,
 		model: selectedModel,
@@ -72,7 +72,6 @@ async function switchDirect(id: string, agent: Agent): Promise<string> {
 	config.model = id
 	await saveConfig(config)
 
-	// Update agent
 	agent.updateConfig({
 		api: selectedProvider.api,
 		model: m,

@@ -224,6 +224,21 @@ export interface AssistantResult {
 	stop: StopReason
 }
 
+/** Prompts — used by interactive commands within the TUI */
+
+export interface Prompts {
+	select(config: {
+		message: string
+		header?: string
+		options: Array<{ value: string; label: string; hint?: string }>
+	}): Promise<string | null>
+	password(config: {
+		message: string
+		validate?: (v: string) => string | undefined
+	}): Promise<string | null>
+	confirm(config: { message: string }): Promise<boolean | null>
+}
+
 /** Commands */
 
 export interface Cmd {
