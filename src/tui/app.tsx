@@ -18,7 +18,11 @@ type PromptMode =
 			options: Array<{ value: string; label: string; hint?: string }>
 			header?: string
 	  }
-	| { type: "password"; message: string; validate?: (v: string) => string | undefined }
+	| {
+			type: "password"
+			message: string
+			validate?: (v: string) => string | undefined
+	  }
 	| { type: "confirm"; message: string }
 
 export async function interactive(
@@ -78,14 +82,20 @@ function App({
 	const [busy, setBusy] = useState(false)
 	const [input, setInput] = useState("")
 	const [status, setStatus] = useState("")
-	const [usage, setUsage] = useState<{ in: number; out: number }>({ in: 0, out: 0 })
+	const [usage, setUsage] = useState<{ in: number; out: number }>({
+		in: 0,
+		out: 0,
+	})
 	const [selCmdIdx, setSelCmdIdx] = useState(0)
 	const [mode, setMode] = useState<PromptMode>({ type: "chat" })
 	const resolveRef = useRef<((v: unknown) => void) | null>(null)
 	const history = useRef<string[]>([])
 	const hIdx = useRef(-1)
 	const abortCtrl = useRef<AbortController | null>(null)
-	const [updateInfo, setUpdateInfo] = useState<{ current: string; latest: string } | null>(null)
+	const [updateInfo, setUpdateInfo] = useState<{
+		current: string
+		latest: string
+	} | null>(null)
 
 	useEffect(() => {
 		const check = async () => {
@@ -193,7 +203,7 @@ function App({
 		if (!key.return) {
 			setInput((prev) => {
 				if (key.backspace || key.delete) return prev.slice(0, -1)
-				return prev + ch
+				return prev + (ch || "")
 			})
 			return
 		}
@@ -258,9 +268,11 @@ function App({
 						if (ev.text) setThinkStream((prev) => prev + ev.text)
 						break
 					case "assistant_msg":
-						// Don't clear streams here — keep live preview visible
-						// until turn_end fires so Static can render the committed msg
 						commitMsg(ev.msg)
+						setTimeout(() => {
+							setStream("")
+							setThinkStream("")
+						}, 0)
 						break
 					case "tool_call":
 						setStatus(chalk.dim(`⏳ ${ev.call.name}…`))
@@ -274,9 +286,6 @@ function App({
 						)
 						break
 					case "turn_end":
-						// Now safe to clear: the committed msg is in Static
-						setStream("")
-						setThinkStream("")
 						setStatus("")
 						break
 					case "usage":
@@ -447,6 +456,7 @@ const TOOL_STYLE: Record<string, string> = {
 	glob: "green",
 	find: "green",
 	grep: "green",
+	tree: "green",
 }
 
 function hasMeaningfulContent(msg: Msg): boolean {
