@@ -100,6 +100,8 @@ export function grepTool(cwd: string): Tool {
 
 					const onAbort = () => {
 						proc.kill()
+						proc.stdout.destroy()
+						proc.stderr.destroy()
 					}
 					signal?.addEventListener("abort", onAbort, { once: true })
 

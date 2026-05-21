@@ -57,7 +57,11 @@ export function gitTool(cwd: string): Tool {
 					stderr += chunk.toString()
 				})
 
-				const onAbort = () => proc.kill("SIGKILL")
+				const onAbort = () => {
+					proc.kill("SIGKILL")
+					proc.stdout.destroy()
+					proc.stderr.destroy()
+				}
 				signal?.addEventListener("abort", onAbort, { once: true })
 
 				let exitCode: number

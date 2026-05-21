@@ -42,11 +42,15 @@ export function bashTool(cwd: string): Tool {
 				const timer = setTimeout(() => {
 					killed = true
 					proc.kill("SIGKILL")
+					proc.stdout.destroy()
+					proc.stderr.destroy()
 				}, timeoutMs)
 
 				const onAbort = () => {
 					killed = true
 					proc.kill("SIGKILL")
+					proc.stdout.destroy()
+					proc.stderr.destroy()
 				}
 				signal?.addEventListener("abort", onAbort, { once: true })
 
