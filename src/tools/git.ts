@@ -60,10 +60,15 @@ export function gitTool(cwd: string): Tool {
 				const onAbort = () => proc.kill("SIGKILL")
 				signal?.addEventListener("abort", onAbort, { once: true })
 
-				const exitCode = await new Promise<number>((resolve) => {
-					proc.on("close", resolve)
-				})
-				signal?.removeEventListener("abort", onAbort)
+				let exitCode: number
+				try {
+					exitCode = await new Promise<number>((resolve, reject) => {
+						proc.on("error", reject)
+						proc.on("close", (code) => resolve(code ?? -1))
+					})
+				} finally {
+					signal?.removeEventListener("abort", onAbort)
+				}
 
 				// Prevent context window blowout by truncating very large outputs
 				const MAX = 50_000

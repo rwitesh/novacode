@@ -27,11 +27,12 @@ export async function getLatestVersion(): Promise<string | null> {
 		const proc = spawn("npm", ["info", "novacode", "version"], {
 			stdio: ["ignore", "pipe", "ignore"],
 		})
-		const text = await new Promise<string>((resolve) => {
+		const text = await new Promise<string>((resolve, reject) => {
 			let out = ""
 			proc.stdout.on("data", (chunk: Buffer) => {
 				out += chunk.toString()
 			})
+			proc.on("error", reject)
 			proc.on("close", () => resolve(out.trim()))
 		})
 		if (text) {
@@ -58,20 +59,29 @@ export async function checkForUpdate(): Promise<{
 }
 
 export async function runUpdate(silent = false): Promise<boolean> {
-	const proc = spawn("npm", ["update", "-g", "novacode"], {
-		stdio: silent ? "ignore" : "inherit",
-	})
-	const exitCode = await new Promise<number>((resolve) => {
-		proc.on("close", resolve)
-	})
-	if (exitCode === 0) {
-		if (!silent) {
-			console.log("✓ novacode updated to latest version successfully.")
+	try {
+		const proc = spawn("npm", ["update", "-g", "novacode"], {
+			stdio: silent ? "ignore" : "inherit",
+		})
+		const exitCode = await new Promise<number>((resolve, reject) => {
+			proc.on("error", reject)
+			proc.on("close", (code) => resolve(code ?? -1))
+		})
+		if (exitCode === 0) {
+			if (!silent) {
+				console.log("✓ novacode updated to latest version successfully.")
+			}
+			return true
+		} else {
+			if (!silent) {
+				console.error(`Update failed (exit code ${exitCode})`)
+				process.exit(1)
+			}
+			return false
 		}
-		return true
-	} else {
+	} catch (e) {
 		if (!silent) {
-			console.error(`Update failed (exit code ${exitCode})`)
+			console.error(`Update failed: ${(e as Error).message}`)
 			process.exit(1)
 		}
 		return false

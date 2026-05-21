@@ -97,21 +97,26 @@ export function grepTool(cwd: string): Tool {
 						cwd,
 						stdio: ["ignore", "pipe", "pipe"],
 					})
-					signal?.addEventListener("abort", () => proc.kill(), { once: true })
+
+					const onAbort = () => {
+						proc.kill()
+					}
+					signal?.addEventListener("abort", onAbort, { once: true })
 
 					let stdout = ""
-					let _stderr = ""
 					proc.stdout.on("data", (chunk: Buffer) => {
 						stdout += chunk.toString()
 					})
-					proc.stderr.on("data", (chunk: Buffer) => {
-						_stderr += chunk.toString()
-					})
 
-					const exitCode = await new Promise<number>((r) => {
-						proc.on("close", r)
-					})
-					signal?.removeEventListener("abort", () => proc.kill())
+					let exitCode: number
+					try {
+						exitCode = await new Promise<number>((resolve, reject) => {
+							proc.on("error", reject)
+							proc.on("close", (code) => resolve(code ?? -1))
+						})
+					} finally {
+						signal?.removeEventListener("abort", onAbort)
+					}
 
 					if (exitCode === 0) {
 						const lines = stdout.split("\n").slice(0, 200).join("\n")
@@ -122,7 +127,10 @@ export function grepTool(cwd: string): Tool {
 				}
 
 				// Pure JS fallback when rg is not available
-				const files = await glob(globFilter || "**/*", { cwd: dir })
+				const files = await glob(globFilter || "**/*", {
+					cwd: dir,
+					ignore: ["**/node_modules/**", "**/.git/**"],
+				})
 				const prefix = relSearchPath === "." ? "" : `${relSearchPath}/`
 				const re = new RegExp(pattern, "i")
 				const matches: string[] = []
