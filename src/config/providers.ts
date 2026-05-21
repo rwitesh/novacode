@@ -83,6 +83,14 @@ export const MODELS: Model[] = [
 	},
 	// Gemini
 	{
+		id: "gemini-3.5-flash",
+		name: "Gemini 3.5 Flash",
+		provider: "gemini",
+		contextWindow: 1_000_000,
+		maxTokens: 65_536,
+		supportsThinking: true,
+	},
+	{
 		id: "gemini-3.1-pro-preview",
 		name: "Gemini 3.1 Pro Preview",
 		provider: "gemini",
@@ -128,7 +136,7 @@ export const MODELS: Model[] = [
 		provider: "gemini",
 		contextWindow: 2_000_000,
 		maxTokens: 65_536,
-		supportsThinking: true,
+		supportsThinking: false,
 	},
 	{
 		id: "gemini-2.5-flash",
@@ -136,7 +144,7 @@ export const MODELS: Model[] = [
 		provider: "gemini",
 		contextWindow: 1_000_000,
 		maxTokens: 65_536,
-		supportsThinking: true,
+		supportsThinking: false,
 	},
 	{
 		id: "gemini-2.5-flash-lite",
@@ -144,7 +152,7 @@ export const MODELS: Model[] = [
 		provider: "gemini",
 		contextWindow: 1_000_000,
 		maxTokens: 65_536,
-		supportsThinking: true,
+		supportsThinking: false,
 	},
 	{
 		id: "gemini-2.5-computer-use-preview-10-2025",
@@ -152,7 +160,7 @@ export const MODELS: Model[] = [
 		provider: "gemini",
 		contextWindow: 1_000_000,
 		maxTokens: 65_536,
-		supportsThinking: true,
+		supportsThinking: false,
 	},
 	// DeepSeek
 	{

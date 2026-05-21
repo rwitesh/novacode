@@ -15,10 +15,6 @@ import { getSessionStore } from "./session/store.ts"
 import { getAllTools } from "./tools/index.ts"
 import { getCurrentVersion, runUpdate } from "./update.ts"
 
-// Ensure providers are registered
-import "./provider/openai.ts"
-import "./provider/gemini.ts"
-
 function parseCli() {
 	const { values, positionals } = parseArgs({
 		options: {

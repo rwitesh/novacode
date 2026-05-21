@@ -6,7 +6,7 @@ import { COMMANDS, dispatch } from "../commands/index.ts"
 import type { SessionStore } from "../session/store.ts"
 import type { Msg, Prompts } from "../types.ts"
 import { checkForUpdate, getCurrentVersion } from "../update.ts"
-import { formatToolArgs, makeRelative } from "../util.ts"
+import { formatToolArgs } from "../util.ts"
 import { formatMarkdown } from "./markdown.ts"
 import { ConfirmPrompt, PasswordPrompt, SelectPrompt } from "./prompts.tsx"
 
@@ -140,6 +140,12 @@ function App({
 		fn?.(value)
 	}
 
+	function commitMsg(msg: Msg) {
+		setMsgs((prev) => [...prev, msg])
+		agent.setMessages([...agent.messages, msg])
+		store.append(sessionId, msg)
+	}
+
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reset selection on input change
 	useEffect(() => {
 		setSelCmdIdx(0)
@@ -211,33 +217,33 @@ function App({
 		if (line.startsWith("/")) {
 			dispatch(line, agent, store, sessionId, prompts).then((r) => {
 				if (r) {
-					setMsgs((prev) => {
-						const updated: Msg[] = [
-							...prev,
-							{
-								role: "assistant",
-								content: [{ type: "text", text: r }],
-								model: "system",
-								provider: "system",
-								usage: { in: 0, out: 0 },
-								stop: "stop",
-								ts: Date.now(),
-							},
-						]
-
-						agent.setMessages(updated)
-						return updated
+					commitMsg({
+						role: "assistant",
+						content: [{ type: "text", text: r }],
+						model: "system",
+						provider: "system",
+						usage: { in: 0, out: 0 },
+						stop: "stop",
+						ts: Date.now(),
 					})
 				}
 			})
 			return
 		}
 
-		abortCtrl.current = new AbortController()
-		const stream = agent.prompt(line, abortCtrl.current.signal)
+		// Record user message before starting the stream
+		const userMsg: Msg = { role: "user", content: line, ts: Date.now() }
+		commitMsg(userMsg)
 
-		;(async () => {
-			for await (const ev of stream) {
+		abortCtrl.current = new AbortController()
+		const eventStream = agent.prompt(line, abortCtrl.current.signal)
+
+		runEventLoop(eventStream)
+	})
+
+	async function runEventLoop(eventStream: ReturnType<Agent["prompt"]>) {
+		try {
+			for await (const ev of eventStream) {
 				switch (ev.type) {
 					case "start":
 						setBusy(true)
@@ -252,76 +258,50 @@ function App({
 						if (ev.text) setThinkStream((prev) => prev + ev.text)
 						break
 					case "assistant_msg":
-						setStream("")
-						setThinkStream("")
-						setMsgs((prev) => {
-							const updated = [...prev, ev.msg]
-							agent.setMessages(updated)
-							return updated
-						})
-						store.append(sessionId, ev.msg)
+						// Don't clear streams here — keep live preview visible
+						// until turn_end fires so Static can render the committed msg
+						commitMsg(ev.msg)
 						break
 					case "tool_call":
 						setStatus(chalk.dim(`⏳ ${ev.call.name}…`))
 						break
 					case "tool_result":
-						setMsgs((prev) => {
-							const updated = [...prev, ev.result]
-							agent.setMessages(updated)
-							return updated
-						})
-						store.append(sessionId, ev.result)
-						{
-							const args = ev.args
-								? `(${Object.values(ev.args)
-										.map((v) => {
-											const val = typeof v === "string" ? makeRelative(v) : JSON.stringify(v)
-											return val.length > 20 ? `${val.slice(0, 20)}…` : val
-										})
-										.join(", ")})`
-								: ""
-							setStatus(
-								ev.result.isError
-									? chalk.red(`✗ ${ev.result.tool}${args}`)
-									: chalk.green(`✓ ${ev.result.tool}${args}`),
-							)
-						}
+						commitMsg(ev.result)
+						setStatus(
+							ev.result.isError
+								? chalk.red(`✗ ${ev.result.tool}`)
+								: chalk.green(`✓ ${ev.result.tool}`),
+						)
 						break
 					case "turn_end":
+						// Now safe to clear: the committed msg is in Static
+						setStream("")
+						setThinkStream("")
 						setStatus("")
 						break
 					case "usage":
 						if (ev.usage) setUsage(ev.usage)
 				}
 			}
-			abortCtrl.current = null
-			setBusy(false)
-			setStatus("")
-			setStream("")
-			setThinkStream("")
-		})().catch((err) => {
+		} catch (err) {
 			const errMsg: Msg = {
 				role: "assistant",
 				model: "system",
 				provider: "system",
-				content: [{ type: "text", text: chalk.red(`Error: ${err.message}`) }],
+				content: [{ type: "text", text: chalk.red(`Error: ${(err as Error).message}`) }],
 				usage: { in: 0, out: 0 },
 				stop: "error",
 				ts: Date.now(),
 			}
-			setMsgs((prev) => [...prev, errMsg])
+			commitMsg(errMsg)
+		} finally {
+			abortCtrl.current = null
 			setBusy(false)
-		})
-
-		// Record user msg immediately
-		const userMsg: Msg = { role: "user", content: line, ts: Date.now() }
-		setMsgs((prev) => {
-			const updated = [...prev, userMsg]
-			agent.setMessages(updated)
-			return updated
-		})
-		store.append(sessionId, userMsg)
-	})
+			setStream("")
+			setThinkStream("")
+			setStatus("")
+		}
+	}
 
 	if (mode.type === "select") {
 		return (
@@ -515,7 +495,6 @@ function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
 			)
 		}
 
-		// Don't render empty assistant messages (often just tool call containers)
 		const hasVisibleContent = msg.content.some((c) => c.type === "text" || c.type === "thinking")
 		if (!hasVisibleContent) return null
 

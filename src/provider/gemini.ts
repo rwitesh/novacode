@@ -9,7 +9,6 @@ import type {
 	ToolDef,
 	Usage,
 } from "../types.ts"
-import { register } from "./registry.ts"
 import { EventStream } from "./stream.ts"
 
 interface GeminiPart {
@@ -200,10 +199,20 @@ export const streamGemini: StreamFn = (
 									if (part.thought === true || typeof part.thought === "string") {
 										const thoughtText = typeof part.thought === "string" ? part.thought : part.text
 										es.push({ type: "thinking_delta", text: thoughtText })
-										content.push({ type: "thinking", text: thoughtText, signature: sig })
+										const last = content[content.length - 1]
+										if (last?.type === "thinking") {
+											last.text += thoughtText
+										} else {
+											content.push({ type: "thinking", text: thoughtText, signature: sig })
+										}
 									} else {
 										es.push({ type: "text_delta", text: part.text })
-										content.push({ type: "text", text: part.text, signature: sig })
+										const last = content[content.length - 1]
+										if (last?.type === "text") {
+											last.text += part.text
+										} else {
+											content.push({ type: "text", text: part.text, signature: sig })
+										}
 									}
 								}
 
@@ -250,5 +259,3 @@ export const streamGemini: StreamFn = (
 
 	return es
 }
-
-register("gemini", streamGemini)

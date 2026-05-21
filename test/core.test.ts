@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { buildSystemPrompt } from "../src/agent/prompt.ts"
 import { EventStream } from "../src/provider/stream.ts"
 import { getAllTools, getDefaultTools } from "../src/tools/index.ts"
-import { consolidate, formatToolArgs, getRelativeIfInside, makeRelative } from "../src/util.ts"
+import { formatToolArgs, getRelativeIfInside, makeRelative } from "../src/util.ts"
 
 describe("tool registration", () => {
 	it("getAllTools returns 11 tools", () => {
@@ -115,32 +115,5 @@ describe("util helpers", () => {
 		const path = "/a/b-other/c/d.txt"
 		const rel = getRelativeIfInside(cwd, path)
 		expect(rel).toBe("/a/b-other/c/d.txt")
-	})
-
-	it("consolidate merges text/thinking and filters out whitespace-only text when tool calls are present", () => {
-		const parts1 = [
-			{ type: "text" as const, text: "hello " },
-			{ type: "text" as const, text: "world" },
-		]
-		expect(consolidate(parts1)).toEqual([{ type: "text", text: "hello world" }])
-
-		const parts2 = [
-			{ type: "text" as const, text: "\n" },
-			{ type: "tool_call" as const, id: "c1", name: "read", args: {} },
-			{ type: "text" as const, text: "  \n  " },
-		]
-		expect(consolidate(parts2)).toEqual([{ type: "tool_call", id: "c1", name: "read", args: {} }])
-
-		const parts3 = [{ type: "text" as const, text: "\n" }]
-		expect(consolidate(parts3)).toEqual([{ type: "text", text: "\n" }])
-
-		const parts4 = [
-			{ type: "text" as const, text: "Thinking...\n" },
-			{ type: "tool_call" as const, id: "c2", name: "tree", args: {} },
-		]
-		expect(consolidate(parts4)).toEqual([
-			{ type: "text", text: "Thinking...\n" },
-			{ type: "tool_call", id: "c2", name: "tree", args: {} },
-		])
 	})
 })

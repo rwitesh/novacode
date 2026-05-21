@@ -2,8 +2,7 @@
  * Core agent loop that orchestrates model interaction and tool execution.
  * Handles turns, tool routing, safety checks, and event streaming.
  */
-import { stream } from "../provider/registry.ts"
-import { EventStream } from "../provider/stream.ts"
+import { EventStream, stream } from "../provider/stream.ts"
 import type {
 	AgentEvent,
 	AssistantMsg,
@@ -13,7 +12,7 @@ import type {
 	ToolCallPart,
 	ToolResultMsg,
 } from "../types.ts"
-import { consolidate, estimateTokens, textPart } from "../util.ts"
+import { estimateTokens, textPart } from "../util.ts"
 
 // Safety cap so a misbehaving model can't loop forever
 const MAX_TURNS = 50
@@ -179,10 +178,20 @@ async function getReply(
 	// Accumulate content and proxy events to the outer stream
 	for await (const ev of providerStream) {
 		if (ev.type === "text_delta" && ev.text) {
-			content.push(textPart(ev.text))
+			const last = content[content.length - 1]
+			if (last?.type === "text") {
+				last.text += ev.text
+			} else {
+				content.push(textPart(ev.text))
+			}
 			es.push({ type: "text_delta", text: ev.text })
 		} else if (ev.type === "thinking_delta" && ev.text) {
-			content.push({ type: "thinking", text: ev.text })
+			const last = content[content.length - 1]
+			if (last?.type === "thinking") {
+				last.text += ev.text
+			} else {
+				content.push({ type: "thinking", text: ev.text })
+			}
 			es.push({ type: "thinking_delta", text: ev.text })
 		} else if (ev.type === "tool_call" && ev.call) {
 			content.push(ev.call)
@@ -193,11 +202,21 @@ async function getReply(
 		}
 	}
 
+	const rawContent =
+		providerStream.result?.content && providerStream.result.content.length > 0
+			? providerStream.result.content
+			: content
+
+	const hasTool = rawContent.some((p) => p.type === "tool_call")
+	const cleanedContent = hasTool
+		? rawContent.filter((p) => p.type !== "text" || p.text.trim().length > 0)
+		: rawContent
+
 	const res = providerStream.result
 	if (res) {
 		return {
 			role: "assistant",
-			content: consolidate(res.content.length > 0 ? res.content : content),
+			content: cleanedContent,
 			model: opts.model.id,
 			provider: opts.model.provider,
 			usage: res.usage,
@@ -208,11 +227,11 @@ async function getReply(
 
 	return {
 		role: "assistant",
-		content: consolidate(content),
+		content: cleanedContent,
 		model: opts.model.id,
 		provider: opts.model.provider,
 		usage,
-		stop: content.some((c) => c.type === "tool_call") ? "tool_use" : "stop",
+		stop: cleanedContent.some((c) => c.type === "tool_call") ? "tool_use" : "stop",
 		ts: Date.now(),
 	}
 }

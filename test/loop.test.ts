@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { run } from "../src/agent/loop.ts"
-import type { AssistantResult, StreamEvent } from "../src/provider/registry.ts"
-import { register } from "../src/provider/registry.ts"
-import { EventStream } from "../src/provider/stream.ts"
+import type { AssistantResult, StreamEvent } from "../src/provider/stream.ts"
+import { EventStream, register } from "../src/provider/stream.ts"
 import type { AgentEvent, ApiFormat, Msg, Tool } from "../src/types.ts"
 
 // Use a unique api format to avoid clashing with real providers

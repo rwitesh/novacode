@@ -1,6 +1,5 @@
 import type {
 	AssistantResult,
-	ContentPart,
 	Msg,
 	StopReason,
 	StreamEvent,
@@ -9,8 +8,6 @@ import type {
 	ToolDef,
 	Usage,
 } from "../types.ts"
-import { consolidate } from "../util.ts"
-import { register } from "./registry.ts"
 import { EventStream } from "./stream.ts"
 
 function msgToOpenAI(msg: Msg): Record<string, unknown> {
@@ -118,8 +115,8 @@ export const streamOpenAI: StreamFn = (
 			let buffer = ""
 			const currentToolCalls = new Map<number, { id: string; name: string; args: string }>()
 			let usage: Usage = { in: 0, out: 0 }
+			let textContent = ""
 			let stop = "stop"
-			const textParts: ContentPart[] = []
 
 			while (true) {
 				const { done, value } = await reader.read()
@@ -142,7 +139,7 @@ export const streamOpenAI: StreamFn = (
 
 						if (delta.content) {
 							es.push({ type: "text_delta", text: delta.content })
-							textParts.push({ type: "text", text: delta.content })
+							textContent += delta.content
 						}
 
 						if (delta.tool_calls) {
@@ -178,7 +175,10 @@ export const streamOpenAI: StreamFn = (
 				}
 			}
 
-			const content: AssistantResult["content"] = consolidate([...textParts])
+			const content: AssistantResult["content"] = []
+			if (textContent) {
+				content.push({ type: "text", text: textContent })
+			}
 			for (const [, tc] of currentToolCalls) {
 				content.push({
 					type: "tool_call",
@@ -213,6 +213,3 @@ export const streamOpenAI: StreamFn = (
 
 	return es
 }
-
-// Auto-register
-register("openai", streamOpenAI)

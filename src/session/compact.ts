@@ -1,5 +1,5 @@
 import { getProvider } from "../config/providers.ts"
-import { stream } from "../provider/registry.ts"
+import { stream } from "../provider/stream.ts"
 import type { Model, Msg } from "../types.ts"
 import { estimateTokens } from "../util.ts"
 import type { SessionStore } from "./store.ts"
