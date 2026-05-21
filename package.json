@@ -3,23 +3,25 @@
 	"version": "0.5.2",
 	"description": "Open-source multi-provider coding agent.",
 	"type": "module",
-	"main": "src/main.ts",
+	"main": "./dist/main.mjs",
 	"bin": {
-		"nova": "src/main.ts"
+		"nova": "./dist/main.mjs"
 	},
 	"files": [
-		"src"
+		"src",
+		"dist"
 	],
 	"scripts": {
-		"start": "node --import tsx/esm src/main.ts",
-		"dev": "node --import tsx/esm src/main.ts",
+		"build": "tsdown",
+		"start": "node dist/main.mjs",
+		"dev": "node --import tsx/esm --watch src/main.ts",
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"format": "biome format --write .",
 		"typecheck": "tsc --noEmit",
-		"check": "npm run typecheck && npm run lint && npm test"
+		"check": "npm run build && npm run typecheck && npm run lint && npm test"
 	},
 	"keywords": [
 		"coding-agent",
@@ -43,12 +45,13 @@
 		"@types/react": "^19.2.14",
 		"@types/semver": "^7.7.1",
 		"lefthook": "^2.1.6",
+		"tsdown": "^0.22.0",
 		"tsx": "^4.19.4",
 		"typescript": "^6.0.3",
 		"vitest": "^4.1.7"
 	},
 	"engines": {
-		"node": ">=22"
+		"node": ">=24"
 	},
 	"dependencies": {
 		"better-sqlite3": "^12.10.0",

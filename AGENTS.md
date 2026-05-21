@@ -13,14 +13,15 @@ Novacode is an open-source, multi-provider coding agent built with Node.js. It f
 ## Commands
 
 ```bash
-npm run dev          # dev with watch (tsx watch)
-npm run start        # run
+npm run dev          # dev with hot-reload watch (node --import tsx/esm --watch src/main.ts)
+npm run build        # compile and bundle the codebase using tsdown
+npm run start        # run the bundled production build (node dist/main.mjs)
 npm test             # run tests (node built-in test runner via tsx)
 npm run lint         # biome lint check
-pm run lint:fix     # biome lint + auto-fix
+npm run lint:fix     # biome lint + auto-fix
 npm run format       # biome format
 npm run typecheck    # tsc --noEmit
-npm run check        # typecheck + lint + test (run this before committing)
+npm run check        # build + typecheck + lint + test (run this before committing)
 ```
 
 ## Architecture
