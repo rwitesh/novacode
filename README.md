@@ -1,8 +1,4 @@
-# NovaCode
-
-Open-source, multi-provider coding agent. 
-
-> **Currently in early development.**
+<img width="1914" height="822" alt="image" src="https://github.com/user-attachments/assets/8dce6a16-e4e3-4fd2-a754-f95d9132ba5e" />
 
 <img width="1164" height="720" alt="result" src="https://github.com/user-attachments/assets/a456c41a-ec19-4a4d-b3b7-180e6b83acc3" />
 
