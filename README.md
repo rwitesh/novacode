@@ -7,9 +7,6 @@ Open-source, multi-provider coding agent.
 <img width="1164" height="720" alt="result" src="https://github.com/user-attachments/assets/a456c41a-ec19-4a4d-b3b7-180e6b83acc3" />
 
 ## Install
-
-Requires [Node.js](https://nodejs.org) >= 22.
-
 ```bash
 # With npm
 npm install -g novacode
@@ -22,16 +19,6 @@ Then use it anywhere:
 
 ```bash
 nova
-```
-
-You can also run without installing:
-
-```bash
-# With npx
-npx novacode
-
-# With bunx
-bunx novacode
 ```
 
 ## Quick Start

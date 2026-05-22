@@ -65,10 +65,8 @@ export class EventStream<T, R> {
 			const item = await new Promise<T | undefined>((resolve) => {
 				this.#resolve = resolve as (value: T) => void
 			})
-			if (item !== undefined && this.#events.length === 0) {
+			if (item !== undefined) {
 				yield item
-			} else if (this.#events.length > 0) {
-				yield this.#events.shift() as T
 			}
 		}
 	}

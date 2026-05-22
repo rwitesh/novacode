@@ -6,7 +6,7 @@ Project knowledge for coding agents working on this codebase.
 
 Novacode is an open-source, multi-provider coding agent built with Node.js. It follows a ReAct agent loop pattern (Reason → Act → Observe).
 
-**Stack:** Node.js (>= 22), TypeScript, `node:fs/promises` for file I/O, `node:child_process` for spawning processes.
+**Stack:** Node.js (>= 24), TypeScript, `node:fs/promises` for file I/O, `node:child_process` for spawning processes.
 
 **Config dir:** `~/.novacode/` (config.json, auth.json, sessions/)
 
@@ -45,15 +45,21 @@ src/
 │   ├── index.ts         # tool factory exports
 │   ├── fs.ts            # read, write, edit tools
 │   ├── shell.ts         # bash tool
-│   └── search.ts        # glob, grep, ls tools
-├── session/             # (TODO) JSONL session persistence + compaction
+│   ├── search.ts        # glob, grep, ls tools
+│   ├── git.ts           # git status, log, diff tools
+│   └── web.ts           # web fetch/search tool
+├── session/             # JSONL session persistence + compaction
 ├── onboarding/
 │   └── wizard.ts        # first-run setup using Ink standalone prompts
 ├── commands/            # slash command handlers (/models, /providers, /compact, etc)
 └── tui/
-    ├── app.tsx          # interactive TUI application using Ink
+    ├── app.tsx          # interactive TUI application using Ink (orchestrator)
     ├── prompts.tsx      # Ink-based select/password/confirm prompt components
-    └── markdown.ts      # markdown terminal renderer
+    ├── markdown.ts      # markdown terminal renderer
+    └── components/
+        ├── message.tsx      # Message renderer + hasMeaningfulContent filter
+        ├── liveArea.tsx     # Spinner, Cursor, LiveArea (streaming/busy display)
+        └── statusBar.tsx    # StatusBar (footer: hints, token usage, model id)
 ```
 
 ## Design Rules
@@ -76,6 +82,7 @@ src/
 - Error handling: try/catch in tools, return `ToolResult` with `isError: true`
 - No decorative comment separators — no `───` dashes, no `***` bars. Use plain `//` for section breaks or nothing at all. Let code structure speak.
 - Tests: small, focused, in `test/` directory. Use `node:test` (describe/it/expect)
+- **File naming:** use `camelCase` for multi-word filenames (e.g. `liveArea.tsx`, `statusBar.tsx`). Never use kebab-case or snake_case.
 
 ## Clean Code Rules
 

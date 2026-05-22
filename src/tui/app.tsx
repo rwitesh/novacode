@@ -6,8 +6,9 @@ import { COMMANDS, dispatch } from "../commands/index.ts"
 import type { SessionStore } from "../session/store.ts"
 import type { Msg, Prompts } from "../types.ts"
 import { checkForUpdate, getCurrentVersion } from "../update.ts"
-import { formatToolArgs } from "../util.ts"
-import { formatMarkdown } from "./markdown.ts"
+import { Cursor, LiveArea } from "./components/liveArea.tsx"
+import { hasMeaningfulContent, Message } from "./components/message.tsx"
+import { StatusBar } from "./components/statusBar.tsx"
 import { ConfirmPrompt, PasswordPrompt, SelectPrompt } from "./prompts.tsx"
 
 type PromptMode =
@@ -42,32 +43,8 @@ export async function interactive(
 	}
 }
 
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-
-function Spinner() {
-	const [frame, setFrame] = useState(0)
-
-	useEffect(() => {
-		const timer = setInterval(() => {
-			setFrame((f) => (f + 1) % SPINNER_FRAMES.length)
-		}, 80)
-		return () => clearInterval(timer)
-	}, [])
-
-	return <Text color="yellow">{SPINNER_FRAMES[frame]}</Text>
-}
-
-function Cursor() {
-	const [visible, setVisible] = useState(true)
-	useEffect(() => {
-		const timer = setInterval(() => setVisible((v) => !v), 530)
-		return () => clearInterval(timer)
-	}, [])
-	return <Text color="green">{visible ? "│" : " "}</Text>
-}
-
 function App({
-	agent: initialAgent,
+	agent,
 	store,
 	sessionId,
 }: {
@@ -75,17 +52,13 @@ function App({
 	store: SessionStore
 	sessionId: string
 }) {
-	const [agent, _setAgent] = useState(initialAgent)
-	const [msgs, setMsgs] = useState<Msg[]>(initialAgent.messages)
+	const [msgs, setMsgs] = useState<Msg[]>(agent.messages)
 	const [stream, setStream] = useState("")
 	const [thinkStream, setThinkStream] = useState("")
 	const [busy, setBusy] = useState(false)
 	const [input, setInput] = useState("")
 	const [status, setStatus] = useState("")
-	const [usage, setUsage] = useState<{ in: number; out: number }>({
-		in: 0,
-		out: 0,
-	})
+	const [usage, setUsage] = useState<{ in: number; out: number }>({ in: 0, out: 0 })
 	const [selCmdIdx, setSelCmdIdx] = useState(0)
 	const [mode, setMode] = useState<PromptMode>({ type: "chat" })
 	const resolveRef = useRef<((v: unknown) => void) | null>(null)
@@ -241,7 +214,6 @@ function App({
 			return
 		}
 
-		// Record user message before starting the stream
 		const userMsg: Msg = { role: "user", content: line, ts: Date.now() }
 		commitMsg(userMsg)
 
@@ -269,10 +241,9 @@ function App({
 						break
 					case "assistant_msg":
 						commitMsg(ev.msg)
-						setTimeout(() => {
-							setStream("")
-							setThinkStream("")
-						}, 0)
+						setStream("")
+						setThinkStream("")
+
 						break
 					case "tool_call":
 						setStatus(chalk.dim(`⏳ ${ev.call.name}…`))
@@ -336,41 +307,18 @@ function App({
 
 	return (
 		<Box flexDirection="column" paddingX={1}>
-			{/* Messages - pushed to scrollback as they finish */}
 			<Static items={visibleMsgs}>
 				{(m, i) => <Message key={`${m.ts}-${i}`} msg={m} isFirst={i === 0} />}
 			</Static>
 
-			{/* Live Area (Streaming, active tool calls, working indicator) */}
-			{isLiveActive && (
-				<Box flexDirection="column" marginTop={visibleMsgs.length > 0 ? 1 : 0}>
-					{thinkStream && (
-						<Text dimColor italic>
-							{thinkStream}
-						</Text>
-					)}
-					{stream && (
-						<Box flexDirection="row">
-							<Box flexGrow={1} flexShrink={1}>
-								<Text>
-									{formatMarkdown(stream)}
-									{!input && <Cursor />}
-								</Text>
-							</Box>
-						</Box>
-					)}
-					{busy && !stream && (
-						<Box flexDirection="row">
-							<Box marginRight={1}>
-								<Spinner />
-							</Box>
-							<Text dimColor>{status ? status.replace("⏳ ", "") : chalk.yellow("working…")}</Text>
-						</Box>
-					)}
-				</Box>
-			)}
+			<LiveArea
+				stream={stream}
+				thinkStream={thinkStream}
+				busy={busy}
+				status={status}
+				hasMessages={visibleMsgs.length > 0}
+			/>
 
-			{/* Input & Footer (Live) */}
 			<Box flexDirection="column" marginTop={visibleMsgs.length > 0 || isLiveActive ? 1 : 0}>
 				{updateInfo && (
 					<Box
@@ -403,155 +351,14 @@ function App({
 					</Box>
 				</Box>
 
-				{/* Dynamic Status / Info Line */}
-				<Box justifyContent="space-between">
-					<Box>
-						{suggestions.length > 0 ? (
-							<Box flexDirection="column" marginLeft={2}>
-								{suggestions.map((s, i) => (
-									<Box key={s.name}>
-										<Text
-											color={i === selCmdIdx ? "black" : "yellow"}
-											backgroundColor={i === selCmdIdx ? "yellow" : undefined}
-										>
-											/{s.name.padEnd(10)}
-										</Text>
-										<Text dimColor> {s.desc}</Text>
-									</Box>
-								))}
-							</Box>
-						) : (
-							<Text dimColor>Enter to send · /help for commands</Text>
-						)}
-					</Box>
-
-					<Box>
-						<Text dimColor>{formatTokenUsage(usage.in, agent.model.contextWindow)}</Text>
-						<Text dimColor> │ </Text>
-						<Text dimColor>{agent.model.id}</Text>
-						{busy && <Text dimColor> │ Esc to stop</Text>}
-					</Box>
-				</Box>
+				<StatusBar
+					model={agent.model}
+					usage={usage}
+					busy={busy}
+					suggestions={suggestions}
+					selCmdIdx={selCmdIdx}
+				/>
 			</Box>
 		</Box>
 	)
-}
-
-function fmtK(n: number): string {
-	const k = n / 1000
-	return k >= 100 ? `${Math.round(k)}K` : `${k.toFixed(1)}K`
-}
-
-function formatTokenUsage(used: number, contextWindow: number): string {
-	if (used === 0) return `0/${fmtK(contextWindow)}`
-	const pct = Math.round((used / contextWindow) * 100)
-	return `${fmtK(used)}/${fmtK(contextWindow)} (${pct}%)`
-}
-
-const TOOL_STYLE: Record<string, string> = {
-	read: "blue",
-	write: "magenta",
-	edit: "yellow",
-	bash: "cyan",
-	glob: "green",
-	find: "green",
-	grep: "green",
-	tree: "green",
-}
-
-function hasMeaningfulContent(msg: Msg): boolean {
-	if (msg.role === "user") return true
-	if (msg.role === "tool_result") return true
-	if (msg.role === "assistant") {
-		if (msg.model === "system") return true
-		return msg.content.some((c) => {
-			if (c.type === "thinking") return c.text.trim().length > 0
-			if (c.type === "text") return c.text.trim().length > 0
-			return false
-		})
-	}
-	return false
-}
-
-function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
-	if (msg.role === "user") {
-		return (
-			<Box marginTop={isFirst ? 0 : 1} flexDirection="row">
-				<Box flexShrink={0} marginRight={1}>
-					<Text bold color="green">
-						{">"}
-					</Text>
-				</Box>
-				<Box flexGrow={1} flexShrink={1}>
-					<Text>
-						{typeof msg.content === "string"
-							? msg.content
-							: msg.content.map((c) => (c.type === "text" ? c.text : "")).join("")}
-					</Text>
-				</Box>
-			</Box>
-		)
-	}
-
-	if (msg.role === "assistant") {
-		if (msg.model === "system") {
-			return (
-				<Box flexDirection="column" marginTop={0}>
-					{msg.content.map((c, i) =>
-						// biome-ignore lint/suspicious/noArrayIndexKey: stable turn content
-						c.type === "text" ? <Text key={i}>{formatMarkdown(c.text)}</Text> : null,
-					)}
-				</Box>
-			)
-		}
-
-		const hasVisibleContent = msg.content.some((c) => c.type === "text" || c.type === "thinking")
-		if (!hasVisibleContent) return null
-
-		return (
-			<Box flexDirection="column" marginTop={0}>
-				{msg.content.map((c, i) => {
-					if (c.type === "thinking") {
-						return (
-							// biome-ignore lint/suspicious/noArrayIndexKey: stable turn content
-							<Text key={i} dimColor italic>
-								{c.text}
-							</Text>
-						)
-					}
-					if (c.type === "text") {
-						// biome-ignore lint/suspicious/noArrayIndexKey: stable turn content
-						return <Text key={i}>{formatMarkdown(c.text)}</Text>
-					}
-					return null
-				})}
-			</Box>
-		)
-	}
-
-	if (msg.role === "tool_result") {
-		const args = msg.args ? formatToolArgs(msg.args, true) : ""
-
-		const resText = msg.content
-			.map((c) => (c.type === "text" ? c.text : ""))
-			.join("")
-			.trim()
-
-		const isRead = msg.tool === "read"
-		const lineCount = isRead ? resText.split("\n").length : 0
-		const color = TOOL_STYLE[msg.tool] || "white"
-
-		return (
-			<Box flexDirection="row">
-				<Text color={msg.isError ? "red" : "green"}>{msg.isError ? "✗" : "✓"} </Text>
-				<Text color={color} bold>
-					{msg.tool}
-				</Text>
-				{args && <Text> {args}</Text>}
-				{isRead && !msg.isError && <Text dimColor> ({lineCount} lines)</Text>}
-				{msg.isError && resText && <Text color="red"> {resText.slice(0, 80)}</Text>}
-			</Box>
-		)
-	}
-	return null
 }
