@@ -1,6 +1,6 @@
 {
 	"name": "novacode",
-	"version": "0.5.3",
+	"version": "0.5.4",
 	"description": "Open-source multi-provider coding agent.",
 	"type": "module",
 	"main": "./dist/main.mjs",
@@ -51,7 +51,7 @@
 		"vitest": "^4.1.7"
 	},
 	"engines": {
-		"node": ">=24"
+		"node": ">=22"
 	},
 	"dependencies": {
 		"better-sqlite3": "^12.10.0",

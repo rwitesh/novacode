@@ -1,3 +1,4 @@
+import { unlinkSync } from "node:fs"
 import { join } from "node:path"
 import BetterSqlite3 from "better-sqlite3"
 import type { Msg, Session } from "../types.ts"
@@ -43,10 +44,32 @@ export class SessionStore {
 	#db: BetterSqlite3.Database
 
 	constructor(dbPath: string) {
-		this.#db = new BetterSqlite3(dbPath)
-		this.#db.pragma("journal_mode = WAL")
-		this.#db.pragma("foreign_keys = ON")
-		this.#db.exec(SCHEMA)
+		this.#db = SessionStore.#open(dbPath)
+	}
+
+	// Opens and fully initialises the DB. If anything throws (e.g. corrupt file),
+	// the bad file is deleted and a fresh DB is created and returned.
+	static #open(dbPath: string): BetterSqlite3.Database {
+		const init = (db: BetterSqlite3.Database) => {
+			db.pragma("journal_mode = WAL")
+			db.pragma("foreign_keys = ON")
+			db.exec(SCHEMA)
+			return db
+		}
+		try {
+			return init(new BetterSqlite3(dbPath))
+		} catch {
+			// Delete the main DB and WAL sidecar files — all three must go or
+			// SQLite will fail again trying to replay a corrupt WAL on reopen.
+			for (const f of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
+				try {
+					unlinkSync(f)
+				} catch {
+					// file may already be absent — ignore
+				}
+			}
+			return init(new BetterSqlite3(dbPath))
+		}
 	}
 
 	create(cwd: string, model: string, provider: string): Session {
