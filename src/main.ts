@@ -104,6 +104,7 @@ Options:
 	const auth = await loadAuth()
 
 	const store = await getSessionStore()
+	await store.prune()
 
 	// Handle --session commands (ls, rm)
 	if (flags.session) {

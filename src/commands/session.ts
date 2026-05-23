@@ -1,4 +1,5 @@
 import type { SessionStore } from "../session/store.ts"
+import { formatRelativeTime } from "../util.ts"
 
 export async function handleSessionCommand(
 	store: SessionStore,
@@ -15,12 +16,12 @@ export async function handleSessionCommand(
 			return
 		}
 
-		console.log("ID".padEnd(25), "MODEL".padEnd(20), "TITLE / UPDATED")
-		console.log("-".repeat(80))
+		console.log("ID".padEnd(25), "TITLE / UPDATED")
+		console.log("-".repeat(60))
 		for (const s of sessions) {
-			const date = new Date(s.updated).toLocaleString()
-			const titleOrUpdated = s.title ? `"${s.title}" (${date})` : date
-			console.log(s.id.padEnd(25), s.model.padEnd(20), titleOrUpdated)
+			const relTime = formatRelativeTime(s.updated)
+			const titleOrUpdated = s.title ? `"${s.title}" (${relTime})` : relTime
+			console.log(s.id.padEnd(25), titleOrUpdated)
 		}
 		return
 	}

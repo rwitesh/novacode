@@ -118,3 +118,42 @@ async function generateSummary(
 
 	return summary.trim() || null
 }
+
+export async function generateSessionTitle(
+	messages: Msg[],
+	model: Model,
+	apiKey: string,
+	baseUrl: string,
+): Promise<string | null> {
+	const provider = getProvider(model.provider)
+	if (!provider) return null
+
+	const convo = messages
+		.slice(0, 4)
+		.map((m) => {
+			if (m.role === "user") return `User: ${extractText(m)}`
+			if (m.role === "assistant") return `Assistant: ${extractText(m)}`
+			return ""
+		})
+		.join("\n")
+
+	const es = stream({
+		api: provider.api,
+		model,
+		apiKey,
+		baseUrl,
+		system:
+			"Generate a very short, descriptive, and concise title for this coding conversation. Do not use quotes or prefixes like 'Title:'. Max 6 words.",
+		messages: [{ role: "user", content: convo, ts: Date.now() }],
+		tools: [],
+	})
+
+	let title = ""
+	for await (const ev of es) {
+		if (ev.type === "text_delta" && ev.text) {
+			title += ev.text
+		}
+	}
+
+	return title.trim().replace(/^["']|["']$/g, "") || null
+}

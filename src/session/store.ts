@@ -59,12 +59,16 @@ export class SessionStore {
 	async list(limit = 10): Promise<Session[]> {
 		try {
 			const entries = await readdir(this.#sessionsDir, { withFileTypes: true })
+			const dirNames = entries
+				.filter((e) => e.isDirectory())
+				.map((e) => e.name)
+				.sort((a, b) => b.localeCompare(a))
+
+			const candidates = dirNames.slice(0, Math.max(limit * 2, 50))
 			const sessions: Session[] = []
-			for (const entry of entries) {
-				if (entry.isDirectory()) {
-					const s = await this.get(entry.name)
-					if (s) sessions.push(s)
-				}
+			for (const name of candidates) {
+				const s = await this.get(name)
+				if (s) sessions.push(s)
 			}
 			sessions.sort((a, b) => b.updated - a.updated)
 			return sessions.slice(0, limit)
@@ -167,6 +171,26 @@ export class SessionStore {
 		const data =
 			remaining.map((m) => JSON.stringify(m)).join("\n") + (remaining.length > 0 ? "\n" : "")
 		await writeFile(this.#messagesPath(sessionId), data)
+	}
+
+	async prune(limit = 10): Promise<void> {
+		try {
+			const entries = await readdir(this.#sessionsDir, { withFileTypes: true })
+			const dirNames = entries
+				.filter((e) => e.isDirectory())
+				.map((e) => e.name)
+				.sort((a, b) => b.localeCompare(a))
+
+			const targets = limit > 0 ? dirNames.slice(0, limit) : dirNames
+			for (const name of targets) {
+				const count = await this.messageCount(name)
+				if (count === 0) {
+					await this.delete(name)
+				}
+			}
+		} catch {
+			// ignore
+		}
 	}
 
 	close(): void {

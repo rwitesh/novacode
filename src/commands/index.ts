@@ -3,6 +3,7 @@ import type { Agent } from "../agent/agent.ts"
 import type { SessionStore } from "../session/store.ts"
 import type { Cmd, Prompts } from "../types.ts"
 import { checkForUpdate, runUpdate } from "../update.ts"
+import { formatRelativeTime } from "../util.ts"
 import { handleCompact } from "./compact.ts"
 import { handleModels } from "./models.ts"
 import { handleProviders } from "./providers.ts"
@@ -11,6 +12,7 @@ export const COMMANDS: Cmd[] = [
 	{ name: "models", desc: "Switch model", aliases: ["model"] },
 	{ name: "providers", desc: "Manage providers", aliases: ["prov", "config", "cfg"] },
 	{ name: "compact", desc: "Compact context" },
+	{ name: "sessions", desc: "List and switch sessions" },
 	{ name: "resume", desc: "Resume previous session" },
 	{ name: "update", desc: "Update novacode" },
 	{ name: "help", desc: "Show help" },
@@ -37,6 +39,8 @@ export async function dispatch(
 	store?: SessionStore,
 	sessionId?: string,
 	prompts?: Prompts,
+	onExit?: () => void,
+	onSwitchSession?: (sessionId: string) => Promise<void>,
 ): Promise<string | null> {
 	const [cmd, ...rest] = input.slice(1).split(" ")
 	const args = rest.join(" ")
@@ -53,6 +57,33 @@ export async function dispatch(
 		case "compact":
 			if (!store || !sessionId) return chalk.red("Session store not available")
 			return handleCompact(agent, store, sessionId)
+		case "sessions": {
+			if (!store || !prompts || !onSwitchSession)
+				return chalk.red("Session switching not available")
+			const sessions = await store.list(50)
+			if (sessions.length === 0) return chalk.yellow("No sessions found.")
+			const options = sessions.map((s) => {
+				const relTime = formatRelativeTime(s.updated)
+				let label = s.title ? `"${s.title}"` : `Session: ${s.id}`
+				if (s.id === sessionId) {
+					label = s.title ? `Current: "${s.title}"` : "Current Session"
+				}
+				return {
+					value: s.id,
+					label,
+					hint: relTime,
+				}
+			})
+			const selectedId = await prompts.select({
+				message: "Select a session to load:",
+				options,
+			})
+			if (selectedId) {
+				await onSwitchSession(selectedId)
+				return chalk.green(`✓ Switched to session: ${selectedId}`)
+			}
+			return chalk.yellow("Session selection cancelled.")
+		}
 		case "resume":
 			return "Use `nova --resume` from the CLI to resume your last session."
 		case "update":
@@ -63,10 +94,18 @@ export async function dispatch(
 			console.clear()
 			return ""
 		case "quit":
-			process.exit(0)
+			if (onExit) {
+				onExit()
+			} else {
+				process.exit(0)
+			}
 			return null
 		case "exit":
-			process.exit(0)
+			if (onExit) {
+				onExit()
+			} else {
+				process.exit(0)
+			}
 			return null
 		default:
 			return chalk.yellow(`Unknown: /${cmd}. Type /help`)

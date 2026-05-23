@@ -1,6 +1,6 @@
 /**
  * Web tools for searching and fetching internet content.
- * Uses DuckDuckGo HTML for search (no API key needed) and Bun's built-in
+ * Uses DuckDuckGo HTML for search (no API key needed) and Node's built-in
  * fetch for reading URLs.
  */
 import type { Tool, ToolResult } from "../types.ts"

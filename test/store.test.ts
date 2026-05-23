@@ -95,4 +95,36 @@ describe("SessionStore", () => {
 			await rm(path, { recursive: true, force: true })
 		}
 	})
+
+	it("should prune empty sessions but keep non-empty ones", async () => {
+		const { path, store } = await createTempStore()
+		try {
+			// Create an empty session
+			const emptySession = await store.create("/test/dir", "test-model", "test-provider")
+
+			// Create a session with messages
+			const activeSession = await store.create("/test/dir", "test-model", "test-provider")
+			const msg: Msg = {
+				role: "user",
+				content: "hello",
+				ts: Date.now(),
+			}
+			await store.append(activeSession.id, msg)
+
+			// Both should exist initially
+			expect(await store.get(emptySession.id)).not.toBeNull()
+			expect(await store.get(activeSession.id)).not.toBeNull()
+
+			// Run pruning
+			await store.prune()
+
+			// Empty session should be deleted
+			expect(await store.get(emptySession.id)).toBeNull()
+
+			// Active session should still exist
+			expect(await store.get(activeSession.id)).not.toBeNull()
+		} finally {
+			await rm(path, { recursive: true, force: true })
+		}
+	})
 })
