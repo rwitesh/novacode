@@ -75,6 +75,10 @@ export const streamOpenAI: StreamFn = (
 	const es = new EventStream<StreamEvent, AssistantResult>()
 
 	;(async () => {
+		let textContent = ""
+		const currentToolCalls = new Map<number, { id: string; name: string; args: string }>()
+		let usage: Usage = { in: 0, out: 0 }
+
 		try {
 			const body = {
 				model: opts.model.id,
@@ -113,9 +117,6 @@ export const streamOpenAI: StreamFn = (
 
 			const decoder = new TextDecoder()
 			let buffer = ""
-			const currentToolCalls = new Map<number, { id: string; name: string; args: string }>()
-			let usage: Usage = { in: 0, out: 0 }
-			let textContent = ""
 			let stop = "stop"
 
 			while (true) {
@@ -200,7 +201,30 @@ export const streamOpenAI: StreamFn = (
 
 			es.finish({ content, usage, stop: stop as StopReason })
 		} catch (e) {
-			if (opts.signal?.aborted) return
+			if (opts.signal?.aborted) {
+				const content: AssistantResult["content"] = []
+				if (textContent) {
+					content.push({ type: "text", text: textContent })
+				}
+				for (const [, tc] of currentToolCalls) {
+					try {
+						content.push({
+							type: "tool_call",
+							id: tc.id,
+							name: tc.name,
+							args: JSON.parse(tc.args || "{}"),
+						})
+					} catch {
+						// skip malformed
+					}
+				}
+				es.finish({
+					content,
+					usage,
+					stop: "aborted",
+				})
+				return
+			}
 			const errorMsg = `Unexpected error: ${e instanceof Error ? e.message : String(e)}`
 			es.push({ type: "text_delta", text: errorMsg })
 			es.finish({

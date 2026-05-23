@@ -97,6 +97,9 @@ export const streamGemini: StreamFn = (
 	const es = new EventStream<StreamEvent, AssistantResult>()
 
 	;(async () => {
+		let usage: Usage = { in: 0, out: 0 }
+		const content: ContentPart[] = []
+
 		try {
 			const baseUrl = opts.baseUrl || "https://generativelanguage.googleapis.com"
 			const url = `${baseUrl}/v1beta/models/${opts.model.id}:streamGenerateContent?alt=sse&key=${opts.apiKey}`
@@ -148,9 +151,7 @@ export const streamGemini: StreamFn = (
 
 			const decoder = new TextDecoder()
 			let buffer = ""
-			let usage: Usage = { in: 0, out: 0 }
 			let stop: StopReason = "stop"
-			const content: ContentPart[] = []
 
 			while (true) {
 				const { done, value } = await reader.read()
@@ -246,7 +247,14 @@ export const streamGemini: StreamFn = (
 
 			es.finish({ content, usage, stop })
 		} catch (e) {
-			if (opts.signal?.aborted) return
+			if (opts.signal?.aborted) {
+				es.finish({
+					content,
+					usage,
+					stop: "aborted",
+				})
+				return
+			}
 			const errorMsg = `Gemini Network/Request Error: ${e instanceof Error ? e.message : String(e)}`
 			es.push({ type: "text_delta", text: errorMsg })
 			es.finish({

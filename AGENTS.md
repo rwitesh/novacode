@@ -61,7 +61,17 @@ src/
         ├── liveArea.tsx     # Spinner, Cursor, LiveArea (streaming/busy display)
         └── statusBar.tsx    # StatusBar (footer: hints, token usage, model id)
 ```
+## Agent Loop & API Flow
 
+Novacode follows a ReAct (Reason → Act → Observe) pattern:
+
+1. **Pure loop** – `src/agent/loop.ts` builds the prompt, streams the LLM via a provider, parses the reply, and returns an updated `AgentState` plus an `Action`.
+2. **Stateful wrapper** – `src/agent/agent.ts` holds the mutable state, repeatedly calls `loop.run`, executes any tool actions, and feeds the tool result back as the next observation.
+3. **Provider abstraction** – `src/provider/registry.ts` maps an `ApiFormat` to a concrete streaming implementation (e.g., `openai.ts`). The provider streams the request to the LLM API.
+4. **Tool execution** – the toolbox (`src/tools/`) runs the requested tool, returns a `ToolResult`, which becomes the next observation for the loop.
+5. The loop repeats until the LLM emits a final‑answer marker or an error aborts.
+
+This succinct flow keeps side‑effects (tool calls, HTTP) out of the pure loop, satisfying the “pure functions first” rule.
 ## Design Rules
 
 1. **One type file** — `src/types.ts` is the single source of truth. No scattered interfaces. If you need a new type, add it there.
@@ -72,6 +82,8 @@ src/
 6. **Short names** — `Msg` not `AgentMessage`, `StreamFn` not `StreamFunction`.
 7. **Private fields** — `#field` not `private field`. True encapsulation.
 8. **Single rendering context** — All interactive UI (chat, prompts, menus) runs inside one Ink app. Never unmount/remount Ink to switch between modes. Use state-based mode switching instead.
+9. **Asynchronous Session Store** — The `SessionStore` class is entirely asynchronous and backed by raw JSON/JSONL files under `~/.novacode/sessions/`. All store methods must be awaited.
+10. **CLI vs Interactive Inputs** — Outside interactive TUI mode, use `--` flags exclusively (e.g. `nova --session ls`, `nova --session rm <id>`, `nova --resume`). Subcommand style (e.g., `nova session ls`) is not permitted. Inside interactive mode, use `/` commands exclusively (e.g. `/resume`, `/compact`).
 
 ## Coding Conventions
 

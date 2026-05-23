@@ -10,9 +10,6 @@ Open-source, multi-provider coding agent.
 ```bash
 # With npm
 npm install -g novacode
-
-# With bun
-bun add -g novacode
 ```
 
 Then use it anywhere:
@@ -48,13 +45,22 @@ nova
 
 You'll get a prompt where you can ask questions, give coding tasks, and use `/help` for available commands.
 
-### 4. Flags & commands
+### 4. Flags & Commands
 
-Available flags: `--provider`, `--model`, `--api-key`, `-s` (resume session)
+#### CLI Flags
+* `nova` — Starts a new interactive session.
+* `nova --resume` — Resumes the most recent active session.
+* `nova --session <id>` — Resumes a specific session by ID.
+* `nova --session ls` — Lists recent sessions with AI-generated titles and smart relative update times.
+* `nova --session ls -n N` — Lists the last N sessions.
+* `nova --session rm <id>` — Deletes a specific session.
+* `nova --session rm --all` — Deletes all sessions.
 
-Session commands: `nova session list`, `nova session delete <id>`
-
-Run `nova -h` or type `/help` in interactive mode to see everything.
+#### Interactive Commands (TUI)
+Inside interactive mode, type `/` to access commands:
+* `/sessions` — Opens a beautiful, keyboard-driven picker to browse and switch between your sessions (using Up/Down arrows and Enter).
+* `/compact` — Compacts the current session's context to optimize token usage.
+* `/help` — Displays all available commands.
 
 ### Supported Providers
 

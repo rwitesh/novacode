@@ -1,24 +1,15 @@
 import { Box, Text } from "ink"
 import type { Msg } from "../../types.ts"
 import { formatToolArgs } from "../../util.ts"
+import { TERMINATION_PHRASES, TOOL_STYLE } from "../constants.ts"
 import { formatMarkdown } from "../markdown.ts"
-
-const TOOL_STYLE: Record<string, string> = {
-	read: "blue",
-	write: "magenta",
-	edit: "yellow",
-	bash: "cyan",
-	glob: "green",
-	find: "green",
-	grep: "green",
-	tree: "green",
-}
 
 export function hasMeaningfulContent(msg: Msg): boolean {
 	if (msg.role === "user") return true
 	if (msg.role === "tool_result") return true
 	if (msg.role === "assistant") {
 		if (msg.model === "system") return true
+		if (msg.stop === "aborted") return true
 		return msg.content.some((c) => {
 			if (c.type === "thinking") return c.text.trim().length > 0
 			if (c.type === "text") return c.text.trim().length > 0
@@ -60,8 +51,14 @@ export function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
 			)
 		}
 
-		const hasVisibleContent = msg.content.some((c) => c.type === "text" || c.type === "thinking")
+		const isAborted = msg.stop === "aborted"
+		const hasVisibleContent =
+			isAborted || msg.content.some((c) => c.type === "text" || c.type === "thinking")
 		if (!hasVisibleContent) return null
+
+		const termPhrase = isAborted
+			? (TERMINATION_PHRASES[msg.ts % TERMINATION_PHRASES.length] ?? "Terminated by user")
+			: ""
 
 		return (
 			<Box flexDirection="column" marginTop={0}>
@@ -80,6 +77,13 @@ export function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
 					}
 					return null
 				})}
+				{isAborted && (
+					<Box marginTop={0}>
+						<Text color="red" italic>
+							▲ {termPhrase}
+						</Text>
+					</Box>
+				)}
 			</Box>
 		)
 	}

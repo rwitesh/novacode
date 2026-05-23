@@ -1,8 +1,11 @@
 import chalk from "chalk"
-import { Box, render, Static, Text, useInput } from "ink"
+import { Box, render, Static, Text, useApp, useInput } from "ink"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
+import { getProvider, MODELS } from "../config/providers.ts"
+import { loadAuth } from "../config/store.ts"
+import { generateSessionTitle } from "../session/compact.ts"
 import type { SessionStore } from "../session/store.ts"
 import type { Msg, Prompts } from "../types.ts"
 import { checkForUpdate, getCurrentVersion } from "../update.ts"
@@ -36,23 +39,55 @@ export async function interactive(
 	process.stdout.write(`${chalk.cyan.bold("⚡ novacode")} ${chalk.gray(`v${version}`)}\n`)
 
 	try {
-		const { waitUntilExit } = render(<App agent={agent} store={store} sessionId={sessionId} />)
+		const { waitUntilExit } = render(<App agent={agent} store={store} sessionId={sessionId} />, {
+			exitOnCtrlC: false,
+		})
 		await waitUntilExit()
 	} finally {
 		process.stdout.write("\x1B[?25h")
+		await store.prune()
 	}
 }
 
 function App({
 	agent,
 	store,
-	sessionId,
+	sessionId: initialSessionId,
 }: {
 	agent: Agent
 	store: SessionStore
 	sessionId: string
 }) {
+	const [currSessionId, setCurrSessionId] = useState(initialSessionId)
 	const [msgs, setMsgs] = useState<Msg[]>(agent.messages)
+
+	const handleSwitchSession = useCallback(
+		async (newSessionId: string) => {
+			const s = await store.get(newSessionId)
+			if (!s) return
+
+			const provider = getProvider(s.provider)
+			const model =
+				MODELS.find((m) => m.id === s.model && m.provider === s.provider) ||
+				MODELS.find((m) => m.id === s.model)
+			if (provider && model) {
+				const auth = await loadAuth()
+				const apiKey = auth.apiKeys[s.provider] || ""
+				agent.updateConfig({
+					api: provider.api,
+					model,
+					apiKey,
+					baseUrl: provider.baseUrl,
+				})
+			}
+
+			const newMsgs = await store.messages(newSessionId)
+			agent.setMessages(newMsgs)
+			setMsgs(newMsgs)
+			setCurrSessionId(newSessionId)
+		},
+		[store, agent],
+	)
 	const [stream, setStream] = useState("")
 	const [thinkStream, setThinkStream] = useState("")
 	const [busy, setBusy] = useState(false)
@@ -69,6 +104,9 @@ function App({
 		current: string
 		latest: string
 	} | null>(null)
+	const { exit } = useApp()
+	const lastExitPress = useRef<{ key: "C"; ts: number } | null>(null)
+	const [exitConfirmKey, setExitConfirmKey] = useState<"C" | null>(null)
 
 	useEffect(() => {
 		const check = async () => {
@@ -126,7 +164,9 @@ function App({
 	function commitMsg(msg: Msg) {
 		setMsgs((prev) => [...prev, msg])
 		agent.setMessages([...agent.messages, msg])
-		store.append(sessionId, msg)
+		store.append(currSessionId, msg).catch((err) => {
+			console.error("Error appending message to session store:", err)
+		})
 	}
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reset selection on input change
@@ -135,12 +175,53 @@ function App({
 	}, [input])
 
 	useInput((ch, key) => {
+		if (key.ctrl && (ch === "c" || ch === "d")) {
+			if (busy) {
+				if (ch === "c") {
+					if (abortCtrl.current) {
+						abortCtrl.current.abort()
+						abortCtrl.current = null
+					}
+				}
+				return
+			}
+
+			// Idle state - handle exit
+			if (ch === "d") {
+				exit()
+				return
+			}
+
+			// Ctrl+C double-press exit logic
+			const now = Date.now()
+			if (
+				lastExitPress.current &&
+				lastExitPress.current.key === "C" &&
+				now - lastExitPress.current.ts < 2000
+			) {
+				exit()
+			} else {
+				lastExitPress.current = { key: "C", ts: now }
+				setExitConfirmKey("C")
+				// Clear the temporary status after 2 seconds
+				setTimeout(() => {
+					if (lastExitPress.current?.key === "C" && Date.now() - lastExitPress.current.ts >= 2000) {
+						lastExitPress.current = null
+						setExitConfirmKey(null)
+					}
+				}, 2000)
+			}
+			return
+		}
+
 		if (mode.type !== "chat") return
 
 		if (key.escape) {
 			if (abortCtrl.current) {
 				abortCtrl.current.abort()
 				abortCtrl.current = null
+			} else if (input) {
+				setInput("")
 			}
 			return
 		}
@@ -198,7 +279,7 @@ function App({
 		hIdx.current = -1
 
 		if (line.startsWith("/")) {
-			dispatch(line, agent, store, sessionId, prompts).then((r) => {
+			dispatch(line, agent, store, currSessionId, prompts, exit, handleSwitchSession).then((r) => {
 				if (r) {
 					commitMsg({
 						role: "assistant",
@@ -258,6 +339,20 @@ function App({
 						break
 					case "turn_end":
 						setStatus("")
+						store
+							.get(currSessionId)
+							.then((s) => {
+								if (s && !s.title && agent.messages.length >= 2) {
+									generateSessionTitle(agent.messages, agent.model, agent.apiKey, agent.baseUrl)
+										.then((title) => {
+											if (title) {
+												store.setTitle(currSessionId, title).catch(() => {})
+											}
+										})
+										.catch(() => {})
+								}
+							})
+							.catch(() => {})
 						break
 					case "usage":
 						if (ev.usage) setUsage(ev.usage)
@@ -311,13 +406,7 @@ function App({
 				{(m, i) => <Message key={`${m.ts}-${i}`} msg={m} isFirst={i === 0} />}
 			</Static>
 
-			<LiveArea
-				stream={stream}
-				thinkStream={thinkStream}
-				busy={busy}
-				status={status}
-				hasMessages={visibleMsgs.length > 0}
-			/>
+			<LiveArea stream={stream} thinkStream={thinkStream} busy={busy} status={status} />
 
 			<Box flexDirection="column" marginTop={visibleMsgs.length > 0 || isLiveActive ? 1 : 0}>
 				{updateInfo && (
@@ -357,6 +446,7 @@ function App({
 					busy={busy}
 					suggestions={suggestions}
 					selCmdIdx={selCmdIdx}
+					exitConfirmKey={exitConfirmKey}
 				/>
 			</Box>
 		</Box>

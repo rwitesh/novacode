@@ -18,12 +18,14 @@ export function StatusBar({
 	busy,
 	suggestions,
 	selCmdIdx,
+	exitConfirmKey,
 }: {
 	model: Model
 	usage: { in: number; out: number }
 	busy: boolean
 	suggestions: Array<{ name: string; desc: string }>
 	selCmdIdx: number
+	exitConfirmKey: "C" | null
 }) {
 	return (
 		<Box justifyContent="space-between">
@@ -42,6 +44,10 @@ export function StatusBar({
 							</Box>
 						))}
 					</Box>
+				) : exitConfirmKey === "C" ? (
+					<Text color="yellow">Press Ctrl+C again to exit</Text>
+				) : busy ? (
+					<Text dimColor>Press Esc to abort or terminate</Text>
 				) : (
 					<Text dimColor>Enter to send · /help for commands</Text>
 				)}

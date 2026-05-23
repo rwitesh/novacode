@@ -1,9 +1,8 @@
 import chalk from "chalk"
 import { Box, Text } from "ink"
 import { useEffect, useState } from "react"
+import { SPINNER_FRAMES } from "../constants.ts"
 import { formatMarkdown } from "../markdown.ts"
-
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
 export function Spinner() {
 	const [frame, setFrame] = useState(0)
@@ -32,19 +31,17 @@ export function LiveArea({
 	thinkStream,
 	busy,
 	status,
-	hasMessages,
 }: {
 	stream: string
 	thinkStream: string
 	busy: boolean
 	status: string
-	hasMessages: boolean
 }) {
 	const isActive = !!(stream || thinkStream || busy)
 	if (!isActive) return null
 
 	return (
-		<Box flexDirection="column" marginTop={hasMessages ? 1 : 0}>
+		<Box flexDirection="column" marginTop={0}>
 			{thinkStream && (
 				<Text dimColor italic>
 					{thinkStream}

@@ -1,6 +1,6 @@
 {
 	"name": "novacode",
-	"version": "0.5.5",
+	"version": "0.6.0",
 	"description": "Open-source multi-provider coding agent.",
 	"type": "module",
 	"main": "./dist/main.mjs",
@@ -21,7 +21,8 @@
 		"lint:fix": "biome check --write .",
 		"format": "biome format --write .",
 		"typecheck": "tsc --noEmit",
-		"check": "npm run build && npm run typecheck && npm run lint && npm test"
+		"check": "npm run build && npm run typecheck && npm run lint && npm test",
+		"benchmark": "node --import tsx/esm test/benchmark.ts"
 	},
 	"keywords": [
 		"coding-agent",
@@ -40,7 +41,6 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.15",
-		"@types/better-sqlite3": "^7.6.13",
 		"@types/node": "^24.5.2",
 		"@types/react": "^19.2.14",
 		"@types/semver": "^7.7.1",
@@ -54,7 +54,6 @@
 		"node": ">=24"
 	},
 	"dependencies": {
-		"better-sqlite3": "^12.10.0",
 		"chalk": "^5.6.2",
 		"glob": "^13.0.6",
 		"ink": "^7.0.3",
