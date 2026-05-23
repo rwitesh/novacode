@@ -126,7 +126,9 @@ function App({
 	function commitMsg(msg: Msg) {
 		setMsgs((prev) => [...prev, msg])
 		agent.setMessages([...agent.messages, msg])
-		store.append(sessionId, msg)
+		store.append(sessionId, msg).catch((err) => {
+			console.error("Error appending message to session store:", err)
+		})
 	}
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reset selection on input change

@@ -13,6 +13,7 @@ import { configExists, loadAuth, loadConfig } from "./config/store.ts"
 import { runOnboarding } from "./onboarding/wizard.ts"
 import { getSessionStore } from "./session/store.ts"
 import { getAllTools } from "./tools/index.ts"
+import type { Session } from "./types.ts"
 import { getCurrentVersion, runUpdate } from "./update.ts"
 
 function parseCli() {
@@ -24,8 +25,12 @@ function parseCli() {
 			model: { type: "string" },
 			"api-key": { type: "string" },
 			session: { type: "string", short: "s" },
+			resume: { type: "boolean" },
+			n: { type: "string" },
+			limit: { type: "string" },
+			all: { type: "boolean" },
 		},
-		strict: true,
+		strict: false,
 		allowPositionals: true,
 	})
 
@@ -52,10 +57,14 @@ async function main() {
 		console.log(`nova — open-source coding agent
 
 Usage:
-  nova                Interactive mode
-  nova update         Update to latest version
-  nova session <cmd>  Session management (list, delete)
-  nova --session <id> Resume a session
+  nova                    Interactive mode
+  nova update             Update to latest version
+  nova --session ls       List sessions (last 10 by default)
+  nova --session ls -n N  List last N sessions
+  nova --session rm <id>  Delete a specific session
+  nova --session rm --all Delete all sessions
+  nova --session <id>     Resume a session by ID
+  nova --resume           Resume the most recent session
 
 Options:
   -h, --help              Show help
@@ -63,14 +72,8 @@ Options:
   --provider <id>         Provider to use
   --model <id>            Model to use
   --api-key <key>         API key override
-  -s, --session <id>      Resume session by ID`)
+  -s, --session <id>      Resume/manage session`)
 		process.exit(0)
-	}
-
-	// Handle session subcommand
-	if (args[0] === "session") {
-		await handleSessionCommand(args.slice(1))
-		return
 	}
 
 	// Handle update subcommand
@@ -80,7 +83,7 @@ Options:
 	}
 
 	// Reject positional args — use interactive mode with / commands
-	if (args.length > 0) {
+	if (args.length > 0 && !flags.session) {
 		console.error(chalk.yellow(`Unknown command: ${args.join(" ")}`))
 		console.error("Run `nova --help` for usage.")
 		process.exit(1)
@@ -100,9 +103,42 @@ Options:
 	const config = await ((await configExists()) ? loadConfig() : runOnboarding())
 	const auth = await loadAuth()
 
-	// CLI overrides
-	const providerId = (flags.provider as string) || config.provider
-	const modelId = (flags.model as string) || config.model
+	const store = await getSessionStore()
+
+	// Handle --session commands (ls, rm)
+	if (flags.session) {
+		const sessionFlag = flags.session as string
+		if (sessionFlag === "ls" || sessionFlag === "list") {
+			const limit = parseInt((flags.n as string) || (flags.limit as string) || "10", 10)
+			await handleSessionCommand(store, ["ls"], { limit })
+			return
+		}
+		if (sessionFlag === "rm" || sessionFlag === "delete") {
+			const id = args[0]
+			const all = !!flags.all
+			await handleSessionCommand(store, ["rm", id ?? ""], { all })
+			return
+		}
+	}
+
+	let session: Session | null = null
+	if (flags.resume) {
+		session = await store.latest()
+		if (!session) {
+			console.error("No recent session found to resume.")
+			process.exit(1)
+		}
+	} else if (flags.session) {
+		session = await store.get(flags.session as string)
+		if (!session) {
+			console.error(`Session not found: ${flags.session}`)
+			process.exit(1)
+		}
+	}
+
+	// CLI overrides or session default or config default
+	const providerId = (flags.provider as string) || session?.provider || config.provider
+	const modelId = (flags.model as string) || session?.model || config.model
 	const apiKey = (flags["api-key"] as string) || auth.apiKeys[providerId]
 
 	const provider = getProvider(providerId)
@@ -133,19 +169,12 @@ Options:
 	const tools = getAllTools(cwd)
 	const system = buildSystemPrompt(cwd, tools)
 
-	// Session persistence
-	const store = getSessionStore()
-	const session = flags.session
-		? store.get(flags.session as string)
-		: store.create(cwd, model.id, providerId)
-
-	if (flags.session && !session) {
-		console.error(`Session not found: ${flags.session}`)
-		process.exit(1)
+	if (!session) {
+		session = await store.create(cwd, model.id, providerId)
 	}
 
-	const sessionId = session!.id
-	const existingMessages = store.messages(sessionId)
+	const sessionId = session.id
+	const existingMessages = await store.messages(sessionId)
 
 	const agent = new Agent({
 		api: provider.api,

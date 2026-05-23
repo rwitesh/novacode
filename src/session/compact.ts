@@ -1,6 +1,6 @@
 import { getProvider } from "../config/providers.ts"
 import { stream } from "../provider/stream.ts"
-import type { Model, Msg } from "../types.ts"
+import type { CompactResult, Model, Msg } from "../types.ts"
 import { estimateTokens } from "../util.ts"
 import type { SessionStore } from "./store.ts"
 
@@ -22,12 +22,6 @@ function extractToolFiles(msg: Msg, toolName: string): string[] {
 	// Extract file paths from tool result content
 	const lines = text.split("\n")
 	return lines.filter((l) => l.trim().length > 0)
-}
-
-export interface CompactResult {
-	compacted: boolean
-	summary?: string
-	msgsRemoved: number
 }
 
 export function needsCompact(messages: Msg[], contextWindow: number): boolean {
@@ -75,14 +69,14 @@ export async function compact(
 	}
 
 	const seqBefore = old.length
-	store.saveCompaction(
+	await store.saveCompaction(
 		sessionId,
 		summary,
 		[...new Set(filesRead)],
 		[...new Set(filesWrote)],
 		seqBefore,
 	)
-	store.truncateBeforeSeq(sessionId, seqBefore + 1)
+	await store.truncateBeforeSeq(sessionId, seqBefore + 1)
 
 	// Insert the summary as a user message so the model retains context
 	const summaryMsg: Msg = {
@@ -90,7 +84,7 @@ export async function compact(
 		content: `[Prior context summary]\n${summary}`,
 		ts: Date.now(),
 	}
-	store.append(sessionId, summaryMsg)
+	await store.append(sessionId, summaryMsg)
 
 	return { compacted: true, summary, msgsRemoved: old.length }
 }

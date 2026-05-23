@@ -11,6 +11,7 @@ export const COMMANDS: Cmd[] = [
 	{ name: "models", desc: "Switch model", aliases: ["model"] },
 	{ name: "providers", desc: "Manage providers", aliases: ["prov", "config", "cfg"] },
 	{ name: "compact", desc: "Compact context" },
+	{ name: "resume", desc: "Resume previous session" },
 	{ name: "update", desc: "Update novacode" },
 	{ name: "help", desc: "Show help" },
 	{ name: "clear", desc: "Clear screen" },
@@ -22,8 +23,8 @@ ${chalk.bold("Commands:")}
 ${COMMANDS.map((c) => `  /${c.name.padEnd(12)} ${c.desc}`).join("\n")}
 
 ${chalk.bold("CLI:")}
-  nova update      Update to latest version
-  nova session ls  List sessions
+  nova update        Update to latest version
+  nova --session ls  List sessions
 
 ${chalk.dim("Keys:")}
   Esc             Abort
@@ -52,6 +53,8 @@ export async function dispatch(
 		case "compact":
 			if (!store || !sessionId) return chalk.red("Session store not available")
 			return handleCompact(agent, store, sessionId)
+		case "resume":
+			return "Use `nova --resume` from the CLI to resume your last session."
 		case "update":
 			return handleUpdate()
 		case "help":

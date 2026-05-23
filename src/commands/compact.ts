@@ -19,7 +19,7 @@ export async function handleCompact(
 
 	if (res.compacted) {
 		// Update agent messages
-		const msgs = store.messages(sessionId)
+		const msgs = await store.messages(sessionId)
 		agent.setMessages(msgs)
 		return chalk.green(`✓ Context compacted (${res.msgsRemoved} messages removed)`)
 	}
