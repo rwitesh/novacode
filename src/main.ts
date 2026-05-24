@@ -11,6 +11,7 @@ import { handleSessionCommand } from "./commands/session.ts"
 import { getProvider, MODELS } from "./config/providers.ts"
 import { configExists, loadAuth, loadConfig } from "./config/store.ts"
 import { runOnboarding } from "./onboarding/wizard.ts"
+import { loadResources } from "./resource.ts"
 import { getSessionStore } from "./session/store.ts"
 import { getAllTools } from "./tools/index.ts"
 import type { Session } from "./types.ts"
@@ -168,7 +169,8 @@ Options:
 
 	const cwd = process.cwd()
 	const tools = getAllTools(cwd)
-	const system = buildSystemPrompt(cwd, tools)
+	const { skills, agentsMd } = await loadResources(cwd)
+	const system = buildSystemPrompt(cwd, tools, skills, agentsMd ?? undefined)
 
 	if (!session) {
 		session = await store.create(cwd, model.id, providerId)
@@ -191,7 +193,7 @@ Options:
 	process.off("SIGINT", onSignal)
 	process.off("SIGTERM", onSignal)
 	const { interactive } = await import("./tui/app.tsx")
-	await interactive(agent, store, sessionId)
+	await interactive(agent, store, sessionId, skills, !!agentsMd)
 }
 
 process.on("unhandledRejection", (reason) => {

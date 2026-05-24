@@ -3,9 +3,14 @@
  */
 
 import os from "node:os"
-import type { Tool } from "../types.ts"
+import type { Skill, Tool } from "../types.ts"
 
-export function buildSystemPrompt(cwd: string, tools: Tool[]): string {
+export function buildSystemPrompt(
+	cwd: string,
+	tools: Tool[],
+	skills: Skill[] = [],
+	agentsMd?: string,
+): string {
 	const toolList = tools.map((t) => `- ${t.def.name}: ${t.def.description}`).join("\n")
 	const platform = os.platform()
 	const arch = os.arch()
@@ -46,5 +51,15 @@ ${toolList}
 - Never delete files outside the working directory.
 - Never run destructive commands unless the user explicitly confirms.
 - If unsure, ask for clarification.
-- Never expose API keys, tokens, or secrets.`
+- Never expose API keys, tokens, or secrets.
+
+# Skills
+
+The following skills are available. Each skill provides specialized instructions for specific tasks.
+
+${skills.length > 0 ? skills.map((s) => `- ${s.name}: ${s.description} (path: ${s.path}/SKILL.md)`).join("\n") : "No skills loaded."}
+
+**IMPORTANT:** Before responding to a task that matches any skill above, you MUST first read the skill's SKILL.md file using the read tool with the full absolute path, then follow its instructions exactly. Do not skip this step.
+
+${agentsMd ? `\n<project_context>\nProject-specific instructions and guidelines:\n\n<project_instructions path="AGENTS.md">\n${agentsMd}\n</project_instructions>\n</project_context>` : ""}`
 }

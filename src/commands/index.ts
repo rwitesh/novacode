@@ -1,7 +1,7 @@
 import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
 import type { SessionStore } from "../session/store.ts"
-import type { Cmd, Prompts } from "../types.ts"
+import type { Cmd, Prompts, Skill } from "../types.ts"
 import { checkForUpdate, runUpdate } from "../update.ts"
 import { formatRelativeTime } from "../util.ts"
 import { handleCompact } from "./compact.ts"
@@ -15,6 +15,7 @@ export const COMMANDS: Cmd[] = [
 	{ name: "sessions", desc: "List and switch sessions" },
 	{ name: "resume", desc: "Resume previous session" },
 	{ name: "update", desc: "Update novacode" },
+	{ name: "skills", desc: "List available skills" },
 	{ name: "help", desc: "Show help" },
 	{ name: "clear", desc: "Clear screen & start new session", aliases: ["new"] },
 	{ name: "quit", desc: "Exit (Ctrl+D)", aliases: ["exit"] },
@@ -42,6 +43,7 @@ export async function dispatch(
 	onExit?: () => void,
 	onSwitchSession?: (sessionId: string) => Promise<void>,
 	onNewSession?: () => Promise<void>,
+	skills: Skill[] = [],
 ): Promise<string | null> {
 	const [cmd, ...rest] = input.slice(1).split(" ")
 	const args = rest.join(" ")
@@ -58,6 +60,8 @@ export async function dispatch(
 		case "compact":
 			if (!store || !sessionId) return chalk.red("Session store not available")
 			return handleCompact(agent, store, sessionId)
+		case "skills":
+			return handleSkills(skills)
 		case "sessions": {
 			if (!store || !prompts || !onSwitchSession)
 				return chalk.red("Session switching not available")
@@ -128,4 +132,34 @@ async function handleUpdate(): Promise<string> {
 		)
 	}
 	return chalk.red("✗ Update failed. Please try running 'nova update' manually in your terminal.")
+}
+
+function handleSkills(skills: Skill[]): string {
+	if (skills.length === 0) {
+		return `${chalk.yellow("No skills found.")}\n\nSkill directories scanned:\n  ~/.agents/skills/\n  ~/.novacode/skills/\n  .agents/skills/\n  .novacode/skills/`
+	}
+
+	const globalSkills = skills.filter((s) => s.source === "global")
+	const projectSkills = skills.filter((s) => s.source === "project")
+
+	let out = `${chalk.bold("Available Skills:")}\n`
+
+	if (globalSkills.length > 0) {
+		out += `\n${chalk.cyan("Global:")}\n`
+		for (const s of globalSkills) {
+			out += `  ${chalk.green(s.name)} — ${s.description}\n`
+			out += `    ${chalk.dim(s.path)}\n`
+		}
+	}
+
+	if (projectSkills.length > 0) {
+		out += `\n${chalk.cyan("Project:")}\n`
+		for (const s of projectSkills) {
+			out += `  ${chalk.green(s.name)} — ${s.description}\n`
+			out += `    ${chalk.dim(s.path)}\n`
+		}
+	}
+
+	out += chalk.dim("\nSkills are auto-loaded by the agent when relevant to your task.")
+	return out
 }

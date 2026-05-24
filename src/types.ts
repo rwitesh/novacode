@@ -253,6 +253,15 @@ export interface Prompts {
 	confirm(config: { message: string }): Promise<boolean | null>
 }
 
+/** Skills */
+
+export interface Skill {
+	name: string
+	description: string
+	path: string
+	source: "global" | "project"
+}
+
 /** Commands */
 
 export interface Cmd {

@@ -7,7 +7,7 @@ import { getProvider, MODELS } from "../config/providers.ts"
 import { loadAuth } from "../config/store.ts"
 import { generateSessionTitle } from "../session/compact.ts"
 import type { SessionStore } from "../session/store.ts"
-import type { Msg, Prompts } from "../types.ts"
+import type { Msg, Prompts, Skill } from "../types.ts"
 import { checkForUpdate, getCurrentVersion } from "../update.ts"
 import { Cursor, LiveArea } from "./components/liveArea.tsx"
 import { hasMeaningfulContent, Message } from "./components/message.tsx"
@@ -33,15 +33,26 @@ export async function interactive(
 	agent: Agent,
 	store: SessionStore,
 	sessionId: string,
+	skills: Skill[] = [],
+	hasAgentsMd = false,
 ): Promise<void> {
 	process.stdout.write("\x1B[?25l")
 	const version = await getCurrentVersion()
 	process.stdout.write(`${chalk.cyan.bold("⚡ novacode")} ${chalk.gray(`v${version}`)}\n`)
+	if (hasAgentsMd) {
+		process.stdout.write(`${chalk.dim("  context:")} ${chalk.cyan("AGENTS.md")}\n`)
+	}
+	if (skills.length > 0) {
+		process.stdout.write(
+			`${chalk.dim("  skills:")}  ${chalk.cyan(`${skills.length} discovered`)}\n`,
+		)
+	}
 
 	try {
-		const { waitUntilExit } = render(<App agent={agent} store={store} sessionId={sessionId} />, {
-			exitOnCtrlC: false,
-		})
+		const { waitUntilExit } = render(
+			<App agent={agent} store={store} sessionId={sessionId} skills={skills} />,
+			{ exitOnCtrlC: false },
+		)
 		await waitUntilExit()
 	} finally {
 		process.stdout.write("\x1B[?25h")
@@ -53,10 +64,12 @@ function App({
 	agent,
 	store,
 	sessionId: initialSessionId,
+	skills,
 }: {
 	agent: Agent
 	store: SessionStore
 	sessionId: string
+	skills: Skill[]
 }) {
 	const [currSessionId, setCurrSessionId] = useState(initialSessionId)
 	const [msgs, setMsgs] = useState<Msg[]>(agent.messages)
@@ -296,6 +309,7 @@ function App({
 				exit,
 				handleSwitchSession,
 				handleNewSession,
+				skills,
 			).then((r) => {
 				if (r) {
 					commitMsg({
