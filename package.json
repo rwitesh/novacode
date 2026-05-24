@@ -1,6 +1,6 @@
 {
 	"name": "novacode",
-	"version": "0.6.0",
+	"version": "0.6.1",
 	"description": "Open-source multi-provider coding agent.",
 	"type": "module",
 	"main": "./dist/main.mjs",
