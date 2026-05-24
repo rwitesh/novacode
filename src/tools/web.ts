@@ -9,21 +9,31 @@ import { textPart } from "../util.ts"
 const MAX_CONTENT = 50_000
 
 // Minimal HTML → plaintext: strips tags, decodes entities, collapses whitespace
+function stripRepeatedly(input: string, pattern: RegExp, replacement: string): string {
+	let previous: string
+	do {
+		previous = input
+		input = input.replace(pattern, replacement)
+	} while (input !== previous)
+	return input
+}
+
 function htmlToText(html: string): string {
 	let text = html
-		// Remove HTML comments
-		.replace(/<!--[\s\S]*?-->/g, "")
-		// Remove script and style blocks entirely
-		.replace(/<script[\s\S]*?<\/script>/gi, "")
-		.replace(/<style[\s\S]*?<\/style>/gi, "")
+	// Remove HTML comments (loop to handle nested/re-introduced patterns)
+	text = stripRepeatedly(text, /<!--[\s\S]*?-->/g, "")
+	// Remove script blocks (loop + tolerate whitespace in close tag like </script >)
+	text = stripRepeatedly(text, /<script[\s\S]*?<\/script\s*>/gi, "")
+	// Remove style blocks
+	text = stripRepeatedly(text, /<style[\s\S]*?<\/style\s*>/gi, "")
+	text = text
 		// Keep link hrefs visible (supports single, double, or no quotes)
 		.replace(/<a[^>]*href=["']?([^"'>\s]*)["']?[^>]*>([\s\S]*?)<\/a>/gi, "[$2]($1)")
 		// Block-level tags → newlines
 		.replace(/<\/?(p|div|br|h[1-6]|li|tr|blockquote|pre|hr)[^>]*>/gi, "\n")
 		// Remove remaining tags
 		.replace(/<[^>]+>/g, "")
-		// Decode common HTML entities (both named and numeric, single/double quotes)
-		.replace(/&amp;/g, "&")
+		// Decode common HTML entities — decode &amp; LAST to avoid double-unescaping
 		.replace(/&lt;/g, "<")
 		.replace(/&gt;/g, ">")
 		.replace(/&quot;/g, '"')
@@ -37,6 +47,7 @@ function htmlToText(html: string): string {
 		.replace(/&lsquo;/g, "'")
 		.replace(/&rsquo;/g, "'")
 		.replace(/&nbsp;/g, " ")
+		.replace(/&amp;/g, "&")
 		// Collapse whitespace but keep paragraph breaks
 		.replace(/[ \t]+/g, " ")
 		.replace(/\n{3,}/g, "\n\n")
