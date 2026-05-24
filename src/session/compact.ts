@@ -1,10 +1,8 @@
 import { getProvider } from "../config/providers.ts"
 import { stream } from "../provider/stream.ts"
 import type { CompactResult, Model, Msg } from "../types.ts"
-import { estimateTokens } from "../util.ts"
 import type { SessionStore } from "./store.ts"
 
-const COMPACT_THRESHOLD = 0.8
 const KEEP_RECENT = 10
 
 function extractText(msg: Msg): string {
@@ -24,10 +22,6 @@ function extractToolFiles(msg: Msg, toolName: string): string[] {
 	return lines.filter((l) => l.trim().length > 0)
 }
 
-export function needsCompact(messages: Msg[], contextWindow: number): boolean {
-	return estimateTokens(messages) > contextWindow * COMPACT_THRESHOLD
-}
-
 export async function compact(
 	store: SessionStore,
 	sessionId: string,
@@ -36,10 +30,6 @@ export async function compact(
 	apiKey: string,
 	baseUrl: string,
 ): Promise<CompactResult> {
-	if (!needsCompact(messages, model.contextWindow)) {
-		return { compacted: false, msgsRemoved: 0 }
-	}
-
 	const old = messages.slice(0, -KEEP_RECENT)
 	if (old.length === 0) {
 		return { compacted: false, msgsRemoved: 0 }
