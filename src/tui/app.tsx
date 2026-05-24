@@ -300,6 +300,10 @@ function App({
 		hIdx.current = -1
 
 		if (line.startsWith("/")) {
+			if (line === "/compact") {
+				setBusy(true)
+				setStatus("Compacting...")
+			}
 			dispatch(
 				line,
 				agent,
@@ -311,6 +315,8 @@ function App({
 				handleNewSession,
 				skills,
 			).then((r) => {
+				setBusy(false)
+				setStatus("")
 				if (r) {
 					commitMsg({
 						role: "assistant",

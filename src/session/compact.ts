@@ -1,9 +1,10 @@
 import { getProvider } from "../config/providers.ts"
 import { stream } from "../provider/stream.ts"
 import type { CompactResult, Model, Msg } from "../types.ts"
+import { estimateTokens } from "../util.ts"
 import type { SessionStore } from "./store.ts"
 
-const KEEP_RECENT = 10
+const MIN_KEEP = 2
 
 function extractText(msg: Msg): string {
 	if (typeof msg.content === "string") return msg.content
@@ -30,10 +31,11 @@ export async function compact(
 	apiKey: string,
 	baseUrl: string,
 ): Promise<CompactResult> {
-	const old = messages.slice(0, -KEEP_RECENT)
-	if (old.length === 0) {
-		return { compacted: false, msgsRemoved: 0 }
+	const tokensBefore = estimateTokens(messages)
+	if (messages.length <= MIN_KEEP) {
+		return { compacted: false, tokensBefore, tokensAfter: tokensBefore }
 	}
+	const old = messages.slice(0, -MIN_KEEP)
 	const convo = old
 		.map((m) => {
 			if (m.role === "user") return `User: ${extractText(m)}`
@@ -46,7 +48,19 @@ export async function compact(
 
 	const summary = await generateSummary(convo, model, apiKey, baseUrl)
 	if (!summary) {
-		return { compacted: false, msgsRemoved: 0 }
+		return { compacted: false, tokensBefore, tokensAfter: tokensBefore }
+	}
+
+	const summaryMsg: Msg = {
+		role: "user",
+		content: `[Prior context summary]\n${summary}`,
+		ts: Date.now(),
+	}
+	const kept = messages.slice(-MIN_KEEP)
+	const tokensAfter = estimateTokens([...kept, summaryMsg])
+
+	if (tokensAfter >= tokensBefore) {
+		return { compacted: false, tokensBefore, tokensAfter: tokensBefore }
 	}
 
 	const filesRead: string[] = []
@@ -67,16 +81,9 @@ export async function compact(
 		seqBefore,
 	)
 	await store.truncateBeforeSeq(sessionId, seqBefore + 1)
-
-	// Insert the summary as a user message so the model retains context
-	const summaryMsg: Msg = {
-		role: "user",
-		content: `[Prior context summary]\n${summary}`,
-		ts: Date.now(),
-	}
 	await store.append(sessionId, summaryMsg)
 
-	return { compacted: true, summary, msgsRemoved: old.length }
+	return { compacted: true, summary, tokensBefore, tokensAfter }
 }
 
 async function generateSummary(

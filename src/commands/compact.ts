@@ -18,10 +18,18 @@ export async function handleCompact(
 	)
 
 	if (res.compacted) {
-		// Update agent messages
 		const msgs = await store.messages(sessionId)
 		agent.setMessages(msgs)
-		return chalk.green(`✓ Context compacted (${res.msgsRemoved} messages removed)`)
+		const saved = res.tokensBefore - res.tokensAfter
+		const pct = Math.round((saved / res.tokensBefore) * 100)
+		return chalk.green(
+			`✓ Compacted ~${res.tokensBefore.toLocaleString()} → ~${res.tokensAfter.toLocaleString()} tokens` +
+				chalk.dim(` (~${saved.toLocaleString()} saved, ${pct}% reduction)`),
+		)
+	}
+
+	if (res.tokensBefore < 500) {
+		return chalk.yellow("Context is too small to benefit from compaction.")
 	}
 
 	return chalk.yellow("Context is small enough, no compaction needed.")

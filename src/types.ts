@@ -179,7 +179,8 @@ export interface Compaction {
 export interface CompactResult {
 	compacted: boolean
 	summary?: string
-	msgsRemoved: number
+	tokensBefore: number
+	tokensAfter: number
 }
 
 /** Loop & Provider Types */
