@@ -16,7 +16,7 @@ export const COMMANDS: Cmd[] = [
 	{ name: "resume", desc: "Resume previous session" },
 	{ name: "update", desc: "Update novacode" },
 	{ name: "help", desc: "Show help" },
-	{ name: "clear", desc: "Clear screen" },
+	{ name: "clear", desc: "Clear screen & start new session", aliases: ["new"] },
 	{ name: "quit", desc: "Exit (Ctrl+D)", aliases: ["exit"] },
 ]
 
@@ -41,6 +41,7 @@ export async function dispatch(
 	prompts?: Prompts,
 	onExit?: () => void,
 	onSwitchSession?: (sessionId: string) => Promise<void>,
+	onNewSession?: () => Promise<void>,
 ): Promise<string | null> {
 	const [cmd, ...rest] = input.slice(1).split(" ")
 	const args = rest.join(" ")
@@ -91,7 +92,9 @@ export async function dispatch(
 		case "help":
 			return HELP
 		case "clear":
+		case "new":
 			console.clear()
+			if (onNewSession) await onNewSession()
 			return ""
 		case "quit":
 			if (onExit) {

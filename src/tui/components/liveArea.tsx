@@ -28,25 +28,20 @@ export function Cursor() {
 
 export function LiveArea({
 	stream,
-	thinkStream,
+	thinking,
 	busy,
 	status,
 }: {
 	stream: string
-	thinkStream: string
+	thinking: boolean
 	busy: boolean
 	status: string
 }) {
-	const isActive = !!(stream || thinkStream || busy)
+	const isActive = !!(stream || thinking || busy)
 	if (!isActive) return null
 
 	return (
 		<Box flexDirection="column" marginTop={0}>
-			{thinkStream && (
-				<Text dimColor italic>
-					{thinkStream}
-				</Text>
-			)}
 			{stream && (
 				<Box flexDirection="row">
 					<Box flexGrow={1} flexShrink={1}>
@@ -57,12 +52,20 @@ export function LiveArea({
 					</Box>
 				</Box>
 			)}
-			{busy && !stream && (
+			{busy && !stream && !thinking && (
 				<Box flexDirection="row">
 					<Box marginRight={1}>
 						<Spinner />
 					</Box>
 					<Text dimColor>{status ? status.replace("⏳ ", "") : chalk.yellow("working…")}</Text>
+				</Box>
+			)}
+			{thinking && !stream && (
+				<Box flexDirection="row">
+					<Box marginRight={1}>
+						<Spinner />
+					</Box>
+					<Text dimColor>{chalk.yellow("Thinking…")}</Text>
 				</Box>
 			)}
 		</Box>

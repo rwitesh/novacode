@@ -11,7 +11,6 @@ export function hasMeaningfulContent(msg: Msg): boolean {
 		if (msg.model === "system") return true
 		if (msg.stop === "aborted") return true
 		return msg.content.some((c) => {
-			if (c.type === "thinking") return c.text.trim().length > 0
 			if (c.type === "text") return c.text.trim().length > 0
 			return false
 		})
@@ -52,8 +51,7 @@ export function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
 		}
 
 		const isAborted = msg.stop === "aborted"
-		const hasVisibleContent =
-			isAborted || msg.content.some((c) => c.type === "text" || c.type === "thinking")
+		const hasVisibleContent = isAborted || msg.content.some((c) => c.type === "text")
 		if (!hasVisibleContent) return null
 
 		const termPhrase = isAborted
@@ -63,14 +61,6 @@ export function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
 		return (
 			<Box flexDirection="column" marginTop={0}>
 				{msg.content.map((c, i) => {
-					if (c.type === "thinking") {
-						return (
-							// biome-ignore lint/suspicious/noArrayIndexKey: stable turn content
-							<Text key={i} dimColor italic>
-								{c.text}
-							</Text>
-						)
-					}
 					if (c.type === "text") {
 						// biome-ignore lint/suspicious/noArrayIndexKey: stable turn content
 						return <Text key={i}>{formatMarkdown(c.text)}</Text>

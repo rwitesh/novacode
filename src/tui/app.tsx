@@ -88,8 +88,16 @@ function App({
 		},
 		[store, agent],
 	)
+
+	const handleNewSession = useCallback(async () => {
+		const m = agent.model
+		const session = await store.create(process.cwd(), m.id, m.provider)
+		agent.setMessages([])
+		setMsgs([])
+		setCurrSessionId(session.id)
+	}, [store, agent])
 	const [stream, setStream] = useState("")
-	const [thinkStream, setThinkStream] = useState("")
+	const [thinking, setThinking] = useState(false)
 	const [busy, setBusy] = useState(false)
 	const [input, setInput] = useState("")
 	const [status, setStatus] = useState("")
@@ -279,7 +287,16 @@ function App({
 		hIdx.current = -1
 
 		if (line.startsWith("/")) {
-			dispatch(line, agent, store, currSessionId, prompts, exit, handleSwitchSession).then((r) => {
+			dispatch(
+				line,
+				agent,
+				store,
+				currSessionId,
+				prompts,
+				exit,
+				handleSwitchSession,
+				handleNewSession,
+			).then((r) => {
 				if (r) {
 					commitMsg({
 						role: "assistant",
@@ -311,19 +328,22 @@ function App({
 					case "start":
 						setBusy(true)
 						setStream("")
-						setThinkStream("")
+						setThinking(false)
 						setStatus("")
 						break
 					case "text_delta":
-						if (ev.text) setStream((prev) => prev + ev.text)
+						if (ev.text) {
+							setThinking(false)
+							setStream((prev) => prev + ev.text)
+						}
 						break
 					case "thinking_delta":
-						if (ev.text) setThinkStream((prev) => prev + ev.text)
+						setThinking(true)
 						break
 					case "assistant_msg":
 						commitMsg(ev.msg)
 						setStream("")
-						setThinkStream("")
+						setThinking(false)
 
 						break
 					case "tool_call":
@@ -373,7 +393,7 @@ function App({
 			abortCtrl.current = null
 			setBusy(false)
 			setStream("")
-			setThinkStream("")
+			setThinking(false)
 			setStatus("")
 		}
 	}
@@ -398,7 +418,7 @@ function App({
 	}
 
 	const visibleMsgs = msgs.filter(hasMeaningfulContent)
-	const isLiveActive = !!(stream || thinkStream || busy)
+	const isLiveActive = !!(stream || thinking || busy)
 
 	return (
 		<Box flexDirection="column" paddingX={1}>
@@ -406,7 +426,7 @@ function App({
 				{(m, i) => <Message key={`${m.ts}-${i}`} msg={m} isFirst={i === 0} />}
 			</Static>
 
-			<LiveArea stream={stream} thinkStream={thinkStream} busy={busy} status={status} />
+			<LiveArea stream={stream} thinking={thinking} busy={busy} status={status} />
 
 			<Box flexDirection="column" marginTop={visibleMsgs.length > 0 || isLiveActive ? 1 : 0}>
 				{updateInfo && (
