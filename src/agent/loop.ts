@@ -186,12 +186,6 @@ async function getReply(
 			}
 			es.push({ type: "text_delta", text: ev.text })
 		} else if (ev.type === "thinking_delta" && ev.text) {
-			const last = content[content.length - 1]
-			if (last?.type === "thinking") {
-				last.text += ev.text
-			} else {
-				content.push({ type: "thinking", text: ev.text })
-			}
 			es.push({ type: "thinking_delta", text: ev.text })
 		} else if (ev.type === "tool_call" && ev.call) {
 			content.push(ev.call)
@@ -202,21 +196,21 @@ async function getReply(
 		}
 	}
 
-	const rawContent =
+	const parts =
 		providerStream.result?.content && providerStream.result.content.length > 0
 			? providerStream.result.content
 			: content
 
-	const hasTool = rawContent.some((p) => p.type === "tool_call")
-	const cleanedContent = hasTool
-		? rawContent.filter((p) => p.type !== "text" || p.text.trim().length > 0)
-		: rawContent
+	const hasToolCall = parts.some((p) => p.type === "tool_call")
+	const replyContent = hasToolCall
+		? parts.filter((p) => p.type !== "text" || p.text.trim().length > 0)
+		: parts
 
 	const res = providerStream.result
 	if (res) {
 		return {
 			role: "assistant",
-			content: cleanedContent,
+			content: replyContent,
 			model: opts.model.id,
 			provider: opts.model.provider,
 			usage: res.usage,
@@ -227,11 +221,11 @@ async function getReply(
 
 	return {
 		role: "assistant",
-		content: cleanedContent,
+		content: replyContent,
 		model: opts.model.id,
 		provider: opts.model.provider,
 		usage,
-		stop: cleanedContent.some((c) => c.type === "tool_call") ? "tool_use" : "stop",
+		stop: replyContent.some((c) => c.type === "tool_call") ? "tool_use" : "stop",
 		ts: Date.now(),
 	}
 }

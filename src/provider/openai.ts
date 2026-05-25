@@ -76,7 +76,6 @@ export const streamOpenAI: StreamFn = (
 
 	;(async () => {
 		let textContent = ""
-		let thinkingContent = ""
 		const currentToolCalls = new Map<number, { id: string; name: string; args: string }>()
 		let usage: Usage = { in: 0, out: 0 }
 
@@ -147,7 +146,6 @@ export const streamOpenAI: StreamFn = (
 						const reasoning = delta.reasoning_content || delta.reasoning || delta.thinking
 						if (reasoning) {
 							es.push({ type: "thinking_delta", text: reasoning })
-							thinkingContent += reasoning
 						}
 
 						if (delta.tool_calls) {
@@ -184,9 +182,6 @@ export const streamOpenAI: StreamFn = (
 			}
 
 			const content: AssistantResult["content"] = []
-			if (thinkingContent) {
-				content.push({ type: "thinking", text: thinkingContent })
-			}
 			if (textContent) {
 				content.push({ type: "text", text: textContent })
 			}
@@ -213,9 +208,6 @@ export const streamOpenAI: StreamFn = (
 		} catch (e) {
 			if (opts.signal?.aborted) {
 				const content: AssistantResult["content"] = []
-				if (thinkingContent) {
-					content.push({ type: "thinking", text: thinkingContent })
-				}
 				if (textContent) {
 					content.push({ type: "text", text: textContent })
 				}

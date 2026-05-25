@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
-import type { Compaction, Msg, Session } from "../types.ts"
+import type { Msg, Session } from "../types.ts"
 
 function generateId(): string {
 	return `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`
@@ -25,8 +25,8 @@ export class SessionStore {
 		return join(this.#sessionDir(id), "messages.jsonl")
 	}
 
-	#compactionPath(id: string): string {
-		return join(this.#sessionDir(id), "compaction.json")
+	#historyPath(id: string): string {
+		return join(this.#sessionDir(id), "history.jsonl")
 	}
 
 	async create(cwd: string, model: string, provider: string): Promise<Session> {
@@ -100,7 +100,7 @@ export class SessionStore {
 		}
 	}
 
-	async append(sessionId: string, msg: Msg): Promise<void> {
+	async append(sessionId: string, msg: Msg, writeToHistory = true): Promise<void> {
 		const session = await this.get(sessionId)
 		if (!session) return
 
@@ -109,6 +109,9 @@ export class SessionStore {
 
 		const line = `${JSON.stringify(msg)}\n`
 		await appendFile(this.#messagesPath(sessionId), line)
+		if (writeToHistory) {
+			await appendFile(this.#historyPath(sessionId), line)
+		}
 	}
 
 	async messages(sessionId: string): Promise<Msg[]> {
@@ -118,6 +121,16 @@ export class SessionStore {
 			return lines.map((l) => JSON.parse(l) as Msg)
 		} catch {
 			return []
+		}
+	}
+
+	async history(sessionId: string): Promise<Msg[]> {
+		try {
+			const data = await readFile(this.#historyPath(sessionId), "utf-8")
+			const lines = data.split("\n").filter((l) => l.trim().length > 0)
+			return lines.map((l) => JSON.parse(l) as Msg)
+		} catch {
+			return this.messages(sessionId)
 		}
 	}
 
@@ -139,37 +152,8 @@ export class SessionStore {
 		await writeFile(this.#metadataPath(sessionId), JSON.stringify(session, null, 2))
 	}
 
-	async saveCompaction(
-		sessionId: string,
-		summary: string,
-		filesRead: string[],
-		filesWrote: string[],
-		seqBefore: number,
-	): Promise<void> {
-		const compaction: Compaction = {
-			summary,
-			seqBefore,
-			filesRead,
-			filesWrote,
-			ts: Date.now(),
-		}
-		await writeFile(this.#compactionPath(sessionId), JSON.stringify(compaction, null, 2))
-	}
-
-	async getLatestCompaction(sessionId: string): Promise<Compaction | null> {
-		try {
-			const data = await readFile(this.#compactionPath(sessionId), "utf-8")
-			return JSON.parse(data) as Compaction
-		} catch {
-			return null
-		}
-	}
-
-	async truncateBeforeSeq(sessionId: string, seq: number): Promise<void> {
-		const msgs = await this.messages(sessionId)
-		const remaining = msgs.slice(seq)
-		const data =
-			remaining.map((m) => JSON.stringify(m)).join("\n") + (remaining.length > 0 ? "\n" : "")
+	async replaceMessages(sessionId: string, msgs: Msg[]): Promise<void> {
+		const data = msgs.map((m) => JSON.stringify(m)).join("\n") + (msgs.length > 0 ? "\n" : "")
 		await writeFile(this.#messagesPath(sessionId), data)
 	}
 

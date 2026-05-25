@@ -48,9 +48,17 @@ export async function interactive(
 		)
 	}
 
+	const initialHistory = await store.history(sessionId)
+
 	try {
 		const { waitUntilExit } = render(
-			<App agent={agent} store={store} sessionId={sessionId} skills={skills} />,
+			<App
+				agent={agent}
+				store={store}
+				sessionId={sessionId}
+				skills={skills}
+				initialHistory={initialHistory}
+			/>,
 			{ exitOnCtrlC: false },
 		)
 		await waitUntilExit()
@@ -65,14 +73,16 @@ function App({
 	store,
 	sessionId: initialSessionId,
 	skills,
+	initialHistory,
 }: {
 	agent: Agent
 	store: SessionStore
 	sessionId: string
 	skills: Skill[]
+	initialHistory: Msg[]
 }) {
 	const [currSessionId, setCurrSessionId] = useState(initialSessionId)
-	const [msgs, setMsgs] = useState<Msg[]>(agent.messages)
+	const [msgs, setMsgs] = useState<Msg[]>(initialHistory)
 
 	const handleSwitchSession = useCallback(
 		async (newSessionId: string) => {
@@ -94,9 +104,10 @@ function App({
 				})
 			}
 
-			const newMsgs = await store.messages(newSessionId)
-			agent.setMessages(newMsgs)
-			setMsgs(newMsgs)
+			const activeMsgs = await store.messages(newSessionId)
+			const fullHistory = await store.history(newSessionId)
+			agent.setMessages(activeMsgs)
+			setMsgs(fullHistory)
 			setCurrSessionId(newSessionId)
 		},
 		[store, agent],

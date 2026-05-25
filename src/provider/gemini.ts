@@ -200,12 +200,6 @@ export const streamGemini: StreamFn = (
 									if (part.thought === true || typeof part.thought === "string") {
 										const thoughtText = typeof part.thought === "string" ? part.thought : part.text
 										es.push({ type: "thinking_delta", text: thoughtText })
-										const last = content[content.length - 1]
-										if (last?.type === "thinking") {
-											last.text += thoughtText
-										} else {
-											content.push({ type: "thinking", text: thoughtText, signature: sig })
-										}
 									} else {
 										es.push({ type: "text_delta", text: part.text })
 										const last = content[content.length - 1]

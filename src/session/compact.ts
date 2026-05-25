@@ -14,15 +14,6 @@ function extractText(msg: Msg): string {
 		.join("")
 }
 
-function extractToolFiles(msg: Msg, toolName: string): string[] {
-	if (msg.role !== "tool_result") return []
-	if (!("tool" in msg) || msg.tool !== toolName) return []
-	const text = extractText(msg)
-	// Extract file paths from tool result content
-	const lines = text.split("\n")
-	return lines.filter((l) => l.trim().length > 0)
-}
-
 export async function compact(
 	store: SessionStore,
 	sessionId: string,
@@ -63,25 +54,10 @@ export async function compact(
 		return { compacted: false, tokensBefore, tokensAfter: tokensBefore }
 	}
 
-	const filesRead: string[] = []
-	const filesWrote: string[] = []
-	for (const m of old) {
-		filesRead.push(...extractToolFiles(m, "read"))
-		filesRead.push(...extractToolFiles(m, "glob"))
-		filesWrote.push(...extractToolFiles(m, "write"))
-		filesWrote.push(...extractToolFiles(m, "edit"))
-	}
-
-	const seqBefore = old.length
-	await store.saveCompaction(
-		sessionId,
-		summary,
-		[...new Set(filesRead)],
-		[...new Set(filesWrote)],
-		seqBefore,
-	)
-	await store.truncateBeforeSeq(sessionId, seqBefore + 1)
-	await store.append(sessionId, summaryMsg)
+	// Replace the entire messages.jsonl with the summaryMsg followed by the kept messages
+	// This places the past context summary at the beginning of the history, ensuring
+	// chronological correctness and keeping the history prefix static for prompt caching.
+	await store.replaceMessages(sessionId, [summaryMsg, ...kept])
 
 	return { compacted: true, summary, tokensBefore, tokensAfter }
 }

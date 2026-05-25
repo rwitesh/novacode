@@ -65,6 +65,93 @@ describe("SessionStore", () => {
 		}
 	})
 
+	it("should support separate active messages and full history backups during compaction", async () => {
+		const { path, store } = await createTempStore()
+		try {
+			const session = await store.create("/test/dir", "test-model", "test-provider")
+
+			const msg1: Msg = { role: "user", content: "hello", ts: Date.now() }
+			const msg2: Msg = {
+				role: "assistant",
+				content: [{ type: "text", text: "world" }],
+				model: "test-model",
+				provider: "test-provider",
+				usage: { in: 0, out: 0 },
+				stop: "stop",
+				ts: Date.now() + 1000,
+			}
+			const summaryMsg: Msg = {
+				role: "user",
+				content: "[Prior context summary]\nAll is compacted",
+				ts: Date.now() + 2000,
+			}
+
+			// Append normal messages
+			await store.append(session.id, msg1)
+			await store.append(session.id, msg2)
+
+			// Replace active messages (cache-optimized order: summaryMsg first)
+			await store.replaceMessages(session.id, [summaryMsg, msg1, msg2])
+
+			// In active messages, we should have all 3 messages with summaryMsg at index 0
+			const activeMsgs = await store.messages(session.id)
+			expect(activeMsgs).toHaveLength(3)
+			expect(activeMsgs[0]!.content).toContain("[Prior context summary]")
+			expect(activeMsgs[1]!.content).toBe("hello")
+
+			// In backup history, we should only have the original 2 messages, without summaryMsg
+			const fullHistory = await store.history(session.id)
+			expect(fullHistory).toHaveLength(2)
+			expect(fullHistory[0]!.content).toBe("hello")
+			expect(fullHistory[1]!.content).toEqual([{ type: "text", text: "world" }])
+		} finally {
+			await rm(path, { recursive: true, force: true })
+		}
+	})
+
+	it("should fallback to active messages for history if history.jsonl does not exist", async () => {
+		const { path, store } = await createTempStore()
+		try {
+			const session = await store.create("/test/dir", "test-model", "test-provider")
+			const msg1: Msg = { role: "user", content: "hello", ts: Date.now() }
+
+			// Append only to active messages so that history.jsonl is not created
+			await store.append(session.id, msg1, false)
+
+			const history = await store.history(session.id)
+			expect(history).toHaveLength(1)
+			expect(history[0]!.content).toBe("hello")
+		} finally {
+			await rm(path, { recursive: true, force: true })
+		}
+	})
+
+	it("should replace the entire active messages file atomically", async () => {
+		const { path, store } = await createTempStore()
+		try {
+			const session = await store.create("/test/dir", "test-model", "test-provider")
+			const msg1: Msg = { role: "user", content: "hello", ts: Date.now() }
+			const msg2: Msg = { role: "user", content: "world", ts: Date.now() + 1000 }
+
+			await store.append(session.id, msg1)
+
+			// Replace active messages with msg2 only
+			await store.replaceMessages(session.id, [msg2])
+
+			// Active messages should be completely replaced with msg2
+			const activeMsgs = await store.messages(session.id)
+			expect(activeMsgs).toHaveLength(1)
+			expect(activeMsgs[0]!.content).toBe("world")
+
+			// History should remain unchanged with original msg1
+			const history = await store.history(session.id)
+			expect(history).toHaveLength(1)
+			expect(history[0]!.content).toBe("hello")
+		} finally {
+			await rm(path, { recursive: true, force: true })
+		}
+	})
+
 	it("should delete a session", async () => {
 		const { path, store } = await createTempStore()
 		try {
@@ -74,23 +161,6 @@ describe("SessionStore", () => {
 			const deleted = await store.delete(session.id)
 			expect(deleted).toBe(true)
 			expect(await store.get(session.id)).toBeNull()
-		} finally {
-			await rm(path, { recursive: true, force: true })
-		}
-	})
-
-	it("should support compaction", async () => {
-		const { path, store } = await createTempStore()
-		try {
-			const session = await store.create("/test/dir", "test-model", "test-provider")
-			await store.saveCompaction(session.id, "summary", ["read.txt"], ["write.txt"], 5)
-
-			const compaction = await store.getLatestCompaction(session.id)
-			expect(compaction).not.toBeNull()
-			expect(compaction?.summary).toBe("summary")
-			expect(compaction?.seqBefore).toBe(5)
-			expect(compaction?.filesRead).toEqual(["read.txt"])
-			expect(compaction?.filesWrote).toEqual(["write.txt"])
 		} finally {
 			await rm(path, { recursive: true, force: true })
 		}

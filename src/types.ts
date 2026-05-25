@@ -168,14 +168,6 @@ export interface Session {
 	updated: number
 }
 
-export interface Compaction {
-	summary: string
-	seqBefore: number
-	filesRead: string[]
-	filesWrote: string[]
-	ts: number
-}
-
 export interface CompactResult {
 	compacted: boolean
 	summary?: string
