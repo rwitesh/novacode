@@ -4,8 +4,6 @@ import type { CompactResult, Model, Msg } from "../types.ts"
 import { estimateTokens } from "../util.ts"
 import type { SessionStore } from "./store.ts"
 
-const MIN_TAIL_SIZE = 20
-
 function extractText(msg: Msg): string {
 	if (typeof msg.content === "string") return msg.content
 	return msg.content
@@ -43,15 +41,12 @@ export async function compact(
 	let accumulatedTokens = 0
 	let cutIndex = messages.length
 
-	// Walk backward from the end to dynamically select the tail messages
+	// Walk backward from the end to dynamically select the tail messages based purely on token budget
 	for (let i = messages.length - 1; i >= 0; i--) {
 		const msg = messages[i]!
 		const msgTokens = estimateMsgTokens(msg)
-		const currentTailSize = messages.length - i
 
-		// Include message in the tail if under the minimum message floor (20)
-		// OR if it fits under the token budget.
-		if (currentTailSize <= MIN_TAIL_SIZE || accumulatedTokens + msgTokens <= tailTokenBudget) {
+		if (accumulatedTokens + msgTokens <= tailTokenBudget) {
 			accumulatedTokens += msgTokens
 			cutIndex = i
 		} else {
