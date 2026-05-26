@@ -21,6 +21,7 @@ type PromptMode =
 			message: string
 			options: Array<{ value: string; label: string; hint?: string }>
 			header?: string
+			footer?: string
 	  }
 	| {
 			type: "password"
@@ -435,6 +436,7 @@ function App({
 				message={mode.message}
 				options={mode.options}
 				header={mode.header}
+				footer={mode.footer}
 				onSelect={resolvePrompt}
 			/>
 		)

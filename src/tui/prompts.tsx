@@ -11,11 +11,13 @@ export function SelectPrompt({
 	message,
 	options,
 	header,
+	footer,
 	onSelect,
 }: {
 	message: string
 	options: SelectOption[]
 	header?: string
+	footer?: string
 	onSelect: (value: string | null) => void
 }) {
 	const [idx, setIdx] = useState(0)
@@ -60,6 +62,11 @@ export function SelectPrompt({
 			<Box marginTop={1}>
 				<Text dimColor>↑↓ navigate · Enter select · Esc cancel</Text>
 			</Box>
+			{footer && (
+				<Box marginTop={1}>
+					<Text>{footer}</Text>
+				</Box>
+			)}
 		</Box>
 	)
 }
@@ -170,6 +177,7 @@ export function standaloneSelect(
 	message: string,
 	options: SelectOption[],
 	header?: string,
+	footer?: string,
 ): Promise<string | null> {
 	return new Promise((resolve) => {
 		const { unmount } = render(
@@ -177,6 +185,7 @@ export function standaloneSelect(
 				message={message}
 				options={options}
 				header={header}
+				footer={footer}
 				onSelect={(v) => {
 					unmount()
 					resolve(v)

@@ -86,7 +86,7 @@ This succinct flow keeps side‑effects (tool calls, HTTP) out of the pure loop,
 7. **Private fields** — `#field` not `private field`. True encapsulation.
 8. **Single rendering context** — All interactive UI (chat, prompts, menus) runs inside one Ink app. Never unmount/remount Ink to switch between modes. Use state-based mode switching instead.
 9. **Synchronous Session Store** — The `SessionStore` class is backed by SQLite (`~/.novacode/state.db`) via `node:sqlite` (synchronous `DatabaseSync`). Store methods are `async` for API compatibility but execute synchronously internally. All store methods must be awaited.
-10. **CLI vs Interactive Inputs** — Outside interactive TUI mode, use `--` flags exclusively (e.g. `nova --session ls`, `nova --session rm <id>`, `nova --resume`). Subcommand style (e.g., `nova session ls`) is not permitted. Inside interactive mode, use `/` commands exclusively (e.g. `/compact`, `/sessions`).
+10. **CLI vs Interactive Inputs** — Outside interactive TUI mode, use `--` flags exclusively (e.g. `nova --sessions ls`, `nova --sessions rm <id>`, `nova --resume`). Subcommand style (e.g., `nova sessions ls`) is not permitted. Inside interactive mode, use `/` commands exclusively (e.g. `/compact`, `/sessions`).
 
 ## Coding Conventions
 

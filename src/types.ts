@@ -252,6 +252,7 @@ export interface Prompts {
 	select(config: {
 		message: string
 		header?: string
+		footer?: string
 		options: Array<{ value: string; label: string; hint?: string }>
 	}): Promise<string | null>
 	password(config: {

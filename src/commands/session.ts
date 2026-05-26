@@ -42,7 +42,7 @@ export async function handleSessionCommand(
 		}
 
 		if (!id) {
-			console.error("Usage: nova --session rm <id> or --session rm --all")
+			console.error("Usage: nova --sessions rm <id> or --sessions rm --all")
 			process.exit(1)
 		}
 		const success = await store.delete(id)

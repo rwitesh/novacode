@@ -25,10 +25,8 @@ function parseCli() {
 			provider: { type: "string" },
 			model: { type: "string" },
 			"api-key": { type: "string" },
-			session: { type: "string", short: "s" },
-			resume: { type: "boolean" },
-			n: { type: "string" },
-			limit: { type: "string" },
+			sessions: { type: "string", short: "s" },
+			resume: { type: "boolean", short: "r" },
 			all: { type: "boolean" },
 		},
 		strict: false,
@@ -69,12 +67,11 @@ async function main() {
 Usage:
   nova                    Interactive mode
   nova update             Update to latest version
-  nova --session ls       List sessions (last 10 by default)
-  nova --session ls -n N  List last N sessions
-  nova --session rm <id>  Delete a specific session
-  nova --session rm --all Delete all sessions
-  nova --session <id>     Resume a session by ID
-  nova --resume           Resume the most recent session
+  nova -s ls [limit]      List sessions (last 10 by default)
+  nova -s rm <id>         Delete a specific session
+  nova -s rm --all        Delete all sessions
+  nova -s <id>            Resume a session by ID
+  nova -r, --resume       Resume the most recent session
 
 Options:
   -h, --help              Show help
@@ -82,7 +79,8 @@ Options:
   --provider <id>         Provider to use
   --model <id>            Model to use
   --api-key <key>         API key override
-  -s, --session <id>      Resume/manage session`)
+  -s, --sessions <id>     Resume/manage sessions
+  -r, --resume            Resume the most recent session`)
 		process.exit(0)
 	}
 
@@ -93,7 +91,7 @@ Options:
 	}
 
 	// Reject positional args — use interactive mode with / commands
-	if (args.length > 0 && !flags.session) {
+	if (args.length > 0 && !flags.sessions) {
 		console.error(chalk.yellow(`Unknown command: ${args.join(" ")}`))
 		console.error("Run `nova --help` for usage.")
 		process.exit(1)
@@ -116,11 +114,12 @@ Options:
 	const store = await getSessionStore()
 	await store.prune()
 
-	// Handle --session commands (ls, rm)
-	if (flags.session) {
-		const sessionFlag = flags.session as string
+	// Handle --sessions commands (ls, rm)
+	if (flags.sessions) {
+		const sessionFlag = flags.sessions as string
 		if (sessionFlag === "ls" || sessionFlag === "list") {
-			const limit = parseInt((flags.n as string) || (flags.limit as string) || "10", 10)
+			const limitVal = args[0] ? parseInt(args[0], 10) : 10
+			const limit = Number.isNaN(limitVal) ? 10 : limitVal
 			await handleSessionCommand(store, ["ls"], { limit })
 			return
 		}
@@ -139,10 +138,10 @@ Options:
 			console.error("No recent session found to resume.")
 			process.exit(1)
 		}
-	} else if (flags.session) {
-		session = await store.get(flags.session as string)
+	} else if (flags.sessions) {
+		session = await store.get(flags.sessions as string)
 		if (!session) {
-			console.error(`Session not found: ${flags.session}`)
+			console.error(`Session not found: ${flags.sessions}`)
 			process.exit(1)
 		}
 	}
