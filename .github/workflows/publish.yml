@@ -12,6 +12,15 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Verify tag is on main branch
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor HEAD origin/main || {
+            echo "ERROR: Tag must be pushed on/merged into the main branch to trigger a release."
+            exit 1
+          }
       - uses: actions/setup-node@v4
         with:
           node-version: 24
