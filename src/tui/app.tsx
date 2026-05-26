@@ -44,9 +44,8 @@ export async function interactive(
 		process.stdout.write(`${chalk.dim("  context:")} ${chalk.cyan("AGENTS.md")}\n`)
 	}
 	if (skills.length > 0) {
-		process.stdout.write(
-			`${chalk.dim("  skills:")}  ${chalk.cyan(`${skills.length} discovered`)}\n`,
-		)
+		const skillNames = skills.map((s) => chalk.cyan(s.name)).join(", ")
+		process.stdout.write(`${chalk.dim("  skills:")}  ${skillNames}\n`)
 	}
 
 	const initialHistory = await store.history(sessionId)
