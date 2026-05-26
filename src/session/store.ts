@@ -1,184 +1,380 @@
-import { appendFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
-import { join } from "node:path"
-import type { Msg, Session } from "../types.ts"
+import { DatabaseSync } from "node:sqlite"
+import type { ContentPart, Msg, Session } from "../types.ts"
+import { closeDb, getDb } from "./db.ts"
 
 function generateId(): string {
 	return `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`
 }
 
+const JSON_SENTINEL = "$json:"
+
+function serializeContent(content: string | ContentPart[]): string | null {
+	if (content === undefined || content === null) return null
+	if (typeof content === "string") return content
+	return JSON_SENTINEL + JSON.stringify(content)
+}
+
+function deserializeContent(raw: string | null): string | ContentPart[] {
+	if (raw === null) return ""
+	if (raw.startsWith(JSON_SENTINEL)) return JSON.parse(raw.slice(JSON_SENTINEL.length))
+	return raw
+}
+
+function rowToMsg(row: Record<string, unknown>): Msg {
+	const role = row.role as string
+	const content = deserializeContent(row.content as string | null)
+	const ts = row.ts as number
+
+	if (role === "user") {
+		return { role: "user", content: content as string | ContentPart[], ts }
+	}
+
+	if (role === "assistant") {
+		return {
+			role: "assistant",
+			content: (content || []) as ContentPart[],
+			model: (row.model as string) ?? "",
+			provider: (row.provider as string) ?? "",
+			usage: { in: (row.usage_input as number) ?? 0, out: (row.usage_output as number) ?? 0 },
+			stop: (row.stop_reason as "stop" | "length" | "tool_use" | "error" | "aborted") ?? "stop",
+			error: undefined,
+			ts,
+		}
+	}
+
+	// tool_result
+	return {
+		role: "tool_result",
+		callId: (row.tool_call_id as string) ?? "",
+		tool: (row.tool_name as string) ?? "",
+		args: row.tool_args ? JSON.parse(row.tool_args as string) : undefined,
+		content: (content || []) as ContentPart[],
+		isError: !!(row.is_error as number),
+		ts,
+	}
+}
+
+function rowToSession(row: Record<string, unknown>): Session {
+	return {
+		id: row.id as string,
+		cwd: row.cwd as string,
+		model: row.model as string,
+		provider: row.provider as string,
+		title: (row.title as string | null) ?? null,
+		parentSessionId: (row.parent_session_id as string | null) ?? null,
+		endReason: (row.end_reason as string | null) ?? null,
+		created: row.created as number,
+		updated: row.updated as number,
+		inputTokens: (row.input_tokens as number) ?? 0,
+		outputTokens: (row.output_tokens as number) ?? 0,
+		messageCount: (row.message_count as number) ?? 0,
+	}
+}
+
 export class SessionStore {
-	#sessionsDir: string
+	#db: DatabaseSync
 
-	constructor(sessionsDir: string) {
-		this.#sessionsDir = sessionsDir
-	}
-
-	#sessionDir(id: string): string {
-		return join(this.#sessionsDir, id)
-	}
-
-	#metadataPath(id: string): string {
-		return join(this.#sessionDir(id), "metadata.json")
-	}
-
-	#messagesPath(id: string): string {
-		return join(this.#sessionDir(id), "messages.jsonl")
-	}
-
-	#historyPath(id: string): string {
-		return join(this.#sessionDir(id), "history.jsonl")
+	constructor(dbOrPath?: DatabaseSync | string) {
+		if (dbOrPath instanceof DatabaseSync) {
+			this.#db = dbOrPath
+		} else {
+			this.#db = getDb(dbOrPath)
+		}
 	}
 
 	async create(cwd: string, model: string, provider: string): Promise<Session> {
 		const id = generateId()
 		const now = Date.now()
-		const session: Session = {
+		this.#db
+			.prepare(
+				`INSERT INTO sessions (id, cwd, model, provider, title, parent_session_id, end_reason, created, updated, input_tokens, output_tokens, message_count)
+				 VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?, 0, 0, 0)`,
+			)
+			.run(id, cwd, model, provider, now, now)
+		return {
 			id,
 			cwd,
 			model,
 			provider,
 			title: null,
+			parentSessionId: null,
+			endReason: null,
 			created: now,
 			updated: now,
+			inputTokens: 0,
+			outputTokens: 0,
+			messageCount: 0,
 		}
-
-		await mkdir(this.#sessionDir(id), { recursive: true })
-		await writeFile(this.#metadataPath(id), JSON.stringify(session, null, 2))
-		return session
 	}
 
 	async get(id: string): Promise<Session | null> {
-		try {
-			const data = await readFile(this.#metadataPath(id), "utf-8")
-			return JSON.parse(data) as Session
-		} catch {
-			return null
-		}
+		const row = this.#db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as
+			| Record<string, unknown>
+			| undefined
+		return row ? rowToSession(row) : null
 	}
 
 	async list(limit = 10): Promise<Session[]> {
-		try {
-			const entries = await readdir(this.#sessionsDir, { withFileTypes: true })
-			const dirNames = entries
-				.filter((e) => e.isDirectory())
-				.map((e) => e.name)
-				.sort((a, b) => b.localeCompare(a))
-
-			const candidates = dirNames.slice(0, Math.max(limit * 2, 50))
-			const sessions: Session[] = []
-			for (const name of candidates) {
-				const s = await this.get(name)
-				if (s) sessions.push(s)
-			}
-			sessions.sort((a, b) => b.updated - a.updated)
-			return sessions.slice(0, limit)
-		} catch {
-			return []
-		}
+		const rows = this.#db
+			.prepare("SELECT * FROM sessions WHERE end_reason IS NULL ORDER BY updated DESC LIMIT ?")
+			.all(limit) as Record<string, unknown>[]
+		return rows.map(rowToSession)
 	}
 
 	async latest(): Promise<Session | null> {
-		const sessions = await this.list(1)
-		return sessions[0] ?? null
+		const row = this.#db
+			.prepare("SELECT * FROM sessions WHERE end_reason IS NULL ORDER BY updated DESC LIMIT 1")
+			.get() as Record<string, unknown> | undefined
+		return row ? rowToSession(row) : null
 	}
 
 	async delete(id: string): Promise<boolean> {
-		try {
-			await rm(this.#sessionDir(id), { recursive: true, force: true })
-			return true
-		} catch {
-			return false
-		}
+		const result = this.#db.prepare("DELETE FROM sessions WHERE id = ?").run(id)
+		return result.changes > 0
 	}
 
 	async deleteAll(): Promise<void> {
-		try {
-			await rm(this.#sessionsDir, { recursive: true, force: true })
-			await mkdir(this.#sessionsDir, { recursive: true })
-		} catch {
-			// ignore
-		}
+		this.#db.exec("DELETE FROM messages; DELETE FROM sessions")
 	}
 
-	async append(sessionId: string, msg: Msg, writeToHistory = true): Promise<void> {
-		const session = await this.get(sessionId)
-		if (!session) return
+	async append(sessionId: string, msg: Msg): Promise<void> {
+		const now = Date.now()
 
-		session.updated = Date.now()
-		await writeFile(this.#metadataPath(sessionId), JSON.stringify(session, null, 2))
+		const role = msg.role
+		let content: string | null = null
+		let toolCallId: string | null = null
+		let toolName: string | null = null
+		let toolArgs: string | null = null
+		let model: string | null = null
+		let provider: string | null = null
+		let usageInput = 0
+		let usageOutput = 0
+		let stopReason: string | null = null
+		let isError = 0
 
-		const line = `${JSON.stringify(msg)}\n`
-		await appendFile(this.#messagesPath(sessionId), line)
-		if (writeToHistory) {
-			await appendFile(this.#historyPath(sessionId), line)
+		if (role === "user") {
+			content = serializeContent(msg.content)
+		} else if (role === "assistant") {
+			content = serializeContent(msg.content)
+			model = msg.model ?? null
+			provider = msg.provider ?? null
+			usageInput = msg.usage?.in ?? 0
+			usageOutput = msg.usage?.out ?? 0
+			stopReason = msg.stop ?? null
+			if (msg.error) isError = 1
+		} else if (role === "tool_result") {
+			content = serializeContent(msg.content)
+			toolCallId = msg.callId ?? null
+			toolName = msg.tool ?? null
+			toolArgs = msg.args ? JSON.stringify(msg.args) : null
+			isError = msg.isError ? 1 : 0
 		}
+
+		const seqRow = this.#db
+			.prepare("SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq FROM messages WHERE session_id = ?")
+			.get(sessionId) as Record<string, unknown>
+		const seq = seqRow?.next_seq as number
+
+		this.#db
+			.prepare(
+				`INSERT INTO messages (session_id, seq, role, content, tool_call_id, tool_name, tool_args, model, provider, usage_input, usage_output, stop_reason, is_error, ts)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			)
+			.run(
+				sessionId,
+				seq,
+				role,
+				content,
+				toolCallId,
+				toolName,
+				toolArgs,
+				model,
+				provider,
+				usageInput,
+				usageOutput,
+				stopReason,
+				isError,
+				msg.ts ?? now,
+			)
+
+		this.#db
+			.prepare(
+				"UPDATE sessions SET message_count = message_count + 1, updated = ?, input_tokens = input_tokens + ?, output_tokens = output_tokens + ? WHERE id = ?",
+			)
+			.run(now, usageInput, usageOutput, sessionId)
 	}
 
 	async messages(sessionId: string): Promise<Msg[]> {
-		try {
-			const data = await readFile(this.#messagesPath(sessionId), "utf-8")
-			const lines = data.split("\n").filter((l) => l.trim().length > 0)
-			return lines.map((l) => JSON.parse(l) as Msg)
-		} catch {
-			return []
-		}
+		const rows = this.#db
+			.prepare("SELECT * FROM messages WHERE session_id = ? ORDER BY seq")
+			.all(sessionId) as Record<string, unknown>[]
+		return rows.map(rowToMsg)
 	}
 
 	async history(sessionId: string): Promise<Msg[]> {
-		try {
-			const data = await readFile(this.#historyPath(sessionId), "utf-8")
-			const lines = data.split("\n").filter((l) => l.trim().length > 0)
-			return lines.map((l) => JSON.parse(l) as Msg)
-		} catch {
+		const lineage = this.#getLineage(sessionId)
+		if (lineage.length <= 1) {
 			return this.messages(sessionId)
 		}
+
+		// Build CASE ordering from lineage (root first, tip last)
+		const caseExpr = lineage.map((id, i) => `WHEN '${id}' THEN ${i}`).join(" ")
+		const rows = this.#db
+			.prepare(
+				`SELECT m.* FROM messages m
+				 WHERE m.session_id IN (${lineage.map(() => "?").join(",")})
+				 ORDER BY CASE m.session_id ${caseExpr} END ASC, m.seq ASC`,
+			)
+			.all(...lineage) as Record<string, unknown>[]
+		return rows.map(rowToMsg)
 	}
 
 	async messageCount(sessionId: string): Promise<number> {
-		try {
-			const data = await readFile(this.#messagesPath(sessionId), "utf-8")
-			const lines = data.split("\n").filter((l) => l.trim().length > 0)
-			return lines.length
-		} catch {
-			return 0
-		}
+		const row = this.#db
+			.prepare("SELECT message_count FROM sessions WHERE id = ?")
+			.get(sessionId) as Record<string, unknown> | undefined
+		return (row?.message_count as number) ?? 0
 	}
 
 	async setTitle(sessionId: string, title: string): Promise<void> {
-		const session = await this.get(sessionId)
-		if (!session) return
-		session.title = title
-		session.updated = Date.now()
-		await writeFile(this.#metadataPath(sessionId), JSON.stringify(session, null, 2))
+		this.#db
+			.prepare("UPDATE sessions SET title = ?, updated = ? WHERE id = ?")
+			.run(title, Date.now(), sessionId)
 	}
 
 	async replaceMessages(sessionId: string, msgs: Msg[]): Promise<void> {
-		const data = msgs.map((m) => JSON.stringify(m)).join("\n") + (msgs.length > 0 ? "\n" : "")
-		await writeFile(this.#messagesPath(sessionId), data)
+		this.#db.prepare("DELETE FROM messages WHERE session_id = ?").run(sessionId)
+		this.#db
+			.prepare("UPDATE sessions SET message_count = 0, updated = ? WHERE id = ?")
+			.run(Date.now(), sessionId)
+
+		let seq = 0
+		for (const msg of msgs) {
+			seq++
+			await this.#insertMessage(sessionId, seq, msg)
+		}
+		this.#db
+			.prepare("UPDATE sessions SET message_count = ?, updated = ? WHERE id = ?")
+			.run(seq, Date.now(), sessionId)
 	}
 
-	async prune(limit = 10): Promise<void> {
-		try {
-			const entries = await readdir(this.#sessionsDir, { withFileTypes: true })
-			const dirNames = entries
-				.filter((e) => e.isDirectory())
-				.map((e) => e.name)
-				.sort((a, b) => b.localeCompare(a))
+	async endSession(id: string, reason: string): Promise<void> {
+		this.#db
+			.prepare("UPDATE sessions SET end_reason = ?, updated = ? WHERE id = ?")
+			.run(reason, Date.now(), id)
+	}
 
-			const targets = limit > 0 ? dirNames.slice(0, limit) : dirNames
-			for (const name of targets) {
-				const count = await this.messageCount(name)
-				if (count === 0) {
-					await this.delete(name)
-				}
-			}
-		} catch {
-			// ignore
+	async createContinuation(
+		parentId: string,
+		cwd: string,
+		model: string,
+		provider: string,
+	): Promise<Session> {
+		const id = generateId()
+		const now = Date.now()
+		this.#db
+			.prepare(
+				`INSERT INTO sessions (id, cwd, model, provider, title, parent_session_id, end_reason, created, updated, input_tokens, output_tokens, message_count)
+				 VALUES (?, ?, ?, ?, NULL, ?, NULL, ?, ?, 0, 0, 0)`,
+			)
+			.run(id, cwd, model, provider, parentId, now, now)
+
+		return {
+			id,
+			cwd,
+			model,
+			provider,
+			title: null,
+			parentSessionId: parentId,
+			endReason: null,
+			created: now,
+			updated: now,
+			inputTokens: 0,
+			outputTokens: 0,
+			messageCount: 0,
 		}
 	}
 
+	#getLineage(sessionId: string): string[] {
+		const ids: string[] = []
+		let current = sessionId
+		const visited = new Set<string>()
+
+		while (current && !visited.has(current)) {
+			ids.push(current)
+			visited.add(current)
+			const row = this.#db
+				.prepare("SELECT parent_session_id FROM sessions WHERE id = ?")
+				.get(current) as Record<string, unknown> | undefined
+			current = (row?.parent_session_id as string | null) ?? ""
+		}
+
+		ids.reverse()
+		return ids
+	}
+
+	async #insertMessage(sessionId: string, seq: number, msg: Msg): Promise<void> {
+		const role = msg.role
+		let content: string | null = null
+		let toolCallId: string | null = null
+		let toolName: string | null = null
+		let toolArgs: string | null = null
+		let model: string | null = null
+		let provider: string | null = null
+		let usageInput = 0
+		let usageOutput = 0
+		let stopReason: string | null = null
+		let isError = 0
+
+		if (role === "user") {
+			content = serializeContent(msg.content)
+		} else if (role === "assistant") {
+			content = serializeContent(msg.content)
+			model = msg.model ?? null
+			provider = msg.provider ?? null
+			usageInput = msg.usage?.in ?? 0
+			usageOutput = msg.usage?.out ?? 0
+			stopReason = msg.stop ?? null
+			if (msg.error) isError = 1
+		} else if (role === "tool_result") {
+			content = serializeContent(msg.content)
+			toolCallId = msg.callId ?? null
+			toolName = msg.tool ?? null
+			toolArgs = msg.args ? JSON.stringify(msg.args) : null
+			isError = msg.isError ? 1 : 0
+		}
+
+		this.#db
+			.prepare(
+				`INSERT INTO messages (session_id, seq, role, content, tool_call_id, tool_name, tool_args, model, provider, usage_input, usage_output, stop_reason, is_error, ts)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			)
+			.run(
+				sessionId,
+				seq,
+				role,
+				content,
+				toolCallId,
+				toolName,
+				toolArgs,
+				model,
+				provider,
+				usageInput,
+				usageOutput,
+				stopReason,
+				isError,
+				msg.ts ?? Date.now(),
+			)
+	}
+
+	async prune(): Promise<void> {
+		this.#db.exec(
+			"DELETE FROM sessions WHERE message_count = 0 AND end_reason IS NULL AND created < strftime('%s','now','now','-1 hour') * 1000",
+		)
+	}
+
 	close(): void {
-		// no-op
+		closeDb()
 	}
 }
 
@@ -186,8 +382,6 @@ let _store: SessionStore | null = null
 
 export async function getSessionStore(dir?: string): Promise<SessionStore> {
 	if (_store) return _store
-	const sessionsPath = join(dir ?? join(process.env.HOME ?? "~", ".novacode"), "sessions")
-	await mkdir(sessionsPath, { recursive: true })
-	_store = new SessionStore(sessionsPath)
+	_store = new SessionStore(dir ? `${dir}/state.db` : undefined)
 	return _store
 }

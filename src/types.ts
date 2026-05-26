@@ -164,8 +164,13 @@ export interface Session {
 	model: string
 	provider: string
 	title: string | null
+	parentSessionId: string | null
+	endReason: string | null
 	created: number
 	updated: number
+	inputTokens: number
+	outputTokens: number
+	messageCount: number
 }
 
 export interface CompactResult {
@@ -173,6 +178,7 @@ export interface CompactResult {
 	summary?: string
 	tokensBefore: number
 	tokensAfter: number
+	newSessionId?: string
 }
 
 /** Loop & Provider Types */

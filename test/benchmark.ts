@@ -1,39 +1,43 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { DatabaseSync } from "node:sqlite"
 import { SessionStore } from "../src/session/store.ts"
 
 async function createTempStore() {
-	const path = await mkdtemp(join(tmpdir(), "novacode-benchmark-"))
-	const store = new SessionStore(path)
-	return { path, store }
+	const dir = await mkdtemp(join(tmpdir(), "novacode-benchmark-"))
+	const dbPath = join(dir, "state.db")
+	const db = new DatabaseSync(dbPath)
+	db.exec("PRAGMA journal_mode = WAL")
+	db.exec(`
+		CREATE TABLE IF NOT EXISTS sessions (
+			id TEXT PRIMARY KEY, cwd TEXT NOT NULL, model TEXT NOT NULL, provider TEXT NOT NULL,
+			title TEXT, parent_session_id TEXT, end_reason TEXT, created INTEGER NOT NULL,
+			updated INTEGER NOT NULL, input_tokens INTEGER DEFAULT 0, output_tokens INTEGER DEFAULT 0,
+			message_count INTEGER DEFAULT 0
+		);
+		CREATE TABLE IF NOT EXISTS messages (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+			seq INTEGER NOT NULL, role TEXT NOT NULL, content TEXT, tool_call_id TEXT, tool_name TEXT,
+			tool_args TEXT, model TEXT, provider TEXT, usage_input INTEGER DEFAULT 0, usage_output INTEGER DEFAULT 0,
+			stop_reason TEXT, is_error INTEGER DEFAULT 0, ts INTEGER NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated DESC);
+		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, seq);
+	`)
+	const store = new SessionStore(db)
+	return { dir, store, db }
 }
 
 async function run() {
-	const { path, store } = await createTempStore()
+	const { dir, store, db } = await createTempStore()
 	try {
 		const numSessions = 1000
-		console.log(`\nGenerating ${numSessions} mock sessions...`)
+		console.log(`\nGenerating ${numSessions} sessions...`)
 
-		// Generate 1000 sessions concurrently to save time
-		const promises = Array.from({ length: numSessions }).map(async (_, i) => {
-			const id = `${(Date.now() - i * 1000).toString(36)}-${crypto.randomUUID().slice(0, 8)}`
-			const sessionDir = join(path, id)
-			await mkdir(sessionDir, { recursive: true })
-
-			const sessionData = {
-				id,
-				cwd: "/test/dir",
-				model: "test-model",
-				provider: "test-provider",
-				title: `Session ${i}`,
-				created: Date.now() - i * 1000,
-				updated: Date.now() - i * 1000,
-			}
-			await writeFile(join(sessionDir, "metadata.json"), JSON.stringify(sessionData, null, 2))
-		})
-
-		await Promise.all(promises)
+		for (let i = 0; i < numSessions; i++) {
+			await store.create("/test/dir", "test-model", "test-provider")
+		}
 		console.log(`Successfully generated ${numSessions} sessions. Running benchmarks...`)
 
 		// Benchmark store.list()
@@ -51,19 +55,18 @@ async function run() {
 
 		// Benchmark store.prune()
 		const startPrune = performance.now()
-		await store.prune(10)
+		await store.prune()
 		const durationPrune = performance.now() - startPrune
 
-		console.log(
-			`⚡ store.prune(10) took ${durationPrune.toFixed(2)}ms for ${numSessions} sessions.`,
-		)
+		console.log(`⚡ store.prune() took ${durationPrune.toFixed(2)}ms for ${numSessions} sessions.`)
 		if (durationPrune >= 100) {
 			throw new Error(`store.prune took too long: ${durationPrune.toFixed(2)}ms`)
 		}
 
 		console.log("✓ Benchmark completed successfully and validated within performance limits!\n")
 	} finally {
-		await rm(path, { recursive: true, force: true })
+		db.close()
+		await rm(dir, { recursive: true, force: true })
 	}
 }
 
