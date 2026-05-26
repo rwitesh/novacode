@@ -28,9 +28,5 @@ export async function handleCompact(
 		}
 	}
 
-	if (res.tokensBefore < 500) {
-		return { result: chalk.yellow("Context is too small to benefit from compaction.") }
-	}
-
 	return { result: chalk.yellow("Context is small enough, no compaction needed.") }
 }

@@ -4,8 +4,7 @@ import type { CompactResult, Model, Msg } from "../types.ts"
 import { estimateTokens } from "../util.ts"
 import type { SessionStore } from "./store.ts"
 
-const TAIL_SIZE = 20
-const CONTENT_CAP = 8000
+const MIN_TAIL_SIZE = 20
 
 function extractText(msg: Msg): string {
 	if (typeof msg.content === "string") return msg.content
@@ -15,32 +14,16 @@ function extractText(msg: Msg): string {
 		.join("")
 }
 
-function truncateContent(msg: Msg): Msg {
-	const cap = (content: string): string =>
-		content.length > CONTENT_CAP ? `${content.slice(0, CONTENT_CAP)}\n[truncated]` : content
-
-	if (msg.role === "assistant" || msg.role === "tool_result") {
-		const content = msg.content
-		if (typeof content === "string") return msg
-		const truncated = content.map((part) =>
-			part.type === "text" && part.text.length > CONTENT_CAP
-				? { ...part, text: cap(part.text) }
-				: part,
-		)
-		return { ...msg, content: truncated }
-	}
-
-	// user msg — content can be string
+function estimateMsgTokens(msg: Msg): number {
+	let chars = 0
 	if (typeof msg.content === "string") {
-		return msg.content.length > CONTENT_CAP ? { ...msg, content: cap(msg.content) } : msg
+		chars += msg.content.length
+	} else if (Array.isArray(msg.content)) {
+		for (const part of msg.content) {
+			if (part.type === "text") chars += part.text.length
+		}
 	}
-
-	const truncated = msg.content.map((part) =>
-		part.type === "text" && part.text.length > CONTENT_CAP
-			? { ...part, text: cap(part.text) }
-			: part,
-	)
-	return { ...msg, content: truncated }
+	return Math.ceil(chars / 4)
 }
 
 export async function compact(
@@ -53,12 +36,35 @@ export async function compact(
 	cwd: string,
 ): Promise<CompactResult> {
 	const tokensBefore = estimateTokens(messages)
-	if (messages.length <= TAIL_SIZE) {
+
+	// Tail protection token budget: 10% of total context window, minimum 20,000 tokens
+	const tailTokenBudget = Math.max(20000, Math.round(model.contextWindow * 0.1))
+
+	let accumulatedTokens = 0
+	let cutIndex = messages.length
+
+	// Walk backward from the end to dynamically select the tail messages
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const msg = messages[i]!
+		const msgTokens = estimateMsgTokens(msg)
+		const currentTailSize = messages.length - i
+
+		// Include message in the tail if under the minimum message floor (20)
+		// OR if it fits under the token budget.
+		if (currentTailSize <= MIN_TAIL_SIZE || accumulatedTokens + msgTokens <= tailTokenBudget) {
+			accumulatedTokens += msgTokens
+			cutIndex = i
+		} else {
+			break
+		}
+	}
+
+	if (cutIndex <= 0) {
 		return { compacted: false, tokensBefore, tokensAfter: tokensBefore }
 	}
 
-	const tail = messages.slice(-TAIL_SIZE).map(truncateContent)
-	const old = messages.slice(0, -TAIL_SIZE)
+	const tail = messages.slice(cutIndex)
+	const old = messages.slice(0, cutIndex)
 
 	const convo = old
 		.map((m) => {
