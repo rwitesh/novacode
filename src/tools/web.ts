@@ -48,6 +48,8 @@ function htmlToText(html: string): string {
 		.replace(/&rsquo;/g, "'")
 		.replace(/&nbsp;/g, " ")
 		.replace(/&amp;/g, "&")
+		// Remove tags that may appear after entity decoding (for example, &lt;script&gt;)
+		.replace(/<[^>]+>/g, "")
 		// Collapse whitespace but keep paragraph breaks
 		.replace(/[ \t]+/g, " ")
 		.replace(/\n{3,}/g, "\n\n")
