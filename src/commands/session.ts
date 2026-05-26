@@ -1,6 +1,13 @@
 import type { SessionStore } from "../session/store.ts"
 import { formatRelativeTime } from "../util.ts"
 
+function formatTokens(n: number): string {
+	if (n === 0) return "-"
+	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+	if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+	return String(n)
+}
+
 export async function handleSessionCommand(
 	store: SessionStore,
 	args: string[],
@@ -16,12 +23,13 @@ export async function handleSessionCommand(
 			return
 		}
 
-		console.log("ID".padEnd(25), "TITLE / UPDATED")
-		console.log("-".repeat(60))
+		console.log("ID".padEnd(25), "TITLE / UPDATED".padEnd(35), "TOKENS")
+		console.log("-".repeat(75))
 		for (const s of sessions) {
 			const relTime = formatRelativeTime(s.updated)
 			const titleOrUpdated = s.title ? `"${s.title}" (${relTime})` : relTime
-			console.log(s.id.padEnd(25), titleOrUpdated)
+			const tokens = formatTokens(s.inputTokens + s.outputTokens)
+			console.log(s.id.padEnd(25), titleOrUpdated.padEnd(35), tokens)
 		}
 		return
 	}

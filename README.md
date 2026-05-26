@@ -2,7 +2,7 @@
 
 Open-source, multi-provider coding agent.
 
-> **Currently in early development (v0.x). Breaking changes may occur between versions without notice.**
+> **Currently in early development (v0.x). Breaking changes may occur.**
 
 <img width="1164" height="720" alt="result" src="https://github.com/user-attachments/assets/a456c41a-ec19-4a4d-b3b7-180e6b83acc3" />
 
