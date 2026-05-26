@@ -45,7 +45,16 @@ function findModel(modelId: string, providerId?: string) {
 	})
 }
 
+const NODE_MIN = 24
+
 async function main() {
+	const major = Number(process.versions.node.split(".")[0])
+	if (!major || major < NODE_MIN) {
+		console.error(`novacode requires Node.js >= ${NODE_MIN}. You have ${process.version}.`)
+		console.error(`Upgrade: https://nodejs.org/`)
+		process.exit(1)
+	}
+
 	const { flags, args } = parseCli()
 
 	if (flags.version) {

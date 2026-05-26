@@ -8,6 +8,8 @@ Open-source, multi-provider coding agent.
 
 ## Install
 
+**Requires Node.js >= 24.**
+
 ```bash
 npm install -g novacode
 ```
