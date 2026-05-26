@@ -192,7 +192,7 @@ export interface CompactResult {
 
 /** Loop & Provider Types */
 
-export interface LoopCtx {
+export interface LlmContext {
 	system: string
 	messages: Msg[]
 	tools: Tool[]
@@ -208,10 +208,10 @@ export interface LoopOpts {
 	beforeTool?: (
 		call: ToolCallPart,
 		args: Record<string, unknown>,
-		ctx: LoopCtx,
+		ctx: LlmContext,
 	) => Promise<{ block?: boolean; reason?: string } | undefined>
 	// Run logic after a tool completes
-	afterTool?: (call: ToolCallPart, result: ToolResultMsg, ctx: LoopCtx) => Promise<void>
+	afterTool?: (call: ToolCallPart, result: ToolResultMsg, ctx: LlmContext) => Promise<void>
 }
 
 export interface StreamOpts {

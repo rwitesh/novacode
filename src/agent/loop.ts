@@ -6,7 +6,7 @@ import { EventStream, stream } from "../provider/stream.ts"
 import type {
 	AgentEvent,
 	AssistantMsg,
-	LoopCtx,
+	LlmContext,
 	LoopOpts,
 	Msg,
 	ToolCallPart,
@@ -24,7 +24,7 @@ const isToolCall = (c: unknown): c is ToolCallPart =>
  * Start a long-running agent session that yields an EventStream of updates.
  */
 export function run(
-	ctx: LoopCtx,
+	initialContext: LlmContext,
 	opts: LoopOpts,
 	signal?: AbortSignal,
 ): EventStream<AgentEvent, Msg[]> {
@@ -32,7 +32,7 @@ export function run(
 	const out: Msg[] = []
 	const maxTurns = opts.maxTurns ?? MAX_TURNS
 
-	let activeCtx: LoopCtx = { ...ctx }
+	let context = initialContext
 
 	const tick = async () => {
 		es.push({ type: "start" })
@@ -46,7 +46,7 @@ export function run(
 				es.push({ type: "turn" })
 
 				// Warn before hitting the hard limit so the caller can compact/summarize
-				const approxTokens = estimateTokens(activeCtx.messages)
+				const approxTokens = estimateTokens(context.messages)
 				if (approxTokens > opts.model.contextWindow * 0.9) {
 					es.push({
 						type: "text_delta",
@@ -54,9 +54,9 @@ export function run(
 					})
 				}
 
-				const reply = await getReply(activeCtx, opts, es, signal)
+				const reply = await getReply(context, opts, es, signal)
 				out.push(reply)
-				activeCtx = { ...activeCtx, messages: [...activeCtx.messages, reply] }
+				context = { ...context, messages: [...context.messages, reply] }
 				es.push({ type: "assistant_msg", msg: reply })
 
 				if (reply.stop === "error" || reply.stop === "aborted") {
@@ -75,7 +75,7 @@ export function run(
 				for (const call of calls) {
 					if (signal?.aborted) break
 
-					const tool = activeCtx.tools.find((t) => t.def.name === call.name)
+					const tool = context.tools.find((t) => t.def.name === call.name)
 					if (!tool) {
 						const errResult: ToolResultMsg = {
 							role: "tool_result",
@@ -86,13 +86,13 @@ export function run(
 							ts: Date.now(),
 						}
 						results.push(errResult)
-						activeCtx = { ...activeCtx, messages: [...activeCtx.messages, errResult] }
+						context = { ...context, messages: [...context.messages, errResult] }
 						out.push(errResult)
 						continue
 					}
 
 					// beforeTool lets callers block dangerous operations (e.g. rm -rf)
-					const blocked = await opts.beforeTool?.(call, call.args, activeCtx)
+					const blocked = await opts.beforeTool?.(call, call.args, context)
 					if (blocked?.block) {
 						const blockResult: ToolResultMsg = {
 							role: "tool_result",
@@ -103,7 +103,7 @@ export function run(
 							ts: Date.now(),
 						}
 						results.push(blockResult)
-						activeCtx = { ...activeCtx, messages: [...activeCtx.messages, blockResult] }
+						context = { ...context, messages: [...context.messages, blockResult] }
 						out.push(blockResult)
 						continue
 					}
@@ -121,11 +121,11 @@ export function run(
 					}
 
 					results.push(toolMsg)
-					activeCtx = { ...activeCtx, messages: [...activeCtx.messages, toolMsg] }
+					context = { ...context, messages: [...context.messages, toolMsg] }
 					out.push(toolMsg)
 					es.push({ type: "tool_result", callId: call.id, result: toolMsg, args: call.args })
 
-					await opts.afterTool?.(call, toolMsg, activeCtx)
+					await opts.afterTool?.(call, toolMsg, context)
 				}
 
 				es.push({ type: "turn_end", msg: reply, results })
@@ -153,7 +153,7 @@ export function run(
 }
 
 async function getReply(
-	ctx: LoopCtx,
+	context: LlmContext,
 	opts: LoopOpts,
 	es: EventStream<AgentEvent, Msg[]>,
 	signal?: AbortSignal,
@@ -163,9 +163,9 @@ async function getReply(
 		model: opts.model,
 		apiKey: opts.apiKey,
 		baseUrl: opts.baseUrl,
-		system: ctx.system,
-		messages: ctx.messages,
-		tools: ctx.tools.map((t) => t.def),
+		system: context.system,
+		messages: context.messages,
+		tools: context.tools.map((t) => t.def),
 		signal,
 	})
 
