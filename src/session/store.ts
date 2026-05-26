@@ -428,9 +428,6 @@ export class SessionStore {
 
 	async prune(): Promise<void> {
 		this.#db.exec("DELETE FROM sessions WHERE message_count = 0")
-		this.#db.exec(
-			"DELETE FROM sessions WHERE id NOT IN (SELECT id FROM sessions ORDER BY updated DESC LIMIT 5)",
-		)
 	}
 
 	close(): void {
