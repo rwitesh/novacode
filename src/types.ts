@@ -164,8 +164,22 @@ export interface Session {
 	model: string
 	provider: string
 	title: string | null
+	parentSessionId: string | null
+	endReason: string | null
 	created: number
 	updated: number
+	inputTokens: number
+	outputTokens: number
+	messageCount: number
+}
+
+export interface PendingSession {
+	cwd: string
+	model: string
+	provider: string
+	title: string | null
+	parentSessionId: string | null
+	created: number
 }
 
 export interface CompactResult {
@@ -173,11 +187,12 @@ export interface CompactResult {
 	summary?: string
 	tokensBefore: number
 	tokensAfter: number
+	newSessionId?: string
 }
 
 /** Loop & Provider Types */
 
-export interface LoopCtx {
+export interface LlmContext {
 	system: string
 	messages: Msg[]
 	tools: Tool[]
@@ -193,10 +208,10 @@ export interface LoopOpts {
 	beforeTool?: (
 		call: ToolCallPart,
 		args: Record<string, unknown>,
-		ctx: LoopCtx,
+		ctx: LlmContext,
 	) => Promise<{ block?: boolean; reason?: string } | undefined>
 	// Run logic after a tool completes
-	afterTool?: (call: ToolCallPart, result: ToolResultMsg, ctx: LoopCtx) => Promise<void>
+	afterTool?: (call: ToolCallPart, result: ToolResultMsg, ctx: LlmContext) => Promise<void>
 }
 
 export interface StreamOpts {
@@ -237,6 +252,7 @@ export interface Prompts {
 	select(config: {
 		message: string
 		header?: string
+		footer?: string
 		options: Array<{ value: string; label: string; hint?: string }>
 	}): Promise<string | null>
 	password(config: {

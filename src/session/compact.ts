@@ -4,14 +4,24 @@ import type { CompactResult, Model, Msg } from "../types.ts"
 import { estimateTokens } from "../util.ts"
 import type { SessionStore } from "./store.ts"
 
-const MIN_KEEP = 2
-
 function extractText(msg: Msg): string {
 	if (typeof msg.content === "string") return msg.content
 	return msg.content
 		.filter((c) => c.type === "text")
 		.map((c) => (c.type === "text" ? c.text : ""))
 		.join("")
+}
+
+function estimateMsgTokens(msg: Msg): number {
+	let chars = 0
+	if (typeof msg.content === "string") {
+		chars += msg.content.length
+	} else if (Array.isArray(msg.content)) {
+		for (const part of msg.content) {
+			if (part.type === "text") chars += part.text.length
+		}
+	}
+	return Math.ceil(chars / 4)
 }
 
 export async function compact(
@@ -21,12 +31,36 @@ export async function compact(
 	model: Model,
 	apiKey: string,
 	baseUrl: string,
+	cwd: string,
 ): Promise<CompactResult> {
 	const tokensBefore = estimateTokens(messages)
-	if (messages.length <= MIN_KEEP) {
+
+	// Tail protection token budget: 10% of total context window, minimum 20,000 tokens
+	const tailTokenBudget = Math.max(20000, Math.round(model.contextWindow * 0.1))
+
+	let accumulatedTokens = 0
+	let cutIndex = messages.length
+
+	// Walk backward from the end to dynamically select the tail messages based purely on token budget
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const msg = messages[i]!
+		const msgTokens = estimateMsgTokens(msg)
+
+		if (accumulatedTokens + msgTokens <= tailTokenBudget) {
+			accumulatedTokens += msgTokens
+			cutIndex = i
+		} else {
+			break
+		}
+	}
+
+	if (cutIndex <= 0) {
 		return { compacted: false, tokensBefore, tokensAfter: tokensBefore }
 	}
-	const old = messages.slice(0, -MIN_KEEP)
+
+	const tail = messages.slice(cutIndex)
+	const old = messages.slice(0, cutIndex)
+
 	const convo = old
 		.map((m) => {
 			if (m.role === "user") return `User: ${extractText(m)}`
@@ -47,19 +81,21 @@ export async function compact(
 		content: `[Prior context summary]\n${summary}`,
 		ts: Date.now(),
 	}
-	const kept = messages.slice(-MIN_KEEP)
-	const tokensAfter = estimateTokens([...kept, summaryMsg])
 
+	await store.endSession(sessionId, "compacted")
+	const newSession = await store.createContinuation(sessionId, cwd, model.id, model.provider)
+
+	const newMsgs = [summaryMsg, ...tail]
+	for (let i = 0; i < newMsgs.length; i++) {
+		await store.append(newSession.id, newMsgs[i]!)
+	}
+
+	const tokensAfter = estimateTokens(newMsgs)
 	if (tokensAfter >= tokensBefore) {
 		return { compacted: false, tokensBefore, tokensAfter: tokensBefore }
 	}
 
-	// Replace the entire messages.jsonl with the summaryMsg followed by the kept messages
-	// This places the past context summary at the beginning of the history, ensuring
-	// chronological correctness and keeping the history prefix static for prompt caching.
-	await store.replaceMessages(sessionId, [summaryMsg, ...kept])
-
-	return { compacted: true, summary, tokensBefore, tokensAfter }
+	return { compacted: true, summary, tokensBefore, tokensAfter, newSessionId: newSession.id }
 }
 
 async function generateSummary(

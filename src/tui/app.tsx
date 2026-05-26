@@ -21,6 +21,7 @@ type PromptMode =
 			message: string
 			options: Array<{ value: string; label: string; hint?: string }>
 			header?: string
+			footer?: string
 	  }
 	| {
 			type: "password"
@@ -43,9 +44,8 @@ export async function interactive(
 		process.stdout.write(`${chalk.dim("  context:")} ${chalk.cyan("AGENTS.md")}\n`)
 	}
 	if (skills.length > 0) {
-		process.stdout.write(
-			`${chalk.dim("  skills:")}  ${chalk.cyan(`${skills.length} discovered`)}\n`,
-		)
+		const skillNames = skills.map((s) => chalk.cyan(s.name)).join(", ")
+		process.stdout.write(`${chalk.dim("  skills:")}  ${skillNames}\n`)
 	}
 
 	const initialHistory = await store.history(sessionId)
@@ -347,7 +347,7 @@ function App({
 		commitMsg(userMsg)
 
 		abortCtrl.current = new AbortController()
-		const eventStream = agent.prompt(line, abortCtrl.current.signal)
+		const eventStream = agent.prompt(abortCtrl.current.signal)
 
 		runEventLoop(eventStream)
 	})
@@ -435,6 +435,7 @@ function App({
 				message={mode.message}
 				options={mode.options}
 				header={mode.header}
+				footer={mode.footer}
 				onSelect={resolvePrompt}
 			/>
 		)

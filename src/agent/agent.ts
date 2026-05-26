@@ -1,5 +1,5 @@
 import type { EventStream } from "../provider/stream.ts"
-import type { AgentEvent, ApiFormat, LoopCtx, LoopOpts, Model, Msg, Tool } from "../types.ts"
+import type { AgentEvent, ApiFormat, LlmContext, LoopOpts, Model, Msg, Tool } from "../types.ts"
 import { run } from "./loop.ts"
 
 export class Agent {
@@ -68,8 +68,8 @@ export class Agent {
 		this.#model = model
 	}
 
-	prompt(input: string, signal?: AbortSignal): EventStream<AgentEvent, Msg[]> {
-		const ctx: LoopCtx = {
+	prompt(signal?: AbortSignal): EventStream<AgentEvent, Msg[]> {
+		const context: LlmContext = {
 			system: this.#system,
 			messages: this.#messages,
 			tools: this.#tools,
@@ -82,6 +82,6 @@ export class Agent {
 			baseUrl: this.#baseUrl,
 		}
 
-		return run(input, ctx, opts, signal)
+		return run(context, opts, signal)
 	}
 }

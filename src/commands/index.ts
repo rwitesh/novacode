@@ -26,8 +26,12 @@ ${chalk.bold("Commands:")}
 ${COMMANDS.map((c) => `  /${c.name.padEnd(12)} ${c.desc}`).join("\n")}
 
 ${chalk.bold("CLI:")}
-  nova update        Update to latest version
-  nova --session ls  List sessions
+  nova update                   Update to latest version
+  nova -s ls                    List sessions
+  nova -s <id> / --sessions     Resume sessions by ID
+  nova -r / --resume            Resume last sessions
+  nova -s rm <id>               Delete specific sessions
+  nova -s rm --all              Delete all sessions
 
 ${chalk.dim("Keys:")}
   Esc             Abort
@@ -59,7 +63,11 @@ export async function dispatch(
 			return handleProviders(agent, prompts)
 		case "compact":
 			if (!store || !sessionId) return chalk.red("Session store not available")
-			return handleCompact(agent, store, sessionId)
+			{
+				const { result, newSessionId } = await handleCompact(agent, store, sessionId)
+				if (newSessionId && onSwitchSession) await onSwitchSession(newSessionId)
+				return result
+			}
 		case "skills":
 			return handleSkills(skills)
 		case "sessions": {
@@ -67,7 +75,7 @@ export async function dispatch(
 				return chalk.red("Session switching not available")
 			const sessions = await store.list(50)
 			if (sessions.length === 0) return chalk.yellow("No sessions found.")
-			const options = sessions.map((s) => {
+			const options = sessions.map((s, idx) => {
 				const relTime = formatRelativeTime(s.updated)
 				let label = s.title ? `"${s.title}"` : `Session: ${s.id}`
 				if (s.id === sessionId) {
@@ -75,17 +83,31 @@ export async function dispatch(
 				}
 				return {
 					value: s.id,
-					label,
+					label: `${idx + 1}. ${label}`,
 					hint: relTime,
 				}
 			})
+			const footer = [
+				chalk.bold("\nCLI Sessions Shortcuts:"),
+				`  ${chalk.cyan("nova -r")} / ${chalk.cyan("--resume")}            Resume last sessions`,
+				`  ${chalk.cyan("nova -s <id>")} / ${chalk.cyan("--sessions <id>")}  Resume specific sessions by ID`,
+				`  ${chalk.cyan("nova -s ls [limit]")}                  List last sessions (default: 10)`,
+				`  ${chalk.cyan("nova -s rm <id>")}                     Delete specific sessions`,
+				`  ${chalk.cyan("nova -s rm --all")}                    Delete all sessions`,
+			].join("\n")
+
 			const selectedId = await prompts.select({
 				message: "Select a session to load:",
 				options,
+				footer,
 			})
 			if (selectedId) {
 				await onSwitchSession(selectedId)
-				return chalk.green(`✓ Switched to session: ${selectedId}`)
+				const selectedSession = sessions.find((s) => s.id === selectedId)
+				const displayName = selectedSession?.title
+					? `${selectedSession.title} (id: ${selectedId})`
+					: selectedId
+				return chalk.green(`✓ Switched to session: ${displayName}`)
 			}
 			return chalk.yellow("Session selection cancelled.")
 		}
