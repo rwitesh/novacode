@@ -36,7 +36,8 @@ async function run() {
 		console.log(`\nGenerating ${numSessions} sessions...`)
 
 		for (let i = 0; i < numSessions; i++) {
-			await store.create("/test/dir", "test-model", "test-provider")
+			const s = await store.create("/test/dir", "test-model", "test-provider")
+			await store.append(s.id, { role: "user", content: `msg ${i}`, ts: Date.now() })
 		}
 		console.log(`Successfully generated ${numSessions} sessions. Running benchmarks...`)
 

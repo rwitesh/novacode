@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite"
-import type { ContentPart, Msg, Session } from "../types.ts"
+import type { ContentPart, Msg, PendingSession, Session } from "../types.ts"
 import { closeDb, getDb } from "./db.ts"
 
 function generateId(): string {
@@ -73,6 +73,7 @@ function rowToSession(row: Record<string, unknown>): Session {
 
 export class SessionStore {
 	#db: DatabaseSync
+	#pendingSessions = new Map<string, PendingSession>()
 
 	constructor(dbOrPath?: DatabaseSync | string) {
 		if (dbOrPath instanceof DatabaseSync) {
@@ -82,15 +83,39 @@ export class SessionStore {
 		}
 	}
 
+	#ensurePersisted(sessionId: string): void {
+		const pending = this.#pendingSessions.get(sessionId)
+		if (!pending) return
+
+		this.#db
+			.prepare(
+				`INSERT OR IGNORE INTO sessions (id, cwd, model, provider, title, parent_session_id, end_reason, created, updated, input_tokens, output_tokens, message_count)
+				 VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 0, 0, 0)`,
+			)
+			.run(
+				sessionId,
+				pending.cwd,
+				pending.model,
+				pending.provider,
+				pending.title,
+				pending.parentSessionId,
+				pending.created,
+				pending.created,
+			)
+		this.#pendingSessions.delete(sessionId)
+	}
+
 	async create(cwd: string, model: string, provider: string): Promise<Session> {
 		const id = generateId()
 		const now = Date.now()
-		this.#db
-			.prepare(
-				`INSERT INTO sessions (id, cwd, model, provider, title, parent_session_id, end_reason, created, updated, input_tokens, output_tokens, message_count)
-				 VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?, 0, 0, 0)`,
-			)
-			.run(id, cwd, model, provider, now, now)
+		this.#pendingSessions.set(id, {
+			cwd,
+			model,
+			provider,
+			title: null,
+			parentSessionId: null,
+			created: now,
+		})
 		return {
 			id,
 			cwd,
@@ -111,7 +136,26 @@ export class SessionStore {
 		const row = this.#db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as
 			| Record<string, unknown>
 			| undefined
-		return row ? rowToSession(row) : null
+		if (row) return rowToSession(row)
+
+		const pending = this.#pendingSessions.get(id)
+		if (pending) {
+			return {
+				id,
+				cwd: pending.cwd,
+				model: pending.model,
+				provider: pending.provider,
+				title: pending.title,
+				parentSessionId: pending.parentSessionId,
+				endReason: null,
+				created: pending.created,
+				updated: pending.created,
+				inputTokens: 0,
+				outputTokens: 0,
+				messageCount: 0,
+			}
+		}
+		return null
 	}
 
 	async list(limit = 10): Promise<Session[]> {
@@ -129,15 +173,18 @@ export class SessionStore {
 	}
 
 	async delete(id: string): Promise<boolean> {
+		const pending = this.#pendingSessions.delete(id)
 		const result = this.#db.prepare("DELETE FROM sessions WHERE id = ?").run(id)
-		return result.changes > 0
+		return pending || result.changes > 0
 	}
 
 	async deleteAll(): Promise<void> {
+		this.#pendingSessions.clear()
 		this.#db.exec("DELETE FROM messages; DELETE FROM sessions")
 	}
 
 	async append(sessionId: string, msg: Msg): Promise<void> {
+		this.#ensurePersisted(sessionId)
 		const now = Date.now()
 
 		const role = msg.role
@@ -237,12 +284,16 @@ export class SessionStore {
 	}
 
 	async setTitle(sessionId: string, title: string): Promise<void> {
+		this.#ensurePersisted(sessionId)
 		this.#db
 			.prepare("UPDATE sessions SET title = ?, updated = ? WHERE id = ?")
 			.run(title, Date.now(), sessionId)
 	}
 
 	async replaceMessages(sessionId: string, msgs: Msg[]): Promise<void> {
+		if (msgs.length > 0) {
+			this.#ensurePersisted(sessionId)
+		}
 		this.#db.prepare("DELETE FROM messages WHERE session_id = ?").run(sessionId)
 		this.#db
 			.prepare("UPDATE sessions SET message_count = 0, updated = ? WHERE id = ?")
@@ -259,6 +310,7 @@ export class SessionStore {
 	}
 
 	async endSession(id: string, reason: string): Promise<void> {
+		this.#ensurePersisted(id)
 		this.#db
 			.prepare("UPDATE sessions SET end_reason = ?, updated = ? WHERE id = ?")
 			.run(reason, Date.now(), id)
@@ -272,12 +324,14 @@ export class SessionStore {
 	): Promise<Session> {
 		const id = generateId()
 		const now = Date.now()
-		this.#db
-			.prepare(
-				`INSERT INTO sessions (id, cwd, model, provider, title, parent_session_id, end_reason, created, updated, input_tokens, output_tokens, message_count)
-				 VALUES (?, ?, ?, ?, NULL, ?, NULL, ?, ?, 0, 0, 0)`,
-			)
-			.run(id, cwd, model, provider, parentId, now, now)
+		this.#pendingSessions.set(id, {
+			cwd,
+			model,
+			provider,
+			title: null,
+			parentSessionId: parentId,
+			created: now,
+		})
 
 		return {
 			id,
@@ -306,7 +360,12 @@ export class SessionStore {
 			const row = this.#db
 				.prepare("SELECT parent_session_id FROM sessions WHERE id = ?")
 				.get(current) as Record<string, unknown> | undefined
-			current = (row?.parent_session_id as string | null) ?? ""
+			if (row) {
+				current = (row.parent_session_id as string | null) ?? ""
+			} else {
+				const pending = this.#pendingSessions.get(current)
+				current = pending?.parentSessionId ?? ""
+			}
 		}
 
 		ids.reverse()
@@ -368,8 +427,9 @@ export class SessionStore {
 	}
 
 	async prune(): Promise<void> {
+		this.#db.exec("DELETE FROM sessions WHERE message_count = 0")
 		this.#db.exec(
-			"DELETE FROM sessions WHERE message_count = 0 AND end_reason IS NULL AND created < strftime('%s','now','now','-1 hour') * 1000",
+			"DELETE FROM sessions WHERE id NOT IN (SELECT id FROM sessions ORDER BY updated DESC LIMIT 5)",
 		)
 	}
 

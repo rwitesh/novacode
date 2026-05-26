@@ -71,7 +71,7 @@ export async function dispatch(
 				return chalk.red("Session switching not available")
 			const sessions = await store.list(50)
 			if (sessions.length === 0) return chalk.yellow("No sessions found.")
-			const options = sessions.map((s) => {
+			const options = sessions.map((s, idx) => {
 				const relTime = formatRelativeTime(s.updated)
 				let label = s.title ? `"${s.title}"` : `Session: ${s.id}`
 				if (s.id === sessionId) {
@@ -79,7 +79,7 @@ export async function dispatch(
 				}
 				return {
 					value: s.id,
-					label,
+					label: `${idx + 1}. ${label}`,
 					hint: relTime,
 				}
 			})
@@ -89,7 +89,11 @@ export async function dispatch(
 			})
 			if (selectedId) {
 				await onSwitchSession(selectedId)
-				return chalk.green(`✓ Switched to session: ${selectedId}`)
+				const selectedSession = sessions.find((s) => s.id === selectedId)
+				const displayName = selectedSession?.title
+					? `${selectedSession.title} (id: ${selectedId})`
+					: selectedId
+				return chalk.green(`✓ Switched to session: ${displayName}`)
 			}
 			return chalk.yellow("Session selection cancelled.")
 		}

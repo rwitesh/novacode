@@ -173,6 +173,15 @@ export interface Session {
 	messageCount: number
 }
 
+export interface PendingSession {
+	cwd: string
+	model: string
+	provider: string
+	title: string | null
+	parentSessionId: string | null
+	created: number
+}
+
 export interface CompactResult {
 	compacted: boolean
 	summary?: string
