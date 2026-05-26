@@ -245,23 +245,7 @@ export async function compact(
   - Content serialization round-trip (string vs ContentPart[])
   - Multiple compactions produce a 3-session chain, history loads all
 
-### Step 8: Migration utility
-
-**File**: `src/session/migrate.ts`
-
-- [ ] One-time migration: read all JSONL sessions from `~/.novacode/sessions/`, insert into SQLite
-- [ ] For each session directory:
-  - Read `metadata.json` → `INSERT INTO sessions`
-  - Read `messages.jsonl` → `INSERT INTO messages` with `seq` from line number
-  - If the session was compacted (has `history.jsonl` that differs from `messages.jsonl`):
-    - Create a parent session with the original `history.jsonl` content
-    - Set current session's `parent_session_id` to that parent
-    - Set parent's `end_reason = 'compacted'`
-- [ ] Run automatically on first boot if `state.db` doesn't exist but `sessions/` dir does
-- [ ] After successful migration, rename `sessions/` to `sessions.bak/`
-- [ ] Log migration progress
-
-### Step 9: Token tracking
+### Step 8: Token tracking
 
 - [ ] On `append()` for assistant messages, accumulate `input_tokens` and `output_tokens` on the session row
 - [ ] Display token usage in `/sessions list` output
@@ -276,7 +260,6 @@ export async function compact(
 | `src/session/db.ts` | **New** — SQLite connection, schema init |
 | `src/session/store.ts` | **Rewrite** — JSONL → SQLite, session splitting API |
 | `src/session/compact.ts` | **Rewrite** — session splitting compaction |
-| `src/session/migrate.ts` | **New** — one-time JSONL → SQLite migration |
 | `src/types.ts` | **Edit** — extend Session + CompactResult types |
 | `src/commands/compact.ts` | **Edit** — handle session switch after compaction |
 | `src/commands/session.ts` | **Edit** — add token display, hide compacted sessions |
@@ -297,8 +280,7 @@ Each step must compile and pass `npm run check` before the next:
 5. **Step 4** — `compact.ts` rewrite (depends on store)
 6. **Step 5** — Update callers (`commands/compact.ts`, `app.tsx`)
 7. **Step 6** — Remove dead JSONL code
-8. **Step 9** — Token tracking (small, additive)
-9. **Step 8** — Migration utility (last, non-blocking)
+8. **Step 8** — Token tracking (small, additive)
 
 ---
 
@@ -308,7 +290,6 @@ Each step must compile and pass `npm run check` before the next:
 |---|---|
 | `node:sqlite` API differences | Read the provided md file first |
 | ContentPart[] serialization edge cases | Sentinel prefix + JSON, test round-trips |
-| Migration fails partway | Run in transaction, rename old dir only on success |
 | Single `state.db` corruption | WAL mode + checkpoint. One-file backup. |
 | Sync API blocks event loop | Fine for CLI single-writer. Each query <1ms. |
 | Long lineage chains | Unlikely in practice (3-4 compactions max). Walk is O(depth). |

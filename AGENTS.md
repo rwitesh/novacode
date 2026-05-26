@@ -6,9 +6,9 @@ Project knowledge for coding agents working on this codebase.
 
 Novacode is an open-source, multi-provider coding agent built with Node.js. It follows a ReAct agent loop pattern (Reason → Act → Observe).
 
-**Stack:** Node.js (>= 24), TypeScript, `node:fs/promises` for file I/O, `node:child_process` for spawning processes.
+**Stack:** Node.js (>= 24), TypeScript, `node:sqlite` (built-in) for session storage, `node:fs/promises` for file I/O, `node:child_process` for spawning processes.
 
-**Config dir:** `~/.novacode/` (config.json, auth.json, sessions/)
+**Config dir:** `~/.novacode/` (config.json, auth.json, state.db)
 
 ## Commands
 
@@ -48,7 +48,10 @@ src/
 │   ├── search.ts        # glob, grep, ls tools
 │   ├── git.ts           # git status, log, diff tools
 │   └── web.ts           # web fetch/search tool
-├── session/             # JSONL session persistence + compaction
+├── session/
+│   ├── db.ts           # node:sqlite wrapper: WAL mode, schema init, singleton
+│   ├── store.ts        # SessionStore class backed by SQLite (sessions + messages tables)
+│   └── compact.ts      # session splitting compaction (end + create continuation)
 ├── onboarding/
 │   └── wizard.ts        # first-run setup using Ink standalone prompts
 ├── commands/            # slash command handlers (/models, /providers, /compact, etc)
@@ -82,8 +85,8 @@ This succinct flow keeps side‑effects (tool calls, HTTP) out of the pure loop,
 6. **Short names** — `Msg` not `AgentMessage`, `StreamFn` not `StreamFunction`.
 7. **Private fields** — `#field` not `private field`. True encapsulation.
 8. **Single rendering context** — All interactive UI (chat, prompts, menus) runs inside one Ink app. Never unmount/remount Ink to switch between modes. Use state-based mode switching instead.
-9. **Asynchronous Session Store** — The `SessionStore` class is entirely asynchronous and backed by raw JSON/JSONL files under `~/.novacode/sessions/`. All store methods must be awaited.
-10. **CLI vs Interactive Inputs** — Outside interactive TUI mode, use `--` flags exclusively (e.g. `nova --session ls`, `nova --session rm <id>`, `nova --resume`). Subcommand style (e.g., `nova session ls`) is not permitted. Inside interactive mode, use `/` commands exclusively (e.g. `/resume`, `/compact`).
+9. **Synchronous Session Store** — The `SessionStore` class is backed by SQLite (`~/.novacode/state.db`) via `node:sqlite` (synchronous `DatabaseSync`). Store methods are `async` for API compatibility but execute synchronously internally. All store methods must be awaited.
+10. **CLI vs Interactive Inputs** — Outside interactive TUI mode, use `--` flags exclusively (e.g. `nova --session ls`, `nova --session rm <id>`, `nova --resume`). Subcommand style (e.g., `nova session ls`) is not permitted. Inside interactive mode, use `/` commands exclusively (e.g. `/compact`, `/sessions`).
 
 ## Coding Conventions
 
@@ -174,5 +177,7 @@ These rules prevent the most common mistakes AI agents make when editing this co
 | Adding a `console.log` for debugging | Remove it before committing |
 | Nesting `if/else` 3+ levels deep | Use early returns and guard clauses |
 | Using callback-style `node:fs` | Use `node:fs/promises` for all file I/O. Prefer async APIs. |
+| Using JSONL files for session storage | All session data lives in SQLite (`state.db`). Use `SessionStore` methods. |
+| Mutating existing session/message rows in SQLite | Use session splitting: `endSession` + `createContinuation`. Never UPDATE old rows. |
 | Creating a new interface in a tool file | Add it to `types.ts` if shared, or keep it local with a clear `/** ... */` doc if it's file-scoped |
 | Adding a new prompt/interactive library (e.g. clack, inquirer, prompts) | Use the existing Ink-based `Prompts` interface in `tui/prompts.tsx`. All interactive UI runs inside one Ink app. |
