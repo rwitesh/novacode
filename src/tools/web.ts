@@ -23,9 +23,9 @@ function htmlToText(html: string): string {
 	// Remove HTML comments (loop to handle nested/re-introduced patterns)
 	text = stripRepeatedly(text, /<!--[\s\S]*?-->/g, "")
 	// Remove script blocks (loop + tolerate whitespace in close tag like </script >)
-	text = stripRepeatedly(text, /<script[\s\S]*?<\/script\s*>/gi, "")
+	text = stripRepeatedly(text, /<script[\s\S]*?<\/script[^>]*>/gi, "")
 	// Remove style blocks
-	text = stripRepeatedly(text, /<style[\s\S]*?<\/style\s*>/gi, "")
+	text = stripRepeatedly(text, /<style[\s\S]*?<\/style[^>]*>/gi, "")
 	text = text
 		// Keep link hrefs visible (supports single, double, or no quotes)
 		.replace(/<a[^>]*href=["']?([^"'>\s]*)["']?[^>]*>([\s\S]*?)<\/a>/gi, "[$2]($1)")

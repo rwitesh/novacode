@@ -1,5 +1,7 @@
 # lefthook.yml — git hooks for novacode
 
+rc: ~/.lefthookrc
+
 pre-commit:
   commands:
     format:
