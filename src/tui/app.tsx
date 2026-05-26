@@ -347,7 +347,7 @@ function App({
 		commitMsg(userMsg)
 
 		abortCtrl.current = new AbortController()
-		const eventStream = agent.prompt(line, abortCtrl.current.signal)
+		const eventStream = agent.prompt(abortCtrl.current.signal)
 
 		runEventLoop(eventStream)
 	})

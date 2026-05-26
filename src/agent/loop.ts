@@ -24,7 +24,6 @@ const isToolCall = (c: unknown): c is ToolCallPart =>
  * Start a long-running agent session that yields an EventStream of updates.
  */
 export function run(
-	input: string,
 	ctx: LoopCtx,
 	opts: LoopOpts,
 	signal?: AbortSignal,
@@ -33,9 +32,7 @@ export function run(
 	const out: Msg[] = []
 	const maxTurns = opts.maxTurns ?? MAX_TURNS
 
-	const userMsg: Msg = { role: "user", content: input, ts: Date.now() }
-	let activeCtx: LoopCtx = { ...ctx, messages: [...ctx.messages, userMsg] }
-	out.push(userMsg)
+	let activeCtx: LoopCtx = { ...ctx }
 
 	const tick = async () => {
 		es.push({ type: "start" })

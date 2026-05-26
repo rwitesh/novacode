@@ -87,7 +87,11 @@ describe("agent loop", () => {
 	it("respects max turns limit", async () => {
 		mockProvider(Array(100).fill(makeToolCallResult("1", "noop")))
 
-		const ctx = { system: "", messages: [] as Msg[], tools: [noopTool] }
+		const ctx = {
+			system: "",
+			messages: [{ role: "user" as const, content: "test", ts: Date.now() }] as Msg[],
+			tools: [noopTool],
+		}
 		const opts = {
 			api: MOCK_API as unknown as ApiFormat,
 			model: fakeModel,
@@ -97,7 +101,7 @@ describe("agent loop", () => {
 		}
 
 		const events: AgentEvent[] = []
-		const stream = run("test", ctx, opts)
+		const stream = run(ctx, opts)
 		for await (const ev of stream) {
 			events.push(ev)
 		}
@@ -109,7 +113,7 @@ describe("agent loop", () => {
 	it("emits warning when approaching context limit", async () => {
 		mockProvider([makeTextResult("ok")])
 
-		const bigContent = "x".repeat(3600) // ~900 tokens, >90% of 1000
+		const bigContent = "x".repeat(3700) // ~925 tokens, >90% of 1000
 		const ctx = {
 			system: "",
 			messages: [{ role: "user" as const, content: bigContent, ts: Date.now() }] as Msg[],
@@ -124,7 +128,7 @@ describe("agent loop", () => {
 		}
 
 		const events: AgentEvent[] = []
-		const stream = run("test", ctx, opts)
+		const stream = run(ctx, opts)
 		for await (const ev of stream) {
 			events.push(ev)
 		}
@@ -138,7 +142,11 @@ describe("agent loop", () => {
 	it("emits done event on completion", async () => {
 		mockProvider([makeTextResult("hello")])
 
-		const ctx = { system: "", messages: [] as Msg[], tools: [] }
+		const ctx = {
+			system: "",
+			messages: [{ role: "user" as const, content: "test", ts: Date.now() }] as Msg[],
+			tools: [],
+		}
 		const opts = {
 			api: MOCK_API as unknown as ApiFormat,
 			model: fakeModel,
@@ -147,7 +155,7 @@ describe("agent loop", () => {
 		}
 
 		const events: AgentEvent[] = []
-		const stream = run("test", ctx, opts)
+		const stream = run(ctx, opts)
 		for await (const ev of stream) {
 			events.push(ev)
 		}

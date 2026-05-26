@@ -68,7 +68,7 @@ export class Agent {
 		this.#model = model
 	}
 
-	prompt(input: string, signal?: AbortSignal): EventStream<AgentEvent, Msg[]> {
+	prompt(signal?: AbortSignal): EventStream<AgentEvent, Msg[]> {
 		const ctx: LoopCtx = {
 			system: this.#system,
 			messages: this.#messages,
@@ -82,6 +82,6 @@ export class Agent {
 			baseUrl: this.#baseUrl,
 		}
 
-		return run(input, ctx, opts, signal)
+		return run(ctx, opts, signal)
 	}
 }
