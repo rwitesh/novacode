@@ -7,7 +7,7 @@ export async function handleCompact(
 	agent: Agent,
 	store: SessionStore,
 	sessionId: string,
-): Promise<string> {
+): Promise<{ result: string; newSessionId?: string }> {
 	const res = await runCompact(
 		store,
 		sessionId,
@@ -15,18 +15,22 @@ export async function handleCompact(
 		agent.model,
 		agent.apiKey,
 		agent.baseUrl,
+		process.cwd(),
 	)
 
 	if (res.compacted) {
-		const msgs = await store.messages(sessionId)
+		const msgs = await store.messages(res.newSessionId ?? sessionId)
 		agent.setMessages(msgs)
 		const pct = Math.round(((res.tokensBefore - res.tokensAfter) / res.tokensBefore) * 100)
-		return chalk.green(`✓ Compacted (${pct}% reduction)`)
+		return {
+			result: chalk.green(`✓ Compacted (${pct}% reduction)`),
+			newSessionId: res.newSessionId,
+		}
 	}
 
 	if (res.tokensBefore < 500) {
-		return chalk.yellow("Context is too small to benefit from compaction.")
+		return { result: chalk.yellow("Context is too small to benefit from compaction.") }
 	}
 
-	return chalk.yellow("Context is small enough, no compaction needed.")
+	return { result: chalk.yellow("Context is small enough, no compaction needed.") }
 }

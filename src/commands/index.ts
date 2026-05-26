@@ -59,7 +59,11 @@ export async function dispatch(
 			return handleProviders(agent, prompts)
 		case "compact":
 			if (!store || !sessionId) return chalk.red("Session store not available")
-			return handleCompact(agent, store, sessionId)
+			{
+				const { result, newSessionId } = await handleCompact(agent, store, sessionId)
+				if (newSessionId && onSwitchSession) await onSwitchSession(newSessionId)
+				return result
+			}
 		case "skills":
 			return handleSkills(skills)
 		case "sessions": {

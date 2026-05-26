@@ -4,7 +4,8 @@ import type { CompactResult, Model, Msg } from "../types.ts"
 import { estimateTokens } from "../util.ts"
 import type { SessionStore } from "./store.ts"
 
-const MIN_KEEP = 2
+const TAIL_SIZE = 20
+const CONTENT_CAP = 8000
 
 function extractText(msg: Msg): string {
 	if (typeof msg.content === "string") return msg.content
@@ -14,6 +15,34 @@ function extractText(msg: Msg): string {
 		.join("")
 }
 
+function truncateContent(msg: Msg): Msg {
+	const cap = (content: string): string =>
+		content.length > CONTENT_CAP ? `${content.slice(0, CONTENT_CAP)}\n[truncated]` : content
+
+	if (msg.role === "assistant" || msg.role === "tool_result") {
+		const content = msg.content
+		if (typeof content === "string") return msg
+		const truncated = content.map((part) =>
+			part.type === "text" && part.text.length > CONTENT_CAP
+				? { ...part, text: cap(part.text) }
+				: part,
+		)
+		return { ...msg, content: truncated }
+	}
+
+	// user msg — content can be string
+	if (typeof msg.content === "string") {
+		return msg.content.length > CONTENT_CAP ? { ...msg, content: cap(msg.content) } : msg
+	}
+
+	const truncated = msg.content.map((part) =>
+		part.type === "text" && part.text.length > CONTENT_CAP
+			? { ...part, text: cap(part.text) }
+			: part,
+	)
+	return { ...msg, content: truncated }
+}
+
 export async function compact(
 	store: SessionStore,
 	sessionId: string,
@@ -21,12 +50,16 @@ export async function compact(
 	model: Model,
 	apiKey: string,
 	baseUrl: string,
+	cwd: string,
 ): Promise<CompactResult> {
 	const tokensBefore = estimateTokens(messages)
-	if (messages.length <= MIN_KEEP) {
+	if (messages.length <= TAIL_SIZE) {
 		return { compacted: false, tokensBefore, tokensAfter: tokensBefore }
 	}
-	const old = messages.slice(0, -MIN_KEEP)
+
+	const tail = messages.slice(-TAIL_SIZE).map(truncateContent)
+	const old = messages.slice(0, -TAIL_SIZE)
+
 	const convo = old
 		.map((m) => {
 			if (m.role === "user") return `User: ${extractText(m)}`
@@ -47,19 +80,21 @@ export async function compact(
 		content: `[Prior context summary]\n${summary}`,
 		ts: Date.now(),
 	}
-	const kept = messages.slice(-MIN_KEEP)
-	const tokensAfter = estimateTokens([...kept, summaryMsg])
 
+	await store.endSession(sessionId, "compacted")
+	const newSession = await store.createContinuation(sessionId, cwd, model.id, model.provider)
+
+	const newMsgs = [summaryMsg, ...tail]
+	for (let i = 0; i < newMsgs.length; i++) {
+		await store.append(newSession.id, newMsgs[i]!)
+	}
+
+	const tokensAfter = estimateTokens(newMsgs)
 	if (tokensAfter >= tokensBefore) {
 		return { compacted: false, tokensBefore, tokensAfter: tokensBefore }
 	}
 
-	// Replace the entire messages.jsonl with the summaryMsg followed by the kept messages
-	// This places the past context summary at the beginning of the history, ensuring
-	// chronological correctness and keeping the history prefix static for prompt caching.
-	await store.replaceMessages(sessionId, [summaryMsg, ...kept])
-
-	return { compacted: true, summary, tokensBefore, tokensAfter }
+	return { compacted: true, summary, tokensBefore, tokensAfter, newSessionId: newSession.id }
 }
 
 async function generateSummary(
