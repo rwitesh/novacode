@@ -81,11 +81,13 @@ export const streamOpenAI: StreamFn = (
 		let usage: Usage = { in: 0, out: 0 }
 
 		try {
-			const body = {
+			const body: Record<string, unknown> = {
 				model: opts.model.id,
 				messages: [{ role: "system", content: opts.system }, ...opts.messages.map(msgToOpenAI)],
 				tools: opts.tools.length > 0 ? toolsToOpenAI(opts.tools) : undefined,
 				stream: true,
+				stream_options: { include_usage: true },
+				prompt_cache_key: "novacode",
 			}
 
 			const response = await axios.post(`${opts.baseUrl}/chat/completions`, body, {

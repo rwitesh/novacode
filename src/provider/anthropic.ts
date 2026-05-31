@@ -145,7 +145,6 @@ export const streamAnthropic: StreamFn = (
 					"Content-Type": "application/json",
 					"x-api-key": opts.apiKey,
 					"anthropic-version": "2023-06-01",
-					"anthropic-beta": "prompt-caching-2024-07-31",
 				},
 				responseType: "stream",
 				signal: opts.signal,
@@ -266,12 +265,6 @@ export const streamAnthropic: StreamFn = (
 						if (chunk.type === "message_delta") {
 							if (chunk.usage) {
 								usage.out = chunk.usage.output_tokens ?? usage.out
-								if (chunk.usage.cache_read_input_tokens) {
-									usage.cacheRead = chunk.usage.cache_read_input_tokens
-								}
-								if (chunk.usage.cache_creation_input_tokens) {
-									usage.cacheWrite = chunk.usage.cache_creation_input_tokens
-								}
 								es.push({ type: "usage", usage })
 							}
 

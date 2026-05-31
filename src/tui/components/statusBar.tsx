@@ -1,5 +1,5 @@
 import { Box, Text } from "ink"
-import type { Model } from "../../types.ts"
+import type { Model, Usage } from "../../types.ts"
 
 function fmtK(n: number): string {
 	const k = n / 1000
@@ -21,7 +21,7 @@ export function StatusBar({
 	exitConfirmKey,
 }: {
 	model: Model
-	usage: { in: number; out: number }
+	usage: Usage
 	busy: boolean
 	suggestions: Array<{ name: string; desc: string }>
 	selCmdIdx: number

@@ -7,7 +7,7 @@ import { getProvider, MODELS } from "../config/providers.ts"
 import { loadAuth } from "../config/store.ts"
 import { generateSessionTitle } from "../session/compact.ts"
 import type { SessionStore } from "../session/store.ts"
-import type { Msg, Prompts, Skill } from "../types.ts"
+import type { Msg, Prompts, Skill, Usage } from "../types.ts"
 import { checkForUpdate, getCurrentVersion } from "../update.ts"
 import { Cursor, LiveArea } from "./components/liveArea.tsx"
 import { hasMeaningfulContent, Message } from "./components/message.tsx"
@@ -126,7 +126,7 @@ function App({
 	const [busy, setBusy] = useState(false)
 	const [input, setInput] = useState("")
 	const [status, setStatus] = useState("")
-	const [usage, setUsage] = useState<{ in: number; out: number }>({ in: 0, out: 0 })
+	const [usage, setUsage] = useState<Usage>({ in: 0, out: 0 })
 	const [selCmdIdx, setSelCmdIdx] = useState(0)
 	const [mode, setMode] = useState<PromptMode>({ type: "chat" })
 	const resolveRef = useRef<((v: unknown) => void) | null>(null)

@@ -69,8 +69,6 @@ export type StopReason = "stop" | "length" | "tool_use" | "error" | "aborted"
 export interface Usage {
 	in: number
 	out: number
-	cacheRead?: number
-	cacheWrite?: number
 }
 
 /** Provider */
