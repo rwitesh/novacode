@@ -14,7 +14,7 @@ import { EventStream } from "./stream.ts"
 
 interface GeminiPart {
 	text?: string
-	thought?: boolean | string
+	thought?: boolean
 	inline_data?: { mime_type: string; data: string }
 	function_call?: { name: string; args: Record<string, unknown> }
 	function_response?: { name: string; response: Record<string, unknown> }
@@ -26,10 +26,6 @@ interface GeminiContent {
 	parts: GeminiPart[]
 }
 
-/**
- * Maps our internal Msg format to the Gemini 'Content' format.
- * Groups consecutive tool_result messages into a single Gemini message.
- */
 function msgsToGemini(messages: Msg[]): GeminiContent[] {
 	const contents: GeminiContent[] = []
 
@@ -49,8 +45,7 @@ function msgsToGemini(messages: Msg[]): GeminiContent[] {
 				if (c.type === "text") return { text: c.text, thought_signature: c.signature }
 				if (c.type === "thinking")
 					return { thought: true, text: c.text, thought_signature: c.signature }
-				if (c.type === "tool_call")
-					return { function_call: { name: c.name, args: c.args }, thought_signature: c.signature }
+				if (c.type === "tool_call") return { function_call: { name: c.name, args: c.args } }
 				return { text: "" }
 			})
 			contents.push({ role: "model", parts })
@@ -67,7 +62,7 @@ function msgsToGemini(messages: Msg[]): GeminiContent[] {
 			}
 
 			const last = contents[contents.length - 1]
-			// Gemini requires alternating roles; multiple function_responses group into one 'user' message.
+			// Gemini requires alternating roles; multiple function_responses group into one user message
 			if (last && last.role === "user" && last.parts.some((p) => p.function_response)) {
 				last.parts.push(part)
 			} else {
@@ -92,6 +87,27 @@ function toolsToGemini(tools: ToolDef[]): unknown[] {
 	]
 }
 
+function buildThinkingConfig(model: {
+	supportsThinking: boolean
+}): { thinkingLevel: string } | undefined {
+	if (!model.supportsThinking) return undefined
+	return { thinkingLevel: "adaptive" }
+}
+
+function mapFinishReason(reason: string): StopReason {
+	if (reason === "STOP") return "stop"
+	if (reason === "MAX_TOKENS") return "length"
+	if (
+		reason === "SAFETY" ||
+		reason === "RECITATION" ||
+		reason === "BLOCKLIST" ||
+		reason === "PROHIBITED_CONTENT" ||
+		reason === "OTHER"
+	)
+		return "error"
+	return "stop"
+}
+
 export const streamGemini: StreamFn = (
 	opts: StreamOpts,
 ): EventStream<StreamEvent, AssistantResult> => {
@@ -101,17 +117,25 @@ export const streamGemini: StreamFn = (
 		let usage: Usage = { in: 0, out: 0 }
 		const content: ContentPart[] = []
 
+		// Block-based accumulation: track accumulated text and thinking across chunks
+		let textAccum = ""
+		let thinkingAccum = ""
+		let thinkingSig = ""
+		let textSig = ""
+
 		try {
 			const baseUrl = opts.baseUrl || "https://generativelanguage.googleapis.com"
 			const url = `${baseUrl}/v1beta/models/${opts.model.id}:streamGenerateContent?alt=sse&key=${opts.apiKey}`
 
-			const body = {
+			const body: Record<string, unknown> = {
 				contents: msgsToGemini(opts.messages),
 				system_instruction: opts.system ? { parts: [{ text: opts.system }] } : undefined,
 				tools: opts.tools.length > 0 ? toolsToGemini(opts.tools) : undefined,
-				generationConfig: {
-					thinkingConfig: opts.model.supportsThinking ? { thinkingLevel: "low" } : undefined,
-				},
+			}
+
+			const thinkingConfig = buildThinkingConfig(opts.model)
+			if (thinkingConfig) {
+				body.generationConfig = { thinkingConfig }
 			}
 
 			const response = await axios.post(url, body, {
@@ -162,75 +186,84 @@ export const streamGemini: StreamFn = (
 					const data = trimmed.slice(6)
 
 					try {
-						const chunk = JSON.parse(data)
-						const candidate = chunk.candidates?.[0]
+						const parsed = JSON.parse(data)
+						const candidate = parsed.candidates?.[0]
 
-						// Handle usage metadata
-						if (chunk.usageMetadata) {
+						if (parsed.usageMetadata) {
 							usage = {
-								in: chunk.usageMetadata.promptTokenCount || usage.in,
-								out: chunk.usageMetadata.candidatesTokenCount || usage.out,
+								in: parsed.usageMetadata.promptTokenCount || usage.in,
+								out: parsed.usageMetadata.candidatesTokenCount || usage.out,
 							}
 							es.push({ type: "usage", usage })
 						}
 
 						if (!candidate) continue
 
-						// Map finish reason
 						if (candidate.finishReason) {
-							const reason = candidate.finishReason
-							if (reason === "STOP") stop = "stop"
-							else if (reason === "MAX_TOKENS") stop = "length"
-							else if (reason === "SAFETY" || reason === "RECITATION" || reason === "OTHER")
-								stop = "error"
+							stop = mapFinishReason(candidate.finishReason)
 						}
 
 						const parts = candidate.content?.parts
-						if (parts) {
-							for (const part of parts) {
-								const sig = part.thought_signature || part.thoughtSignature
+						if (!parts) continue
 
-								// Handle text and thinking deltas
-								if (part.text) {
-									if (part.thought === true || typeof part.thought === "string") {
-										const thoughtText = typeof part.thought === "string" ? part.thought : part.text
-										es.push({ type: "thinking_delta", text: thoughtText })
-									} else {
-										es.push({ type: "text_delta", text: part.text })
-										const last = content[content.length - 1]
-										if (last?.type === "text") {
-											last.text += part.text
-										} else {
-											content.push({ type: "text", text: part.text, signature: sig })
-										}
-									}
+						for (const part of parts) {
+							const sig = part.thought_signature
+
+							if (part.thought === true && part.text) {
+								thinkingAccum += part.text
+								if (sig) thinkingSig = sig
+								es.push({ type: "thinking_delta", text: part.text })
+								continue
+							}
+
+							if (part.text) {
+								textAccum += part.text
+								if (sig) textSig = sig
+								es.push({ type: "text_delta", text: part.text })
+								continue
+							}
+
+							if (part.function_call) {
+								const fc = part.function_call
+								const id = `call_${Math.random().toString(36).slice(2, 9)}`
+
+								const toolCall: ContentPart = {
+									type: "tool_call",
+									id,
+									name: fc.name,
+									args: (fc.args as Record<string, unknown>) || {},
 								}
-
-								// Handle function calls (can be snake_case or camelCase in some API versions)
-								const fc = part.functionCall || part.function_call
-								if (fc) {
-									const name = fc.name
-									const args = (fc.args as Record<string, unknown>) || {}
-									const id = `call_${Math.random().toString(36).slice(2, 9)}`
-
-									const toolCall: ContentPart = {
-										type: "tool_call",
-										id,
-										name,
-										args,
-										signature: sig,
-									}
-									content.push(toolCall)
-									es.push({ type: "tool_call", call: toolCall })
-									stop = "tool_use"
-								}
+								content.push(toolCall)
+								es.push({ type: "tool_call", call: toolCall })
+								stop = "tool_use"
 							}
 						}
-					} catch (_e) {
-						if (data.trim() !== "" && data.trim() !== "[DONE]") {
-							// skip noise
-						}
+					} catch {
+						// Skip malformed JSON chunks
 					}
+				}
+			}
+
+			// Finalize accumulated blocks into content
+			if (thinkingAccum) {
+				content.unshift({
+					type: "thinking",
+					text: thinkingAccum,
+					signature: thinkingSig || undefined,
+				})
+			}
+			if (textAccum) {
+				// Insert text after thinking but before tool calls
+				const insertIdx = content.findIndex((c) => c.type === "tool_call")
+				const textPart: ContentPart = {
+					type: "text",
+					text: textAccum,
+					signature: textSig || undefined,
+				}
+				if (insertIdx === -1) {
+					content.push(textPart)
+				} else {
+					content.splice(insertIdx, 0, textPart)
 				}
 			}
 
