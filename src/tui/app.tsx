@@ -490,7 +490,7 @@ function App({
 					borderRight={false}
 					paddingTop={0}
 					paddingBottom={0}
-					marginBottom={1}
+					marginBottom={0}
 				>
 					<Box flexDirection="row">
 						<Box flexShrink={0} marginRight={1}>

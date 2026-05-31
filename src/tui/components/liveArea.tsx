@@ -40,7 +40,7 @@ export function LiveArea({
 	if (!isActive) return null
 
 	return (
-		<Box flexDirection="column" marginTop={1}>
+		<Box flexDirection="column" marginTop={0}>
 			{stream && (
 				<Box flexDirection="row">
 					<Box flexGrow={1} flexShrink={1}>
