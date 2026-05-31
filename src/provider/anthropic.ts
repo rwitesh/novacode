@@ -86,11 +86,32 @@ function msgsToAnthropic(messages: Msg[]): Record<string, unknown>[] {
 }
 
 function toolsToAnthropic(tools: ToolDef[]): unknown[] {
-	return tools.map((t) => ({
-		name: t.name,
-		description: t.description,
-		input_schema: t.parameters,
-	}))
+	return tools.map((t, i) => {
+		const def: Record<string, unknown> = {
+			name: t.name,
+			description: t.description,
+			input_schema: t.parameters,
+		}
+		// Cache the last tool definition for prompt caching
+		if (i === tools.length - 1) {
+			def.cache_control = { type: "ephemeral" }
+		}
+		return def
+	})
+}
+
+function buildThinkingConfig(model: {
+	supportsThinking: boolean
+	id: string
+}): Record<string, unknown> | undefined {
+	if (!model.supportsThinking) return undefined
+
+	// Opus 4.5 uses manual thinking with budget_tokens
+	if (model.id === "claude-opus-4-5" || model.id === "claude-sonnet-4-5")
+		return { type: "enabled", budget_tokens: 10000 }
+
+	// Opus 4.6+/Sonnet 4.6 use adaptive thinking
+	return { type: "adaptive" }
 }
 
 export const streamAnthropic: StreamFn = (
@@ -99,7 +120,7 @@ export const streamAnthropic: StreamFn = (
 	const es = new EventStream<StreamEvent, AssistantResult>()
 
 	;(async () => {
-		const usage: Usage = { in: 0, out: 0 }
+		let usage: Usage = { in: 0, out: 0 }
 		const content: ContentPart[] = []
 		const blocks = new Map<
 			number,
@@ -110,7 +131,7 @@ export const streamAnthropic: StreamFn = (
 				text: string
 				thinking: string
 				partialJson: string
-				signature?: string
+				signature: string
 			}
 		>()
 
@@ -121,23 +142,25 @@ export const streamAnthropic: StreamFn = (
 			const body: Record<string, unknown> = {
 				model: opts.model.id,
 				messages: msgsToAnthropic(opts.messages),
-				system: opts.system || undefined,
-				max_tokens: opts.model.maxTokens || 4096,
+				system: opts.system
+					? [{ type: "text", text: opts.system, cache_control: { type: "ephemeral" } }]
+					: undefined,
+				max_tokens: opts.model.maxTokens || 16384,
 				stream: true,
-				cache_control: { type: "ephemeral" },
 			}
 
 			if (opts.tools.length > 0) {
 				body.tools = toolsToAnthropic(opts.tools)
 			}
 
-			if (opts.model.supportsThinking) {
-				body.thinking = {
-					type: "adaptive",
-				}
-				body.output_config = {
-					effort: "high",
-				}
+			const thinking = buildThinkingConfig(opts.model)
+			if (thinking) {
+				body.thinking = thinking
+			}
+
+			const effort = opts.model.effort
+			if (effort) {
+				body.output_config = { effort }
 			}
 
 			const response = await axios.post(url, body, {
@@ -192,8 +215,14 @@ export const streamAnthropic: StreamFn = (
 						const chunk = JSON.parse(data)
 
 						if (chunk.type === "message_start") {
-							if (chunk.message?.usage) {
-								usage.in = chunk.message.usage.input_tokens ?? usage.in
+							const u = chunk.message?.usage
+							if (u) {
+								// Sum all input token fields for accurate context size
+								const inputTokens =
+									(u.input_tokens ?? 0) +
+									(u.cache_creation_input_tokens ?? 0) +
+									(u.cache_read_input_tokens ?? 0)
+								usage = { in: inputTokens, out: u.output_tokens ?? 0 }
 								es.push({ type: "usage", usage })
 							}
 						}
@@ -208,7 +237,7 @@ export const streamAnthropic: StreamFn = (
 								text: "",
 								thinking: "",
 								partialJson: "",
-								signature: block.signature ?? "",
+								signature: "",
 							})
 						}
 
@@ -225,6 +254,8 @@ export const streamAnthropic: StreamFn = (
 									es.push({ type: "thinking_delta", text: delta.thinking })
 								} else if (delta.type === "input_json_delta" && delta.partial_json) {
 									block.partialJson += delta.partial_json
+								} else if (delta.type === "signature_delta" && delta.signature) {
+									block.signature += delta.signature
 								}
 							}
 						}
@@ -235,7 +266,7 @@ export const streamAnthropic: StreamFn = (
 							if (block) {
 								if (block.type === "text" && block.text) {
 									content.push({ type: "text", text: block.text })
-								} else if (block.type === "thinking" && block.thinking) {
+								} else if (block.type === "thinking" && (block.thinking || block.signature)) {
 									content.push({
 										type: "thinking",
 										text: block.thinking,
@@ -245,15 +276,14 @@ export const streamAnthropic: StreamFn = (
 									let args = {}
 									try {
 										args = JSON.parse(block.partialJson || "{}")
-									} catch {
-										/* fallback */
+									} catch (e) {
+										args = { _raw: block.partialJson, _parseError: (e as Error).message }
 									}
 									const toolCall: ContentPart = {
 										type: "tool_call",
 										id: block.id,
 										name: block.name,
 										args,
-										signature: block.signature || undefined,
 									}
 									content.push(toolCall)
 									es.push({ type: "tool_call", call: toolCall })
@@ -264,7 +294,7 @@ export const streamAnthropic: StreamFn = (
 
 						if (chunk.type === "message_delta") {
 							if (chunk.usage) {
-								usage.out = chunk.usage.output_tokens ?? usage.out
+								usage = { in: usage.in, out: chunk.usage.output_tokens ?? usage.out }
 								es.push({ type: "usage", usage })
 							}
 
@@ -276,11 +306,18 @@ export const streamAnthropic: StreamFn = (
 									stop = "length"
 								} else if (reason === "tool_use") {
 									stop = "tool_use"
+								} else if (reason === "refusal") {
+									stop = "refusal"
 								}
 							}
 						}
+
+						if (chunk.type === "error") {
+							const errMsg = chunk.error?.message ?? "Unknown stream error"
+							es.push({ type: "text_delta", text: `\n[Stream error: ${errMsg}]` })
+						}
 					} catch {
-						// Skip malformed chunks or event noise
+						// Skip malformed JSON chunks
 					}
 				}
 			}

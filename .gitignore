@@ -29,3 +29,4 @@ coverage
 # skills
 .agents
 skills-lock.json
+docs

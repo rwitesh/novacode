@@ -62,7 +62,7 @@ export interface ToolResultMsg {
 }
 
 export type Msg = UserMsg | AssistantMsg | ToolResultMsg
-export type StopReason = "stop" | "length" | "tool_use" | "error" | "aborted"
+export type StopReason = "stop" | "length" | "tool_use" | "error" | "aborted" | "refusal"
 
 /** Usage */
 
@@ -90,6 +90,7 @@ export interface Model {
 	contextWindow: number
 	maxTokens: number
 	supportsThinking: boolean
+	effort?: string
 }
 
 /** Tools */
