@@ -1,6 +1,6 @@
 import chalk from "chalk"
 import { Box, render, Static, Text, useApp, useInput } from "ink"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
 import { getProvider, MODELS } from "../config/providers.ts"
@@ -12,6 +12,7 @@ import { checkForUpdate, getCurrentVersion } from "../update.ts"
 import { Cursor, LiveArea } from "./components/liveArea.tsx"
 import { hasMeaningfulContent, Message } from "./components/message.tsx"
 import { StatusBar } from "./components/statusBar.tsx"
+import { useStreamBuffer } from "./hooks/useStreamBuffer.ts"
 import { ConfirmPrompt, PasswordPrompt, SelectPrompt } from "./prompts.tsx"
 
 type PromptMode =
@@ -120,7 +121,7 @@ function App({
 		setMsgs([])
 		setCurrSessionId(session.id)
 	}, [store, agent])
-	const [stream, setStream] = useState("")
+
 	const [thinking, setThinking] = useState(false)
 	const [busy, setBusy] = useState(false)
 	const [input, setInput] = useState("")
@@ -139,6 +140,8 @@ function App({
 	const { exit } = useApp()
 	const lastExitPress = useRef<{ key: "C"; ts: number } | null>(null)
 	const [exitConfirmKey, setExitConfirmKey] = useState<"C" | null>(null)
+
+	const { bufferedStream, append: appendStream, reset: resetStream } = useStreamBuffer()
 
 	useEffect(() => {
 		const check = async () => {
@@ -218,13 +221,11 @@ function App({
 				return
 			}
 
-			// Idle state - handle exit
 			if (ch === "d") {
 				exit()
 				return
 			}
 
-			// Ctrl+C double-press exit logic
 			const now = Date.now()
 			if (
 				lastExitPress.current &&
@@ -235,7 +236,6 @@ function App({
 			} else {
 				lastExitPress.current = { key: "C", ts: now }
 				setExitConfirmKey("C")
-				// Clear the temporary status after 2 seconds
 				setTimeout(() => {
 					if (lastExitPress.current?.key === "C" && Date.now() - lastExitPress.current.ts >= 2000) {
 						lastExitPress.current = null
@@ -358,14 +358,14 @@ function App({
 				switch (ev.type) {
 					case "start":
 						setBusy(true)
-						setStream("")
+						resetStream()
 						setThinking(false)
 						setStatus("")
 						break
 					case "text_delta":
 						if (ev.text) {
 							setThinking(false)
-							setStream((prev) => prev + ev.text)
+							appendStream(ev.text)
 						}
 						break
 					case "thinking_delta":
@@ -373,9 +373,8 @@ function App({
 						break
 					case "assistant_msg":
 						commitMsg(ev.msg)
-						setStream("")
+						resetStream()
 						setThinking(false)
-
 						break
 					case "tool_call":
 						setStatus(chalk.dim(`⏳ ${ev.call.name}…`))
@@ -423,11 +422,13 @@ function App({
 		} finally {
 			abortCtrl.current = null
 			setBusy(false)
-			setStream("")
+			resetStream()
 			setThinking(false)
 			setStatus("")
 		}
 	}
+
+	const visibleMsgs = useMemo(() => msgs.filter(hasMeaningfulContent), [msgs])
 
 	if (mode.type === "select") {
 		return (
@@ -449,18 +450,18 @@ function App({
 		return <ConfirmPrompt message={mode.message} onConfirm={resolvePrompt} />
 	}
 
-	const visibleMsgs = msgs.filter(hasMeaningfulContent)
-	const isLiveActive = !!(stream || thinking || busy)
-
 	return (
-		<Box flexDirection="column" paddingX={1}>
+		<Box flexDirection="column" paddingX={1} width="100%">
 			<Static items={visibleMsgs}>
 				{(m, i) => <Message key={`${m.ts}-${i}`} msg={m} isFirst={i === 0} />}
 			</Static>
 
-			<LiveArea stream={stream} thinking={thinking} busy={busy} status={status} />
+			<LiveArea stream={bufferedStream} thinking={thinking} busy={busy} status={status} />
 
-			<Box flexDirection="column" marginTop={visibleMsgs.length > 0 || isLiveActive ? 1 : 0}>
+			<Box
+				flexDirection="column"
+				marginTop={visibleMsgs.length > 0 || bufferedStream || thinking || busy ? 1 : 0}
+			>
 				{updateInfo && (
 					<Box
 						borderStyle="round"
@@ -478,17 +479,31 @@ function App({
 						</Text>
 					</Box>
 				)}
-				<Box flexDirection="row">
-					<Box flexShrink={0} marginRight={1}>
-						<Text bold color="green">
-							{">"}
-						</Text>
-					</Box>
-					<Box flexGrow={1} flexShrink={1}>
-						<Text>
-							{input}
-							<Cursor />
-						</Text>
+
+				<Box
+					flexDirection="column"
+					borderStyle="single"
+					borderTop
+					borderBottom
+					borderColor="green"
+					borderLeft={false}
+					borderRight={false}
+					paddingTop={0}
+					paddingBottom={0}
+					marginBottom={0}
+				>
+					<Box flexDirection="row">
+						<Box flexShrink={0} marginRight={1}>
+							<Text bold color="greenBright">
+								{"❯"}
+							</Text>
+						</Box>
+						<Box flexGrow={1} flexShrink={1}>
+							<Text>
+								{input}
+								<Cursor />
+							</Text>
+						</Box>
 					</Box>
 				</Box>
 

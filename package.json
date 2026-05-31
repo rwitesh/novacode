@@ -1,6 +1,6 @@
 {
 	"name": "novacode",
-	"version": "0.8.0",
+	"version": "0.8.1",
 	"description": "Open-source multi-provider coding agent.",
 	"type": "module",
 	"main": "./dist/main.mjs",
@@ -27,8 +27,10 @@
 		"coding-agent",
 		"ai",
 		"cli",
-		"node",
-		"llm"
+		"agent",
+		"llm",
+		"nova",
+		"novacode"
 	],
 	"license": "Apache-2.0",
 	"publishConfig": {

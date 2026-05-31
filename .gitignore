@@ -25,3 +25,7 @@ coverage
 # OS
 .DS_Store
 .idea
+
+# skills
+.agents
+skills-lock.json
