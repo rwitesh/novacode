@@ -47,7 +47,7 @@ Run `nova --help` to see all available flags and commands.
 
 ### Supported Providers
 
-GLM (Z.AI), Gemini (Google), DeepSeek, OpenAI
+Anthropic, DeepSeek, Gemini (Google), GLM (Z.AI), OpenAI
 
 ## Development
 
