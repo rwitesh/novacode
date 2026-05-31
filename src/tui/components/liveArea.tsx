@@ -2,7 +2,6 @@ import chalk from "chalk"
 import { Box, Text } from "ink"
 import { useEffect, useState } from "react"
 import { SPINNER_FRAMES } from "../constants.ts"
-import { formatMarkdown } from "../markdown.ts"
 
 export function Spinner() {
 	const [frame, setFrame] = useState(0)
@@ -23,7 +22,7 @@ export function Cursor() {
 		const timer = setInterval(() => setVisible((v) => !v), 530)
 		return () => clearInterval(timer)
 	}, [])
-	return <Text color="green">{visible ? "│" : " "}</Text>
+	return <Text color="white">{visible ? "█" : " "}</Text>
 }
 
 export function LiveArea({
@@ -41,12 +40,12 @@ export function LiveArea({
 	if (!isActive) return null
 
 	return (
-		<Box flexDirection="column" marginTop={0}>
+		<Box flexDirection="column" marginTop={1}>
 			{stream && (
 				<Box flexDirection="row">
 					<Box flexGrow={1} flexShrink={1}>
 						<Text>
-							{formatMarkdown(stream)}
+							{stream}
 							<Cursor />
 						</Text>
 					</Box>
