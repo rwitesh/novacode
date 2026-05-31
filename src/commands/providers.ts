@@ -9,7 +9,9 @@ export async function handleProviders(agent: Agent, prompts?: Prompts): Promise<
 
 	const config = await loadConfig()
 	const auth = await loadAuth()
-	const configured = PROVIDERS.filter((p) => !!auth.apiKeys[p.id])
+	const configured = PROVIDERS.filter((p) => !!auth.apiKeys[p.id]).sort((a, b) =>
+		a.name.localeCompare(b.name),
+	)
 
 	const headerLines =
 		configured.length === 0
@@ -49,7 +51,9 @@ async function addProvider(agent: Agent, prompts: Prompts): Promise<string> {
 	const auth = await loadAuth()
 	const config = await loadConfig()
 
-	const available = PROVIDERS.filter((p) => !auth.apiKeys[p.id])
+	const available = PROVIDERS.filter((p) => !auth.apiKeys[p.id]).sort((a, b) =>
+		a.name.localeCompare(b.name),
+	)
 	if (available.length === 0) {
 		return chalk.yellow("All providers already have API keys configured.")
 	}
@@ -72,19 +76,53 @@ async function addProvider(agent: Agent, prompts: Prompts): Promise<string> {
 	auth.apiKeys[pDef.id] = key
 	await saveAuth(auth)
 
-	if (!config.provider) {
-		config.provider = pDef.id
-		const mDef = MODELS.find((m) => m.provider === pDef.id)
-		if (mDef) {
-			config.model = mDef.id
-		}
-		await saveConfig(config)
-		agent.updateConfig({
-			api: pDef.api,
-			model: MODELS.find((m) => m.id === config.model)!,
-			apiKey: key,
-			baseUrl: pDef.baseUrl,
+	const providerModels = MODELS.filter((m) => m.provider === pDef.id)
+	const defaultModel = providerModels[0]
+	let selectedModelId = defaultModel?.id ?? ""
+
+	if (defaultModel) {
+		const choice = await prompts.select({
+			message: "Model Selection",
+			options: [
+				{ value: "latest", label: `Use default latest (${defaultModel.id})` },
+				{ value: "choose", label: "Choose a model ID..." },
+			],
 		})
+
+		if (choice === "choose") {
+			const pickedModel = await prompts.select({
+				message: "Select Model ID",
+				options: providerModels.map((m) => ({ value: m.id, label: m.name })),
+			})
+			if (pickedModel) {
+				selectedModelId = pickedModel
+			}
+		}
+	}
+
+	let makeDefault = !config.provider
+	if (config.provider && config.provider !== pDef.id) {
+		const confirm = await prompts.confirm({
+			message: `Set ${pDef.name} as the default provider?`,
+		})
+		if (confirm) {
+			makeDefault = true
+		}
+	}
+
+	if (makeDefault) {
+		config.provider = pDef.id
+		config.model = selectedModelId
+		await saveConfig(config)
+		const modelDef = MODELS.find((m) => m.id === selectedModelId)
+		if (modelDef) {
+			agent.updateConfig({
+				apiFormat: pDef.apiFormat,
+				model: modelDef,
+				apiKey: key,
+				baseUrl: pDef.baseUrl,
+			})
+		}
 	}
 
 	return chalk.green(`✓ ${pDef.name} configured`)
@@ -93,7 +131,9 @@ async function addProvider(agent: Agent, prompts: Prompts): Promise<string> {
 async function updateKey(agent: Agent, prompts: Prompts): Promise<string> {
 	const auth = await loadAuth()
 
-	const configured = PROVIDERS.filter((p) => !!auth.apiKeys[p.id])
+	const configured = PROVIDERS.filter((p) => !!auth.apiKeys[p.id]).sort((a, b) =>
+		a.name.localeCompare(b.name),
+	)
 	if (configured.length === 0) {
 		return chalk.yellow("No providers configured. Use 'Add Provider' first.")
 	}
@@ -118,7 +158,7 @@ async function updateKey(agent: Agent, prompts: Prompts): Promise<string> {
 		const currentModel = MODELS.find((m) => m.id === config.model && m.provider === config.provider)
 		if (currentModel) {
 			agent.updateConfig({
-				api: pDef.api,
+				apiFormat: pDef.apiFormat,
 				model: currentModel,
 				apiKey: key,
 				baseUrl: pDef.baseUrl,
@@ -133,7 +173,9 @@ async function removeKey(agent: Agent, prompts: Prompts): Promise<string> {
 	const auth = await loadAuth()
 	const config = await loadConfig()
 
-	const configured = PROVIDERS.filter((p) => !!auth.apiKeys[p.id])
+	const configured = PROVIDERS.filter((p) => !!auth.apiKeys[p.id]).sort((a, b) =>
+		a.name.localeCompare(b.name),
+	)
 	if (configured.length === 0) {
 		return chalk.yellow("No configured providers to remove.")
 	}
@@ -163,7 +205,7 @@ async function removeKey(agent: Agent, prompts: Prompts): Promise<string> {
 				config.provider = next
 				config.model = mDef.id
 				agent.updateConfig({
-					api: pDef.api,
+					apiFormat: pDef.apiFormat,
 					model: mDef,
 					apiKey: auth.apiKeys[next]!,
 					baseUrl: pDef.baseUrl,
@@ -180,9 +222,10 @@ async function setDefault(agent: Agent, prompts: Prompts): Promise<string> {
 	const config = await loadConfig()
 	const auth = await loadAuth()
 
+	const sortedProviders = [...PROVIDERS].sort((a, b) => a.name.localeCompare(b.name))
 	const pick = await prompts.select({
 		message: "Default Provider",
-		options: PROVIDERS.map((p) => ({
+		options: sortedProviders.map((p) => ({
 			value: p.id,
 			label: `${auth.apiKeys[p.id] ? "✅" : "❌"} ${p.name}`,
 		})),
@@ -203,7 +246,7 @@ async function setDefault(agent: Agent, prompts: Prompts): Promise<string> {
 	await saveConfig(config)
 
 	agent.updateConfig({
-		api: pDef.api,
+		apiFormat: pDef.apiFormat,
 		model: mDef,
 		apiKey: auth.apiKeys[pick],
 		baseUrl: pDef.baseUrl,

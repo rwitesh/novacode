@@ -159,7 +159,7 @@ async function getReply(
 	signal?: AbortSignal,
 ): Promise<AssistantMsg> {
 	const providerStream = stream({
-		api: opts.api,
+		apiFormat: opts.apiFormat,
 		model: opts.model,
 		apiKey: opts.apiKey,
 		baseUrl: opts.baseUrl,

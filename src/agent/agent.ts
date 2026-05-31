@@ -3,7 +3,7 @@ import type { AgentEvent, ApiFormat, LlmContext, LoopOpts, Model, Msg, Tool } fr
 import { run } from "./loop.ts"
 
 export class Agent {
-	#api: ApiFormat
+	#apiFormat: ApiFormat
 	#model: Model
 	#system: string
 	#messages: Msg[] = []
@@ -12,7 +12,7 @@ export class Agent {
 	#baseUrl: string
 
 	constructor(opts: {
-		api: ApiFormat
+		apiFormat: ApiFormat
 		model: Model
 		apiKey: string
 		baseUrl: string
@@ -20,7 +20,7 @@ export class Agent {
 		tools: Tool[]
 		messages?: Msg[]
 	}) {
-		this.#api = opts.api
+		this.#apiFormat = opts.apiFormat
 		this.#model = opts.model
 		this.#apiKey = opts.apiKey
 		this.#baseUrl = opts.baseUrl
@@ -49,8 +49,13 @@ export class Agent {
 		return this.#baseUrl
 	}
 
-	updateConfig(opts: { api: ApiFormat; model: Model; apiKey: string; baseUrl: string }): void {
-		this.#api = opts.api
+	updateConfig(opts: {
+		apiFormat: ApiFormat
+		model: Model
+		apiKey: string
+		baseUrl: string
+	}): void {
+		this.#apiFormat = opts.apiFormat
 		this.#model = opts.model
 		this.#apiKey = opts.apiKey
 		this.#baseUrl = opts.baseUrl
@@ -76,7 +81,7 @@ export class Agent {
 		}
 
 		const opts: LoopOpts = {
-			api: this.#api,
+			apiFormat: this.#apiFormat,
 			model: this.#model,
 			apiKey: this.#apiKey,
 			baseUrl: this.#baseUrl,

@@ -75,12 +75,12 @@ export interface Usage {
 
 /** Provider */
 
-export type ApiFormat = "openai" | "gemini"
+export type ApiFormat = "openai" | "gemini" | "anthropic"
 
 export interface ProviderDef {
 	id: string
 	name: string
-	api: ApiFormat
+	apiFormat: ApiFormat
 	baseUrl: string
 	envKey: string // env var name for API key
 }
@@ -199,7 +199,7 @@ export interface LlmContext {
 }
 
 export interface LoopOpts {
-	api: ApiFormat
+	apiFormat: ApiFormat
 	model: Model
 	apiKey: string
 	baseUrl: string
@@ -215,7 +215,7 @@ export interface LoopOpts {
 }
 
 export interface StreamOpts {
-	api: ApiFormat
+	apiFormat: ApiFormat
 	model: Model
 	apiKey: string
 	baseUrl: string

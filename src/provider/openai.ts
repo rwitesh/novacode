@@ -1,3 +1,4 @@
+import axios from "axios"
 import type {
 	AssistantResult,
 	Msg,
@@ -87,19 +88,22 @@ export const streamOpenAI: StreamFn = (
 				stream: true,
 			}
 
-			const response = await fetch(`${opts.baseUrl}/chat/completions`, {
-				method: "POST",
+			const response = await axios.post(`${opts.baseUrl}/chat/completions`, body, {
 				headers: {
 					"Content-Type": "application/json",
 					Authorization: `Bearer ${opts.apiKey}`,
 				},
-				body: JSON.stringify(body),
+				responseType: "stream",
 				signal: opts.signal,
+				validateStatus: () => true,
 			})
 
-			if (!response.ok) {
-				const text = await response.text()
-				const errorMsg = `API error ${response.status}: ${text}`
+			if (response.status < 200 || response.status >= 300) {
+				let errorText = ""
+				for await (const chunk of response.data) {
+					errorText += chunk.toString("utf8")
+				}
+				const errorMsg = `API error ${response.status}: ${errorText}`
 				es.push({ type: "text_delta", text: errorMsg })
 				es.finish({
 					content: [{ type: "text", text: errorMsg }],
@@ -109,21 +113,12 @@ export const streamOpenAI: StreamFn = (
 				return
 			}
 
-			const reader = response.body?.getReader()
-			if (!reader) {
-				es.finish({ content: [], usage: { in: 0, out: 0 }, stop: "error" })
-				return
-			}
-
 			const decoder = new TextDecoder()
 			let buffer = ""
 			let stop = "stop"
 
-			while (true) {
-				const { done, value } = await reader.read()
-				if (done) break
-
-				buffer += decoder.decode(value, { stream: true })
+			for await (const chunk of response.data) {
+				buffer += decoder.decode(chunk, { stream: true })
 				const lines = buffer.split("\n")
 				buffer = lines.pop() ?? ""
 

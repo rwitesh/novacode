@@ -154,7 +154,9 @@ Options:
 	const provider = getProvider(providerId)
 	if (!provider) {
 		console.error(`Unknown provider: ${providerId}`)
-		console.error(`Available: ${getProvider("glm") ? "glm, " : ""}gemini, deepseek, openai`)
+		console.error(
+			`Available: ${getProvider("glm") ? "glm, " : ""}gemini, deepseek, openai, anthropic`,
+		)
 		process.exit(1)
 	}
 
@@ -188,7 +190,7 @@ Options:
 	const existingMessages = await store.messages(sessionId)
 
 	const agent = new Agent({
-		api: provider.api,
+		apiFormat: provider.apiFormat,
 		model,
 		apiKey,
 		baseUrl: provider.baseUrl,

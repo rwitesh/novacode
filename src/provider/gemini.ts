@@ -1,3 +1,4 @@
+import axios from "axios"
 import type {
 	AssistantResult,
 	ContentPart,
@@ -113,22 +114,25 @@ export const streamGemini: StreamFn = (
 				},
 			}
 
-			const response = await fetch(url, {
-				method: "POST",
+			const response = await axios.post(url, body, {
 				headers: {
 					"Content-Type": "application/json",
 					"Api-Revision": "2026-05-20",
 				},
-				body: JSON.stringify(body),
+				responseType: "stream",
 				signal: opts.signal,
+				validateStatus: () => true,
 			})
 
-			if (!response.ok) {
-				const text = await response.text()
-				let msg = text
+			if (response.status < 200 || response.status >= 300) {
+				let errorText = ""
+				for await (const chunk of response.data) {
+					errorText += chunk.toString("utf8")
+				}
+				let msg = errorText
 				try {
-					const json = JSON.parse(text)
-					msg = json.error?.message || json.message || text
+					const json = JSON.parse(errorText)
+					msg = json.error?.message || json.message || errorText
 				} catch {
 					/* use raw text */
 				}
@@ -143,21 +147,12 @@ export const streamGemini: StreamFn = (
 				return
 			}
 
-			const reader = response.body?.getReader()
-			if (!reader) {
-				es.finish({ content: [], usage: { in: 0, out: 0 }, stop: "error" })
-				return
-			}
-
 			const decoder = new TextDecoder()
 			let buffer = ""
 			let stop: StopReason = "stop"
 
-			while (true) {
-				const { done, value } = await reader.read()
-				if (done) break
-
-				buffer += decoder.decode(value, { stream: true })
+			for await (const chunk of response.data) {
+				buffer += decoder.decode(chunk, { stream: true })
 				const lines = buffer.split("\n")
 				buffer = lines.pop() ?? ""
 

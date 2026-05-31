@@ -7,9 +7,10 @@ import type { NovaConfig } from "../types.ts"
 export async function runOnboarding(): Promise<NovaConfig> {
 	console.log(chalk.bold.cyan("\n⚡ Nova — your coding companion\n"))
 
+	const sortedProviders = [...PROVIDERS].sort((a, b) => a.name.localeCompare(b.name))
 	const providerId = await standaloneSelect(
 		"Pick a provider",
-		PROVIDERS.map((p) => ({ value: p.id, label: p.name })),
+		sortedProviders.map((p) => ({ value: p.id, label: p.name })),
 	)
 	if (!providerId) {
 		console.log(chalk.dim("Cancelled"))

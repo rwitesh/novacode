@@ -108,7 +108,7 @@ async function generateSummary(
 	if (!provider) return null
 
 	const es = stream({
-		api: provider.api,
+		apiFormat: provider.apiFormat,
 		model,
 		apiKey,
 		baseUrl,
@@ -147,7 +147,7 @@ export async function generateSessionTitle(
 		.join("\n")
 
 	const es = stream({
-		api: provider.api,
+		apiFormat: provider.apiFormat,
 		model,
 		apiKey,
 		baseUrl,

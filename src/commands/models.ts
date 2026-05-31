@@ -45,7 +45,7 @@ export async function handleModels(args: string, agent: Agent, prompts?: Prompts
 	await saveConfig(config)
 
 	agent.updateConfig({
-		api: selectedProvider.api,
+		apiFormat: selectedProvider.apiFormat,
 		model: selectedModel,
 		apiKey: auth.apiKeys[pk!] ?? "",
 		baseUrl: selectedProvider.baseUrl,
@@ -73,7 +73,7 @@ async function switchDirect(id: string, agent: Agent): Promise<string> {
 	await saveConfig(config)
 
 	agent.updateConfig({
-		api: selectedProvider.api,
+		apiFormat: selectedProvider.apiFormat,
 		model: m,
 		apiKey: auth.apiKeys[pk],
 		baseUrl: selectedProvider.baseUrl,

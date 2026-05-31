@@ -1,4 +1,5 @@
 import type { AgentEvent, ApiFormat, AssistantResult, StreamFn, StreamOpts } from "../types.ts"
+import { streamAnthropic } from "./anthropic.ts"
 import { streamGemini } from "./gemini.ts"
 import { streamOpenAI } from "./openai.ts"
 
@@ -84,16 +85,17 @@ export class EventStream<T, R> {
 const registry = new Map<ApiFormat, StreamFn>([
 	["openai", streamOpenAI],
 	["gemini", streamGemini],
+	["anthropic", streamAnthropic],
 ])
 
-export function register(api: ApiFormat, fn: StreamFn): void {
-	registry.set(api, fn)
+export function register(apiFormat: ApiFormat, fn: StreamFn): void {
+	registry.set(apiFormat, fn)
 }
 
 // Bridges provider-specific StreamEvents into AgentEvents so the loop and TUI deal with one type.
 export function stream(opts: StreamOpts): EventStream<AgentEvent, AssistantResult> {
-	const fn = registry.get(opts.api)
-	if (!fn) throw new Error(`No provider registered for API format: ${opts.api}`)
+	const fn = registry.get(opts.apiFormat)
+	if (!fn) throw new Error(`No provider registered for API format: ${opts.apiFormat}`)
 
 	// Bridge layer: converts provider-specific StreamEvents into the agent's
 	// AgentEvent shape, so the loop and TUI only deal with one event type.

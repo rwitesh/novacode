@@ -93,7 +93,7 @@ describe("agent loop", () => {
 			tools: [noopTool],
 		}
 		const opts = {
-			api: MOCK_API as unknown as ApiFormat,
+			apiFormat: MOCK_API as unknown as ApiFormat,
 			model: fakeModel,
 			apiKey: "test",
 			baseUrl: "http://test",
@@ -120,7 +120,7 @@ describe("agent loop", () => {
 			tools: [noopTool],
 		}
 		const opts = {
-			api: MOCK_API as unknown as ApiFormat,
+			apiFormat: MOCK_API as unknown as ApiFormat,
 			model: fakeModel,
 			apiKey: "test",
 			baseUrl: "http://test",
@@ -148,7 +148,7 @@ describe("agent loop", () => {
 			tools: [],
 		}
 		const opts = {
-			api: MOCK_API as unknown as ApiFormat,
+			apiFormat: MOCK_API as unknown as ApiFormat,
 			model: fakeModel,
 			apiKey: "test",
 			baseUrl: "http://test",

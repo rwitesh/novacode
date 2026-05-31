@@ -6,7 +6,7 @@ Project knowledge for coding agents working on this codebase.
 
 Novacode is an open-source, multi-provider coding agent built with Node.js. It follows a ReAct agent loop pattern (Reason → Act → Observe).
 
-**Stack:** Node.js (>= 24), TypeScript, `node:sqlite` (built-in) for session storage, `node:fs/promises` for file I/O, `node:child_process` for spawning processes.
+**Stack:** Node.js (>= 24), TypeScript, `node:sqlite` (built-in) for session storage, `node:fs/promises` for file I/O, `node:child_process` for spawning processes, `axios` for HTTP requests and LLM streaming.
 
 **Config dir:** `~/.novacode/` (config.json, auth.json, state.db)
 
@@ -16,7 +16,7 @@ Novacode is an open-source, multi-provider coding agent built with Node.js. It f
 npm run dev          # dev with hot-reload watch (node --import tsx/esm --watch src/main.ts)
 npm run build        # compile and bundle the codebase using tsdown
 npm run start        # run the bundled production build (node dist/main.mjs)
-npm test             # run tests (node built-in test runner via tsx)
+npm test             # run tests via vitest
 npm run lint         # biome lint check
 npm run lint:fix     # biome lint + auto-fix
 npm run format       # biome format
@@ -32,11 +32,12 @@ src/
 ├── types.ts             # ALL shared types (single source of truth)
 ├── config/
 │   ├── store.ts         # config.json (settings) + auth.json (API keys, 0600)
-│   └── providers.ts     # provider catalog (GLM, Gemini, DeepSeek, OpenAI)
+│   └── providers.ts     # provider catalog (GLM, Gemini, DeepSeek, OpenAI, Anthropic)
 ├── provider/
-│   ├── stream.ts        # EventStream<T,R> — push-based async event stream
-│   ├── registry.ts      # Map<ApiFormat, StreamFn> + bridge to agent events
-│   └── openai.ts        # OpenAI-compatible streaming (GLM, DeepSeek, OpenAI)
+│   ├── stream.ts        # EventStream<T,R> — push-based async event stream & provider registry
+│   ├── openai.ts        # OpenAI-compatible streaming (GLM, DeepSeek, OpenAI)
+│   ├── gemini.ts        # Gemini-compatible streaming
+│   └── anthropic.ts     # Anthropic streaming with native thinking support
 ├── agent/
 │   ├── loop.ts          # pure ReAct loop function (run)
 │   ├── agent.ts         # stateful Agent class wrapping loop
@@ -59,6 +60,8 @@ src/
     ├── app.tsx          # interactive TUI application using Ink (orchestrator)
     ├── prompts.tsx      # Ink-based select/password/confirm prompt components
     ├── markdown.ts      # markdown terminal renderer
+    ├── hooks/
+    │   └── useStreamBuffer.ts # frame-rate-limited streaming text buffer hook
     └── components/
         ├── message.tsx      # Message renderer + hasMeaningfulContent filter
         ├── liveArea.tsx     # Spinner, Cursor, LiveArea (streaming/busy display)
@@ -70,7 +73,7 @@ Novacode follows a ReAct (Reason → Act → Observe) pattern:
 
 1. **Pure loop** – `src/agent/loop.ts` builds the prompt, streams the LLM via a provider, parses the reply, and returns an updated `AgentState` plus an `Action`.
 2. **Stateful wrapper** – `src/agent/agent.ts` holds the mutable state, repeatedly calls `loop.run`, executes any tool actions, and feeds the tool result back as the next observation.
-3. **Provider abstraction** – `src/provider/registry.ts` maps an `ApiFormat` to a concrete streaming implementation (e.g., `openai.ts`). The provider streams the request to the LLM API.
+3. **Provider abstraction** – `src/provider/stream.ts` maps an `ApiFormat` to a concrete streaming implementation (e.g., `openai.ts`, `gemini.ts`, `anthropic.ts`). The provider streams the request to the LLM API using Axios.
 4. **Tool execution** – the toolbox (`src/tools/`) runs the requested tool, returns a `ToolResult`, which becomes the next observation for the loop.
 5. The loop repeats until the LLM emits a final‑answer marker or an error aborts.
 
@@ -96,7 +99,7 @@ This succinct flow keeps side‑effects (tool calls, HTTP) out of the pure loop,
 - `async/await` over `.then()` chains
 - Error handling: try/catch in tools, return `ToolResult` with `isError: true`
 - No decorative comment separators — no `───` dashes, no `***` bars. Use plain `//` for section breaks or nothing at all. Let code structure speak.
-- Tests: small, focused, in `test/` directory. Use `node:test` (describe/it/expect)
+- Tests: small, focused, in `test/` directory. Use `vitest` (describe/it/expect)
 - **File naming:** use `camelCase` for multi-word filenames (e.g. `liveArea.tsx`, `statusBar.tsx`). Never use kebab-case or snake_case.
 
 ## Clean Code Rules

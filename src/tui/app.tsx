@@ -98,7 +98,7 @@ function App({
 				const auth = await loadAuth()
 				const apiKey = auth.apiKeys[s.provider] || ""
 				agent.updateConfig({
-					api: provider.api,
+					apiFormat: provider.apiFormat,
 					model,
 					apiKey,
 					baseUrl: provider.baseUrl,
