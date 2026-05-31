@@ -12,24 +12,27 @@ export async function handleModels(args: string, agent: Agent, prompts?: Prompts
 
 	if (!prompts) return chalk.red("Prompts not available in this context")
 
-	const options: Array<{ value: string; label: string; hint?: string }> = []
-	for (const m of MODELS) {
-		const cur = m.id === config.model && m.provider === config.provider
+	const activeModels = MODELS.filter((m) => {
 		const pDef = getProvider(m.provider)
-		if (!pDef) continue
+		return pDef && !!auth.apiKeys[m.provider]
+	})
 
-		const hasKey = !!auth.apiKeys[m.provider]
-		if (!hasKey) continue
+	if (!activeModels.length)
+		return chalk.yellow("No models available. Use /providers to add a provider API key.")
+
+	const maxLen = Math.max(...activeModels.map((m) => m.id.length), 20)
+
+	const options: Array<{ value: string; label: string; hint?: string }> = []
+	for (const m of activeModels) {
+		const cur = m.id === config.model && m.provider === config.provider
+		const pDef = getProvider(m.provider)!
 
 		options.push({
 			value: `${m.provider}:${m.id}`,
-			label: `${cur ? chalk.green("●") : "○"} ${m.id.padEnd(20)} ${fmt(m.contextWindow).padEnd(8)}`,
+			label: `${cur ? chalk.green("●") : "○"} ${m.id.padEnd(maxLen + 2)} ${fmt(m.contextWindow).padEnd(8)}`,
 			hint: pDef.name,
 		})
 	}
-
-	if (!options.length)
-		return chalk.yellow("No models available. Use /providers to add a provider API key.")
 
 	const pick = await prompts.select({ message: "Model", options })
 	if (!pick) return ""

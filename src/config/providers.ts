@@ -237,14 +237,6 @@ export const MODELS: Model[] = [
 		supportsThinking: true,
 	},
 	{
-		id: "claude-opus-4-1-20250805",
-		name: "Claude 4.1 Opus",
-		provider: "anthropic",
-		contextWindow: 200_000,
-		maxTokens: 8192,
-		supportsThinking: true,
-	},
-	{
 		id: "claude-sonnet-4-6",
 		name: "Claude 4.6 Sonnet",
 		provider: "anthropic",
@@ -259,14 +251,6 @@ export const MODELS: Model[] = [
 		contextWindow: 200_000,
 		maxTokens: 8192,
 		supportsThinking: true,
-	},
-	{
-		id: "claude-haiku-4-5-20251001",
-		name: "Claude 4.5 Haiku",
-		provider: "anthropic",
-		contextWindow: 200_000,
-		maxTokens: 8192,
-		supportsThinking: false,
 	},
 ]
 
