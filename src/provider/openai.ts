@@ -11,6 +11,14 @@ import type {
 } from "../types.ts"
 import { EventStream } from "./stream.ts"
 
+function mapFinishReason(reason: string): StopReason {
+	if (reason === "stop") return "stop"
+	if (reason === "length") return "length"
+	if (reason === "tool_calls") return "tool_use"
+	if (reason === "content_filter") return "error"
+	return "stop"
+}
+
 function msgToOpenAI(msg: Msg): Record<string, unknown> {
 	if (msg.role === "user") {
 		return {
@@ -85,9 +93,9 @@ export const streamOpenAI: StreamFn = (
 				model: opts.model.id,
 				messages: [{ role: "system", content: opts.system }, ...opts.messages.map(msgToOpenAI)],
 				tools: opts.tools.length > 0 ? toolsToOpenAI(opts.tools) : undefined,
+				max_completion_tokens: opts.model.maxTokens || undefined,
 				stream: true,
 				stream_options: { include_usage: true },
-				prompt_cache_key: "novacode",
 			}
 
 			const response = await axios.post(`${opts.baseUrl}/chat/completions`, body, {
@@ -105,7 +113,15 @@ export const streamOpenAI: StreamFn = (
 				for await (const chunk of response.data) {
 					errorText += chunk.toString("utf8")
 				}
-				const errorMsg = `API error ${response.status}: ${errorText}`
+				let msg = errorText
+				try {
+					const json = JSON.parse(errorText)
+					msg = json.error?.message || json.message || errorText
+				} catch {
+					/* use raw text */
+				}
+
+				const errorMsg = `OpenAI Error (${response.status}): ${msg}`
 				es.push({ type: "text_delta", text: errorMsg })
 				es.finish({
 					content: [{ type: "text", text: errorMsg }],
@@ -117,7 +133,7 @@ export const streamOpenAI: StreamFn = (
 
 			const decoder = new TextDecoder()
 			let buffer = ""
-			let stop = "stop"
+			let stop: StopReason = "stop"
 
 			for await (const chunk of response.data) {
 				buffer += decoder.decode(chunk, { stream: true })
@@ -171,7 +187,11 @@ export const streamOpenAI: StreamFn = (
 						}
 
 						const finishReason = chunk.choices?.[0]?.finish_reason
-						if (finishReason) stop = finishReason
+						if (finishReason) stop = mapFinishReason(finishReason)
+
+						if (delta.refusal) {
+							stop = "refusal"
+						}
 					} catch {
 						// Skip malformed JSON chunks
 					}
@@ -183,25 +203,18 @@ export const streamOpenAI: StreamFn = (
 				content.push({ type: "text", text: textContent })
 			}
 			for (const [, tc] of currentToolCalls) {
-				content.push({
-					type: "tool_call",
-					id: tc.id,
-					name: tc.name,
-					args: JSON.parse(tc.args || "{}"),
-				})
-				es.push({
-					type: "tool_call",
-					call: {
-						type: "tool_call",
-						id: tc.id,
-						name: tc.name,
-						args: JSON.parse(tc.args || "{}"),
-					},
-				})
+				let args: Record<string, unknown> = {}
+				try {
+					args = JSON.parse(tc.args || "{}")
+				} catch {
+					args = { _raw: tc.args }
+				}
+				content.push({ type: "tool_call", id: tc.id, name: tc.name, args })
+				es.push({ type: "tool_call", call: { type: "tool_call", id: tc.id, name: tc.name, args } })
 				stop = "tool_use"
 			}
 
-			es.finish({ content, usage, stop: stop as StopReason })
+			es.finish({ content, usage, stop })
 		} catch (e) {
 			if (opts.signal?.aborted) {
 				const content: AssistantResult["content"] = []
@@ -227,7 +240,7 @@ export const streamOpenAI: StreamFn = (
 				})
 				return
 			}
-			const errorMsg = `Unexpected error: ${e instanceof Error ? e.message : String(e)}`
+			const errorMsg = `OpenAI Error: ${e instanceof Error ? e.message : String(e)}`
 			es.push({ type: "text_delta", text: errorMsg })
 			es.finish({
 				content: [{ type: "text", text: errorMsg }],
