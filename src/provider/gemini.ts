@@ -1,4 +1,3 @@
-import axios from "axios"
 import type {
 	AssistantResult,
 	ContentPart,
@@ -10,6 +9,7 @@ import type {
 	ToolDef,
 	Usage,
 } from "../types.ts"
+import { streamPost } from "./http.ts"
 import { EventStream } from "./stream.ts"
 
 interface GeminiPart {
@@ -138,21 +138,10 @@ export const streamGemini: StreamFn = (
 				body.generationConfig = { thinkingConfig }
 			}
 
-			const response = await axios.post(url, body, {
-				headers: {
-					"Content-Type": "application/json",
-					"Api-Revision": "2026-05-20",
-				},
-				responseType: "stream",
-				signal: opts.signal,
-				validateStatus: () => true,
-			})
+			const res = await streamPost(url, { "Api-Revision": "2026-05-20" }, body, opts.signal)
 
-			if (response.status < 200 || response.status >= 300) {
-				let errorText = ""
-				for await (const chunk of response.data) {
-					errorText += chunk.toString("utf8")
-				}
+			if (!res.ok) {
+				const errorText = await res.text()
 				let msg = errorText
 				try {
 					const json = JSON.parse(errorText)
@@ -161,7 +150,7 @@ export const streamGemini: StreamFn = (
 					/* use raw text */
 				}
 
-				const errorMsg = `Gemini Error (${response.status}): ${msg}`
+				const errorMsg = `Gemini Error (${res.status}): ${msg}`
 				es.push({ type: "text_delta", text: errorMsg })
 				es.finish({
 					content: [{ type: "text", text: errorMsg }],
@@ -171,76 +160,64 @@ export const streamGemini: StreamFn = (
 				return
 			}
 
-			const decoder = new TextDecoder()
-			let buffer = ""
 			let stop: StopReason = "stop"
 
-			for await (const chunk of response.data) {
-				buffer += decoder.decode(chunk, { stream: true })
-				const lines = buffer.split("\n")
-				buffer = lines.pop() ?? ""
+			for await (const data of res.events()) {
+				try {
+					const parsed = JSON.parse(data)
+					const candidate = parsed.candidates?.[0]
 
-				for (const line of lines) {
-					const trimmed = line.trim()
-					if (!trimmed?.startsWith("data: ")) continue
-					const data = trimmed.slice(6)
-
-					try {
-						const parsed = JSON.parse(data)
-						const candidate = parsed.candidates?.[0]
-
-						if (parsed.usageMetadata) {
-							usage = {
-								in: parsed.usageMetadata.promptTokenCount || usage.in,
-								out: parsed.usageMetadata.candidatesTokenCount || usage.out,
-							}
-							es.push({ type: "usage", usage })
+					if (parsed.usageMetadata) {
+						usage = {
+							in: parsed.usageMetadata.promptTokenCount || usage.in,
+							out: parsed.usageMetadata.candidatesTokenCount || usage.out,
 						}
-
-						if (!candidate) continue
-
-						if (candidate.finishReason) {
-							stop = mapFinishReason(candidate.finishReason)
-						}
-
-						const parts = candidate.content?.parts
-						if (!parts) continue
-
-						for (const part of parts) {
-							const sig = part.thought_signature
-
-							if (part.thought === true && part.text) {
-								thinkingAccum += part.text
-								if (sig) thinkingSig = sig
-								es.push({ type: "thinking_delta", text: part.text })
-								continue
-							}
-
-							if (part.text) {
-								textAccum += part.text
-								if (sig) textSig = sig
-								es.push({ type: "text_delta", text: part.text })
-								continue
-							}
-
-							if (part.function_call) {
-								const fc = part.function_call
-								const id = `call_${Math.random().toString(36).slice(2, 9)}`
-
-								const toolCall: ContentPart = {
-									type: "tool_call",
-									id,
-									name: fc.name,
-									args: (fc.args as Record<string, unknown>) || {},
-								}
-								content.push(toolCall)
-								es.push({ type: "tool_call", call: toolCall })
-								stop = "tool_use"
-							}
-						}
-					} catch {
-						// Skip malformed JSON chunks
+						es.push({ type: "usage", usage })
 					}
+
+					if (!candidate) continue
+
+					if (candidate.finishReason) {
+						stop = mapFinishReason(candidate.finishReason)
+					}
+
+					const parts = candidate.content?.parts
+					if (!parts) continue
+
+					for (const part of parts) {
+						const sig = part.thought_signature
+
+						if (part.thought === true && part.text) {
+							thinkingAccum += part.text
+							if (sig) thinkingSig = sig
+							es.push({ type: "thinking_delta", text: part.text })
+							continue
+						}
+
+						if (part.text) {
+							textAccum += part.text
+							if (sig) textSig = sig
+							es.push({ type: "text_delta", text: part.text })
+							continue
+						}
+
+						if (part.function_call) {
+							const fc = part.function_call
+							const id = `call_${Math.random().toString(36).slice(2, 9)}`
+
+							const toolCall: ContentPart = {
+								type: "tool_call",
+								id,
+								name: fc.name,
+								args: (fc.args as Record<string, unknown>) || {},
+							}
+							content.push(toolCall)
+							es.push({ type: "tool_call", call: toolCall })
+							stop = "tool_use"
+						}
+					}
+				} catch {
+					// Skip malformed JSON chunks
 				}
 			}
 

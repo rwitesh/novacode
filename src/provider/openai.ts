@@ -1,4 +1,3 @@
-import axios from "axios"
 import type {
 	AssistantResult,
 	Msg,
@@ -9,6 +8,7 @@ import type {
 	ToolDef,
 	Usage,
 } from "../types.ts"
+import { streamPost } from "./http.ts"
 import { EventStream } from "./stream.ts"
 
 function mapFinishReason(reason: string): StopReason {
@@ -98,21 +98,15 @@ export const streamOpenAI: StreamFn = (
 				stream_options: { include_usage: true },
 			}
 
-			const response = await axios.post(`${opts.baseUrl}/chat/completions`, body, {
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${opts.apiKey}`,
-				},
-				responseType: "stream",
-				signal: opts.signal,
-				validateStatus: () => true,
-			})
+			const res = await streamPost(
+				`${opts.baseUrl}/chat/completions`,
+				{ Authorization: `Bearer ${opts.apiKey}` },
+				body,
+				opts.signal,
+			)
 
-			if (response.status < 200 || response.status >= 300) {
-				let errorText = ""
-				for await (const chunk of response.data) {
-					errorText += chunk.toString("utf8")
-				}
+			if (!res.ok) {
+				const errorText = await res.text()
 				let msg = errorText
 				try {
 					const json = JSON.parse(errorText)
@@ -121,7 +115,7 @@ export const streamOpenAI: StreamFn = (
 					/* use raw text */
 				}
 
-				const errorMsg = `OpenAI Error (${response.status}): ${msg}`
+				const errorMsg = `OpenAI Error (${res.status}): ${msg}`
 				es.push({ type: "text_delta", text: errorMsg })
 				es.finish({
 					content: [{ type: "text", text: errorMsg }],
@@ -131,70 +125,57 @@ export const streamOpenAI: StreamFn = (
 				return
 			}
 
-			const decoder = new TextDecoder()
-			let buffer = ""
 			let stop: StopReason = "stop"
 
-			for await (const chunk of response.data) {
-				buffer += decoder.decode(chunk, { stream: true })
-				const lines = buffer.split("\n")
-				buffer = lines.pop() ?? ""
+			for await (const data of res.events()) {
+				try {
+					const chunk = JSON.parse(data)
+					const delta = chunk.choices?.[0]?.delta
+					if (!delta) continue
 
-				for (const line of lines) {
-					const trimmed = line.trim()
-					if (!trimmed?.startsWith("data: ")) continue
-					const data = trimmed.slice(6)
-					if (data === "[DONE]") continue
-
-					try {
-						const chunk = JSON.parse(data)
-						const delta = chunk.choices?.[0]?.delta
-						if (!delta) continue
-
-						if (delta.content) {
-							es.push({ type: "text_delta", text: delta.content })
-							textContent += delta.content
-						}
-
-						const reasoning = delta.reasoning_content || delta.reasoning || delta.thinking
-						if (reasoning) {
-							es.push({ type: "thinking_delta", text: reasoning })
-						}
-
-						if (delta.tool_calls) {
-							for (const tc of delta.tool_calls) {
-								const idx = tc.index ?? 0
-								if (!currentToolCalls.has(idx)) {
-									currentToolCalls.set(idx, {
-										id: tc.id ?? "",
-										name: tc.function?.name ?? "",
-										args: "",
-									})
-								}
-								const existing = currentToolCalls.get(idx)!
-								if (tc.id) existing.id = tc.id
-								if (tc.function?.name) existing.name = tc.function.name
-								if (tc.function?.arguments) existing.args += tc.function.arguments
-							}
-						}
-
-						if (chunk.usage) {
-							usage = {
-								in: chunk.usage.prompt_tokens ?? 0,
-								out: chunk.usage.completion_tokens ?? 0,
-							}
-							es.push({ type: "usage", usage })
-						}
-
-						const finishReason = chunk.choices?.[0]?.finish_reason
-						if (finishReason) stop = mapFinishReason(finishReason)
-
-						if (delta.refusal) {
-							stop = "refusal"
-						}
-					} catch {
-						// Skip malformed JSON chunks
+					if (delta.content) {
+						es.push({ type: "text_delta", text: delta.content })
+						textContent += delta.content
 					}
+
+					const reasoning = delta.reasoning_content || delta.reasoning || delta.thinking
+					if (reasoning) {
+						es.push({ type: "thinking_delta", text: reasoning })
+					}
+
+					if (delta.tool_calls) {
+						for (const tc of delta.tool_calls) {
+							const idx = tc.index ?? 0
+							if (!currentToolCalls.has(idx)) {
+								currentToolCalls.set(idx, {
+									id: tc.id ?? "",
+									name: tc.function?.name ?? "",
+									args: "",
+								})
+							}
+							const existing = currentToolCalls.get(idx)!
+							if (tc.id) existing.id = tc.id
+							if (tc.function?.name) existing.name = tc.function.name
+							if (tc.function?.arguments) existing.args += tc.function.arguments
+						}
+					}
+
+					if (chunk.usage) {
+						usage = {
+							in: chunk.usage.prompt_tokens ?? 0,
+							out: chunk.usage.completion_tokens ?? 0,
+						}
+						es.push({ type: "usage", usage })
+					}
+
+					const finishReason = chunk.choices?.[0]?.finish_reason
+					if (finishReason) stop = mapFinishReason(finishReason)
+
+					if (delta.refusal) {
+						stop = "refusal"
+					}
+				} catch {
+					// Skip malformed JSON chunks
 				}
 			}
 

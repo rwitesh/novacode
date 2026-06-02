@@ -1,4 +1,3 @@
-import axios from "axios"
 import type {
 	AssistantResult,
 	ContentPart,
@@ -10,6 +9,7 @@ import type {
 	ToolDef,
 	Usage,
 } from "../types.ts"
+import { streamPost } from "./http.ts"
 import { EventStream } from "./stream.ts"
 
 function msgsToAnthropic(messages: Msg[]): Record<string, unknown>[] {
@@ -163,22 +163,18 @@ export const streamAnthropic: StreamFn = (
 				body.output_config = { effort }
 			}
 
-			const response = await axios.post(url, body, {
-				headers: {
-					"Content-Type": "application/json",
+			const res = await streamPost(
+				url,
+				{
 					"x-api-key": opts.apiKey,
 					"anthropic-version": "2023-06-01",
 				},
-				responseType: "stream",
-				signal: opts.signal,
-				validateStatus: () => true,
-			})
+				body,
+				opts.signal,
+			)
 
-			if (response.status < 200 || response.status >= 300) {
-				let errorText = ""
-				for await (const chunk of response.data) {
-					errorText += chunk.toString("utf8")
-				}
+			if (!res.ok) {
+				const errorText = await res.text()
 				let msg = errorText
 				try {
 					const json = JSON.parse(errorText)
@@ -187,7 +183,7 @@ export const streamAnthropic: StreamFn = (
 					/* use raw text */
 				}
 
-				const errorMsg = `Anthropic Error (${response.status}): ${msg}`
+				const errorMsg = `Anthropic Error (${res.status}): ${msg}`
 				es.push({ type: "text_delta", text: errorMsg })
 				es.finish({
 					content: [{ type: "text", text: errorMsg }],
@@ -197,128 +193,115 @@ export const streamAnthropic: StreamFn = (
 				return
 			}
 
-			const decoder = new TextDecoder()
-			let buffer = ""
 			let stop: StopReason = "stop"
 
-			for await (const chunk of response.data) {
-				buffer += decoder.decode(chunk, { stream: true })
-				const lines = buffer.split("\n")
-				buffer = lines.pop() ?? ""
+			for await (const data of res.events()) {
+				try {
+					const chunk = JSON.parse(data)
 
-				for (const line of lines) {
-					const trimmed = line.trim()
-					if (!trimmed?.startsWith("data: ")) continue
-					const data = trimmed.slice(6)
-
-					try {
-						const chunk = JSON.parse(data)
-
-						if (chunk.type === "message_start") {
-							const u = chunk.message?.usage
-							if (u) {
-								// Sum all input token fields for accurate context size
-								const inputTokens =
-									(u.input_tokens ?? 0) +
-									(u.cache_creation_input_tokens ?? 0) +
-									(u.cache_read_input_tokens ?? 0)
-								usage = { in: inputTokens, out: u.output_tokens ?? 0 }
-								es.push({ type: "usage", usage })
-							}
+					if (chunk.type === "message_start") {
+						const u = chunk.message?.usage
+						if (u) {
+							const inputTokens =
+								(u.input_tokens ?? 0) +
+								(u.cache_creation_input_tokens ?? 0) +
+								(u.cache_read_input_tokens ?? 0)
+							usage = { in: inputTokens, out: u.output_tokens ?? 0 }
+							es.push({ type: "usage", usage })
 						}
-
-						if (chunk.type === "content_block_start") {
-							const idx = chunk.index
-							const block = chunk.content_block
-							blocks.set(idx, {
-								type: block.type,
-								id: block.id ?? "",
-								name: block.name ?? "",
-								text: "",
-								thinking: "",
-								partialJson: "",
-								signature: "",
-							})
-						}
-
-						if (chunk.type === "content_block_delta") {
-							const idx = chunk.index
-							const delta = chunk.delta
-							const block = blocks.get(idx)
-							if (block) {
-								if (delta.type === "text_delta" && delta.text) {
-									block.text += delta.text
-									es.push({ type: "text_delta", text: delta.text })
-								} else if (delta.type === "thinking_delta" && delta.thinking) {
-									block.thinking += delta.thinking
-									es.push({ type: "thinking_delta", text: delta.thinking })
-								} else if (delta.type === "input_json_delta" && delta.partial_json) {
-									block.partialJson += delta.partial_json
-								} else if (delta.type === "signature_delta" && delta.signature) {
-									block.signature += delta.signature
-								}
-							}
-						}
-
-						if (chunk.type === "content_block_stop") {
-							const idx = chunk.index
-							const block = blocks.get(idx)
-							if (block) {
-								if (block.type === "text" && block.text) {
-									content.push({ type: "text", text: block.text })
-								} else if (block.type === "thinking" && (block.thinking || block.signature)) {
-									content.push({
-										type: "thinking",
-										text: block.thinking,
-										signature: block.signature || undefined,
-									})
-								} else if (block.type === "tool_use") {
-									let args = {}
-									try {
-										args = JSON.parse(block.partialJson || "{}")
-									} catch (e) {
-										args = { _raw: block.partialJson, _parseError: (e as Error).message }
-									}
-									const toolCall: ContentPart = {
-										type: "tool_call",
-										id: block.id,
-										name: block.name,
-										args,
-									}
-									content.push(toolCall)
-									es.push({ type: "tool_call", call: toolCall })
-									stop = "tool_use"
-								}
-							}
-						}
-
-						if (chunk.type === "message_delta") {
-							if (chunk.usage) {
-								usage = { in: usage.in, out: chunk.usage.output_tokens ?? usage.out }
-								es.push({ type: "usage", usage })
-							}
-
-							if (chunk.delta?.stop_reason) {
-								const reason = chunk.delta.stop_reason
-								if (reason === "end_turn" || reason === "stop_sequence") {
-									stop = "stop"
-								} else if (reason === "max_tokens") {
-									stop = "length"
-								} else if (reason === "tool_use") {
-									stop = "tool_use"
-								} else if (reason === "refusal") {
-									stop = "refusal"
-								}
-							}
-						}
-
-						if (chunk.type === "error") {
-							const errMsg = chunk.error?.message ?? "Unknown stream error"
-							es.push({ type: "text_delta", text: `\n[Stream error: ${errMsg}]` })
-						}
-					} catch {
-						// Skip malformed JSON chunks
 					}
+
+					if (chunk.type === "content_block_start") {
+						const idx = chunk.index
+						const block = chunk.content_block
+						blocks.set(idx, {
+							type: block.type,
+							id: block.id ?? "",
+							name: block.name ?? "",
+							text: "",
+							thinking: "",
+							partialJson: "",
+							signature: "",
+						})
+					}
+
+					if (chunk.type === "content_block_delta") {
+						const idx = chunk.index
+						const delta = chunk.delta
+						const block = blocks.get(idx)
+						if (block) {
+							if (delta.type === "text_delta" && delta.text) {
+								block.text += delta.text
+								es.push({ type: "text_delta", text: delta.text })
+							} else if (delta.type === "thinking_delta" && delta.thinking) {
+								block.thinking += delta.thinking
+								es.push({ type: "thinking_delta", text: delta.thinking })
+							} else if (delta.type === "input_json_delta" && delta.partial_json) {
+								block.partialJson += delta.partial_json
+							} else if (delta.type === "signature_delta" && delta.signature) {
+								block.signature += delta.signature
+							}
+						}
+					}
+
+					if (chunk.type === "content_block_stop") {
+						const idx = chunk.index
+						const block = blocks.get(idx)
+						if (block) {
+							if (block.type === "text" && block.text) {
+								content.push({ type: "text", text: block.text })
+							} else if (block.type === "thinking" && (block.thinking || block.signature)) {
+								content.push({
+									type: "thinking",
+									text: block.thinking,
+									signature: block.signature || undefined,
+								})
+							} else if (block.type === "tool_use") {
+								let args = {}
+								try {
+									args = JSON.parse(block.partialJson || "{}")
+								} catch (e) {
+									args = { _raw: block.partialJson, _parseError: (e as Error).message }
+								}
+								const toolCall: ContentPart = {
+									type: "tool_call",
+									id: block.id,
+									name: block.name,
+									args,
+								}
+								content.push(toolCall)
+								es.push({ type: "tool_call", call: toolCall })
+								stop = "tool_use"
+							}
+						}
+					}
+
+					if (chunk.type === "message_delta") {
+						if (chunk.usage) {
+							usage = { in: usage.in, out: chunk.usage.output_tokens ?? usage.out }
+							es.push({ type: "usage", usage })
+						}
+
+						if (chunk.delta?.stop_reason) {
+							const reason = chunk.delta.stop_reason
+							if (reason === "end_turn" || reason === "stop_sequence") {
+								stop = "stop"
+							} else if (reason === "max_tokens") {
+								stop = "length"
+							} else if (reason === "tool_use") {
+								stop = "tool_use"
+							} else if (reason === "refusal") {
+								stop = "refusal"
+							}
+						}
+					}
+
+					if (chunk.type === "error") {
+						const errMsg = chunk.error?.message ?? "Unknown stream error"
+						es.push({ type: "text_delta", text: `\n[Stream error: ${errMsg}]` })
+					}
+				} catch {
+					// Skip malformed JSON chunks
 				}
 			}
 
