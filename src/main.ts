@@ -67,6 +67,7 @@ async function main() {
 Usage:
   nova                    Interactive mode
   nova update             Update to latest version
+  nova reset              Delete all nova data and exit
   nova -s ls [limit]      List sessions (last 10 by default)
   nova -s rm <id>         Delete a specific session
   nova -s rm --all        Delete all sessions
@@ -87,6 +88,13 @@ Options:
 	// Handle update subcommand
 	if (args[0] === "update") {
 		await runUpdate()
+		return
+	}
+
+	// Handle reset subcommand
+	if (args[0] === "reset") {
+		const { handleCliReset } = await import("./commands/reset.ts")
+		await handleCliReset()
 		return
 	}
 

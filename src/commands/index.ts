@@ -7,6 +7,7 @@ import { formatRelativeTime } from "../util.ts"
 import { handleCompact } from "./compact.ts"
 import { handleModels } from "./models.ts"
 import { handleProviders } from "./providers.ts"
+import { handleInteractiveReset } from "./reset.ts"
 
 export const COMMANDS: Cmd[] = [
 	{ name: "models", desc: "Switch model", aliases: ["model"] },
@@ -16,6 +17,7 @@ export const COMMANDS: Cmd[] = [
 	{ name: "resume", desc: "Resume previous session" },
 	{ name: "update", desc: "Update novacode" },
 	{ name: "skills", desc: "List available skills" },
+	{ name: "reset", desc: "Reset all nova data" },
 	{ name: "help", desc: "Show help" },
 	{ name: "clear", desc: "Clear screen & start new session", aliases: ["new"] },
 	{ name: "quit", desc: "Exit (Ctrl+D)", aliases: ["exit"] },
@@ -27,6 +29,7 @@ ${COMMANDS.map((c) => `  /${c.name.padEnd(12)} ${c.desc}`).join("\n")}
 
 ${chalk.bold("CLI:")}
   nova update                   Update to latest version
+  nova reset                    Delete all nova data and exit
   nova -s ls                    List sessions
   nova -s <id> / --sessions     Resume sessions by ID
   nova -r / --resume            Resume last sessions
@@ -115,6 +118,8 @@ export async function dispatch(
 			return "Use `nova --resume` from the CLI to resume your last session."
 		case "update":
 			return handleUpdate()
+		case "reset":
+			return handleInteractiveReset(prompts, onExit)
 		case "help":
 			return HELP
 		case "clear":

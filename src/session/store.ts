@@ -427,7 +427,11 @@ export class SessionStore {
 	}
 
 	async prune(): Promise<void> {
-		this.#db.exec("DELETE FROM sessions WHERE message_count = 0")
+		try {
+			this.#db.exec("DELETE FROM sessions WHERE message_count = 0")
+		} catch {
+			// DB may be closed after reset
+		}
 	}
 
 	close(): void {
