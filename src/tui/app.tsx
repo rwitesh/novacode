@@ -13,6 +13,7 @@ import { Cursor, LiveArea } from "./components/liveArea.tsx"
 import { hasMeaningfulContent, Message } from "./components/message.tsx"
 import { StatusBar } from "./components/statusBar.tsx"
 import { useStreamBuffer } from "./hooks/useStreamBuffer.ts"
+import { useTip } from "./hooks/useTip.ts"
 import { ConfirmPrompt, PasswordPrompt, SelectPrompt } from "./prompts.tsx"
 
 type PromptMode =
@@ -142,6 +143,7 @@ function App({
 	const [exitConfirmKey, setExitConfirmKey] = useState<"C" | null>(null)
 
 	const { bufferedStream, append: appendStream, reset: resetStream } = useStreamBuffer()
+	const tip = useTip(busy)
 
 	useEffect(() => {
 		const check = async () => {
@@ -514,6 +516,7 @@ function App({
 					suggestions={suggestions}
 					selCmdIdx={selCmdIdx}
 					exitConfirmKey={exitConfirmKey}
+					tip={tip}
 				/>
 			</Box>
 		</Box>
