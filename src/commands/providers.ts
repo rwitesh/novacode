@@ -1,6 +1,6 @@
 import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
-import { getProvider, MODELS, PROVIDERS } from "../config/catalog.ts"
+import { getDefaultModel, getProvider, MODELS, PROVIDERS } from "../config/catalog.ts"
 import { loadAuth, loadConfig, saveAuth, saveConfig } from "../config/store.ts"
 import type { Prompts } from "../types.ts"
 
@@ -20,9 +20,7 @@ export async function handleProviders(agent: Agent, prompts?: Prompts): Promise<
 					.map((p) => {
 						const isDefault = p.id === config.provider
 						const active = isDefault ? chalk.green(" ●") : ""
-						const currentModel = isDefault
-							? config.model
-							: (MODELS.find((m) => m.provider === p.id)?.id ?? "")
+						const currentModel = isDefault ? config.model : (getDefaultModel(p.id)?.id ?? "")
 						return `  ✅ ${p.name.padEnd(24)} ${currentModel}${active}`
 					})
 					.join("\n")
@@ -77,14 +75,14 @@ async function addProvider(agent: Agent, prompts: Prompts): Promise<string> {
 	await saveAuth(auth)
 
 	const providerModels = MODELS.filter((m) => m.provider === pDef.id)
-	const defaultModel = providerModels[0]
+	const defaultModel = getDefaultModel(pDef.id)
 	let selectedModelId = defaultModel?.id ?? ""
 
 	if (defaultModel) {
 		const choice = await prompts.select({
 			message: "Model Selection",
 			options: [
-				{ value: "latest", label: `Use default latest (${defaultModel.id})` },
+				{ value: "latest", label: `Use default (${defaultModel.id})` },
 				{ value: "choose", label: "Choose a model ID..." },
 			],
 		})
@@ -200,7 +198,7 @@ async function removeKey(agent: Agent, prompts: Prompts): Promise<string> {
 		const next = Object.keys(auth.apiKeys)[0]
 		if (next) {
 			const pDef = getProvider(next)
-			const mDef = MODELS.find((m) => m.provider === next)
+			const mDef = getDefaultModel(next)
 			if (pDef && mDef) {
 				config.provider = next
 				config.model = mDef.id
@@ -237,7 +235,7 @@ async function setDefault(agent: Agent, prompts: Prompts): Promise<string> {
 	}
 
 	const pDef = getProvider(pick)
-	const mDef = MODELS.find((m) => m.provider === pick)
+	const mDef = getDefaultModel(pick)
 
 	if (!pDef || !mDef) return chalk.red("Error: Provider or model not found")
 

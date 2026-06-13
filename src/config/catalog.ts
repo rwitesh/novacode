@@ -1,36 +1,46 @@
 import type { Model, ProviderDef } from "../types.ts"
 
+// Provider id constants — single source of truth for provider identifiers,
+// referenced by both PROVIDERS and every entry in MODELS.
+export const PROVIDER = {
+	glm: "glm",
+	gemini: "gemini",
+	deepseek: "deepseek",
+	openai: "openai",
+	anthropic: "anthropic",
+} as const
+
 export const PROVIDERS: ProviderDef[] = [
 	{
-		id: "glm",
+		id: PROVIDER.glm,
 		name: "GLM (Z.AI)",
 		apiFormat: "openai",
 		baseUrl: "https://api.z.ai/api/coding/paas/v4",
 		envKey: "GLM_API_KEY",
 	},
 	{
-		id: "gemini",
+		id: PROVIDER.gemini,
 		name: "Gemini (Google)",
 		apiFormat: "gemini",
 		baseUrl: "https://generativelanguage.googleapis.com",
 		envKey: "GEMINI_API_KEY",
 	},
 	{
-		id: "deepseek",
+		id: PROVIDER.deepseek,
 		name: "DeepSeek",
 		apiFormat: "openai",
 		baseUrl: "https://api.deepseek.com",
 		envKey: "DEEPSEEK_API_KEY",
 	},
 	{
-		id: "openai",
+		id: PROVIDER.openai,
 		name: "OpenAI",
 		apiFormat: "openai",
 		baseUrl: "https://api.openai.com/v1",
 		envKey: "OPENAI_API_KEY",
 	},
 	{
-		id: "anthropic",
+		id: PROVIDER.anthropic,
 		name: "Anthropic",
 		apiFormat: "anthropic",
 		baseUrl: "https://api.anthropic.com",
@@ -43,15 +53,16 @@ export const MODELS: Model[] = [
 	{
 		id: "glm-5.1",
 		name: "GLM-5.1",
-		provider: "glm",
+		provider: PROVIDER.glm,
 		contextWindow: 128_000,
 		maxTokens: 4096,
 		supportsThinking: false,
+		default: true,
 	},
 	{
 		id: "glm-5",
 		name: "GLM-5",
-		provider: "glm",
+		provider: PROVIDER.glm,
 		contextWindow: 128_000,
 		maxTokens: 4096,
 		supportsThinking: false,
@@ -59,7 +70,7 @@ export const MODELS: Model[] = [
 	{
 		id: "glm-5-turbo",
 		name: "GLM-5 Turbo",
-		provider: "glm",
+		provider: PROVIDER.glm,
 		contextWindow: 128_000,
 		maxTokens: 4096,
 		supportsThinking: false,
@@ -67,7 +78,7 @@ export const MODELS: Model[] = [
 	{
 		id: "glm-4.7",
 		name: "GLM-4.7",
-		provider: "glm",
+		provider: PROVIDER.glm,
 		contextWindow: 128_000,
 		maxTokens: 4096,
 		supportsThinking: false,
@@ -75,7 +86,7 @@ export const MODELS: Model[] = [
 	{
 		id: "glm-4.7-flash",
 		name: "GLM-4.7 Flash (Free)",
-		provider: "glm",
+		provider: PROVIDER.glm,
 		contextWindow: 128_000,
 		maxTokens: 4096,
 		supportsThinking: false,
@@ -83,7 +94,7 @@ export const MODELS: Model[] = [
 	{
 		id: "glm-4.5-flash",
 		name: "GLM-4.5 Flash (Free)",
-		provider: "glm",
+		provider: PROVIDER.glm,
 		contextWindow: 128_000,
 		maxTokens: 4096,
 		supportsThinking: false,
@@ -92,15 +103,16 @@ export const MODELS: Model[] = [
 	{
 		id: "gemini-3.5-flash",
 		name: "Gemini 3.5 Flash",
-		provider: "gemini",
+		provider: PROVIDER.gemini,
 		contextWindow: 1_000_000,
 		maxTokens: 65_536,
 		supportsThinking: true,
+		default: true,
 	},
 	{
 		id: "gemini-3.1-pro-preview",
 		name: "Gemini 3.1 Pro Preview",
-		provider: "gemini",
+		provider: PROVIDER.gemini,
 		contextWindow: 2_000_000,
 		maxTokens: 65_536,
 		supportsThinking: true,
@@ -108,7 +120,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gemini-3.1-pro-preview-customtools",
 		name: "Gemini 3.1 Pro (Custom Tools)",
-		provider: "gemini",
+		provider: PROVIDER.gemini,
 		contextWindow: 2_000_000,
 		maxTokens: 65_536,
 		supportsThinking: true,
@@ -116,7 +128,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gemini-3.1-flash-lite",
 		name: "Gemini 3.1 Flash-Lite",
-		provider: "gemini",
+		provider: PROVIDER.gemini,
 		contextWindow: 1_000_000,
 		maxTokens: 65_536,
 		supportsThinking: true,
@@ -124,7 +136,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gemini-3.1-flash-lite-preview",
 		name: "Gemini 3.1 Flash-Lite Preview",
-		provider: "gemini",
+		provider: PROVIDER.gemini,
 		contextWindow: 1_000_000,
 		maxTokens: 65_536,
 		supportsThinking: true,
@@ -132,7 +144,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gemini-3-flash-preview",
 		name: "Gemini 3 Flash Preview",
-		provider: "gemini",
+		provider: PROVIDER.gemini,
 		contextWindow: 1_000_000,
 		maxTokens: 65_536,
 		supportsThinking: true,
@@ -140,7 +152,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gemini-2.5-pro",
 		name: "Gemini 2.5 Pro",
-		provider: "gemini",
+		provider: PROVIDER.gemini,
 		contextWindow: 2_000_000,
 		maxTokens: 65_536,
 		supportsThinking: false,
@@ -148,7 +160,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gemini-2.5-flash",
 		name: "Gemini 2.5 Flash",
-		provider: "gemini",
+		provider: PROVIDER.gemini,
 		contextWindow: 1_000_000,
 		maxTokens: 65_536,
 		supportsThinking: false,
@@ -156,7 +168,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gemini-2.5-flash-lite",
 		name: "Gemini 2.5 Flash-Lite",
-		provider: "gemini",
+		provider: PROVIDER.gemini,
 		contextWindow: 1_000_000,
 		maxTokens: 65_536,
 		supportsThinking: false,
@@ -164,7 +176,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gemini-2.5-computer-use-preview-10-2025",
 		name: "Gemini 2.5 Computer Use",
-		provider: "gemini",
+		provider: PROVIDER.gemini,
 		contextWindow: 1_000_000,
 		maxTokens: 65_536,
 		supportsThinking: false,
@@ -173,15 +185,16 @@ export const MODELS: Model[] = [
 	{
 		id: "deepseek-v4-flash",
 		name: "DeepSeek V4 Flash",
-		provider: "deepseek",
+		provider: PROVIDER.deepseek,
 		contextWindow: 1_000_000,
 		maxTokens: 16_384,
 		supportsThinking: true,
+		default: true,
 	},
 	{
 		id: "deepseek-v4-pro",
 		name: "DeepSeek V4 Pro",
-		provider: "deepseek",
+		provider: PROVIDER.deepseek,
 		contextWindow: 1_000_000,
 		maxTokens: 16_384,
 		supportsThinking: true,
@@ -190,16 +203,17 @@ export const MODELS: Model[] = [
 	{
 		id: "gpt-5.5",
 		name: "GPT-5.5",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 1_000_000,
 		maxTokens: 128_000,
 		supportsThinking: true,
 		effort: "high",
+		default: true,
 	},
 	{
 		id: "gpt-5.5-pro",
 		name: "GPT-5.5 Pro",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 1_000_000,
 		maxTokens: 128_000,
 		supportsThinking: true,
@@ -208,7 +222,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gpt-5.4",
 		name: "GPT-5.4",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 1_000_000,
 		maxTokens: 128_000,
 		supportsThinking: true,
@@ -217,7 +231,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gpt-5.4-pro",
 		name: "GPT-5.4 Pro",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 1_000_000,
 		maxTokens: 128_000,
 		supportsThinking: true,
@@ -226,7 +240,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gpt-5.4-mini",
 		name: "GPT-5.4 Mini",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 400_000,
 		maxTokens: 128_000,
 		supportsThinking: true,
@@ -235,7 +249,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gpt-5.4-nano",
 		name: "GPT-5.4 Nano",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 400_000,
 		maxTokens: 128_000,
 		supportsThinking: true,
@@ -244,7 +258,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gpt-5.2",
 		name: "GPT-5.2",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 1_000_000,
 		maxTokens: 128_000,
 		supportsThinking: true,
@@ -253,7 +267,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gpt-5.2-pro",
 		name: "GPT-5.2 Pro",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 1_000_000,
 		maxTokens: 128_000,
 		supportsThinking: true,
@@ -262,7 +276,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gpt-5.1",
 		name: "GPT-5.1",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 1_000_000,
 		maxTokens: 128_000,
 		supportsThinking: true,
@@ -271,7 +285,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gpt-5",
 		name: "GPT-5",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 400_000,
 		maxTokens: 128_000,
 		supportsThinking: true,
@@ -280,7 +294,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gpt-5-mini",
 		name: "GPT-5 Mini",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 400_000,
 		maxTokens: 128_000,
 		supportsThinking: true,
@@ -289,7 +303,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gpt-5-nano",
 		name: "GPT-5 Nano",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 400_000,
 		maxTokens: 128_000,
 		supportsThinking: true,
@@ -298,7 +312,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gpt-5-pro",
 		name: "GPT-5 Pro",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 400_000,
 		maxTokens: 128_000,
 		supportsThinking: true,
@@ -307,7 +321,7 @@ export const MODELS: Model[] = [
 	{
 		id: "o4-mini",
 		name: "o4 Mini",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 200_000,
 		maxTokens: 100_000,
 		supportsThinking: true,
@@ -316,7 +330,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gpt-4.1",
 		name: "GPT-4.1",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 1_000_000,
 		maxTokens: 32_768,
 		supportsThinking: false,
@@ -324,7 +338,7 @@ export const MODELS: Model[] = [
 	{
 		id: "gpt-4.1-mini",
 		name: "GPT-4.1 Mini",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 1_000_000,
 		maxTokens: 32_768,
 		supportsThinking: false,
@@ -332,25 +346,35 @@ export const MODELS: Model[] = [
 	{
 		id: "gpt-4.1-nano",
 		name: "GPT-4.1 Nano",
-		provider: "openai",
+		provider: PROVIDER.openai,
 		contextWindow: 1_000_000,
 		maxTokens: 32_768,
 		supportsThinking: false,
 	},
 	// Anthropic
 	{
-		id: "claude-opus-4-8",
-		name: "Claude 4.8 Opus",
-		provider: "anthropic",
-		contextWindow: 200_000,
-		maxTokens: 64_000,
+		id: "claude-fable-5",
+		name: "Claude Fable 5",
+		provider: PROVIDER.anthropic,
+		contextWindow: 1_000_000,
+		maxTokens: 128_000,
 		supportsThinking: true,
 		effort: "xhigh",
 	},
 	{
+		id: "claude-opus-4-8",
+		name: "Claude 4.8 Opus",
+		provider: PROVIDER.anthropic,
+		contextWindow: 200_000,
+		maxTokens: 64_000,
+		supportsThinking: true,
+		effort: "xhigh",
+		default: true,
+	},
+	{
 		id: "claude-opus-4-7",
 		name: "Claude 4.7 Opus",
-		provider: "anthropic",
+		provider: PROVIDER.anthropic,
 		contextWindow: 200_000,
 		maxTokens: 64_000,
 		supportsThinking: true,
@@ -359,7 +383,7 @@ export const MODELS: Model[] = [
 	{
 		id: "claude-opus-4-6",
 		name: "Claude 4.6 Opus",
-		provider: "anthropic",
+		provider: PROVIDER.anthropic,
 		contextWindow: 200_000,
 		maxTokens: 32_000,
 		supportsThinking: true,
@@ -368,7 +392,7 @@ export const MODELS: Model[] = [
 	{
 		id: "claude-opus-4-5",
 		name: "Claude 4.5 Opus",
-		provider: "anthropic",
+		provider: PROVIDER.anthropic,
 		contextWindow: 200_000,
 		maxTokens: 32_000,
 		supportsThinking: true,
@@ -377,7 +401,7 @@ export const MODELS: Model[] = [
 	{
 		id: "claude-sonnet-4-6",
 		name: "Claude 4.6 Sonnet",
-		provider: "anthropic",
+		provider: PROVIDER.anthropic,
 		contextWindow: 200_000,
 		maxTokens: 32_000,
 		supportsThinking: true,
@@ -386,7 +410,7 @@ export const MODELS: Model[] = [
 	{
 		id: "claude-sonnet-4-5",
 		name: "Claude 4.5 Sonnet",
-		provider: "anthropic",
+		provider: PROVIDER.anthropic,
 		contextWindow: 200_000,
 		maxTokens: 32_000,
 		supportsThinking: true,
@@ -400,4 +424,11 @@ export function getProvider(id: string): ProviderDef | undefined {
 
 export function getModelsForProvider(providerId: string): Model[] {
 	return MODELS.filter((m) => m.provider === providerId)
+}
+
+// Returns a provider's default model (flagged default: true), falling back to
+// the first listed model.
+export function getDefaultModel(providerId: string): Model | undefined {
+	const models = getModelsForProvider(providerId)
+	return models.find((m) => m.default) ?? models[0]
 }

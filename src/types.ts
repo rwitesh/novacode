@@ -75,6 +75,8 @@ export interface Usage {
 
 export type ApiFormat = "openai" | "gemini" | "anthropic"
 
+export type Effort = "low" | "medium" | "high" | "xhigh"
+
 export interface ProviderDef {
 	id: string
 	name: string
@@ -90,7 +92,8 @@ export interface Model {
 	contextWindow: number
 	maxTokens: number
 	supportsThinking: boolean
-	effort?: string
+	effort?: Effort
+	default?: boolean
 }
 
 /** Tools */
