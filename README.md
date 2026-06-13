@@ -4,7 +4,7 @@ Open-source, multi-provider coding agent.
 
 > **Currently in early development (v0.x). Breaking changes may occur.**
 
-<img width="1164" height="720" alt="result" src="https://github.com/user-attachments/assets/a456c41a-ec19-4a4d-b3b7-180e6b83acc3" />
+https://github.com/user-attachments/assets/c4c8dfee-3a9e-4b40-9d74-dbb9354aed96
 
 ## Install
 
