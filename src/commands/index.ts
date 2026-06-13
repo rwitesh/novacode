@@ -1,9 +1,10 @@
 import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
 import type { SessionStore } from "../session/store.ts"
+import { groupSkills } from "../skills/index.ts"
 import type { Cmd, Prompts, Skill } from "../types.ts"
 import { checkForUpdate, runUpdate } from "../update.ts"
-import { formatRelativeTime } from "../util.ts"
+import { formatRelativeTime, shortenPath } from "../util.ts"
 import { handleCompact } from "./compact.ts"
 import { handleModels } from "./models.ts"
 import { handleProviders } from "./providers.ts"
@@ -163,30 +164,21 @@ async function handleUpdate(): Promise<string> {
 
 function handleSkills(skills: Skill[]): string {
 	if (skills.length === 0) {
-		return `${chalk.yellow("No skills found.")}\n\nSkill directories scanned:\n  ~/.agents/skills/\n  ~/.novacode/skills/\n  .agents/skills/\n  .novacode/skills/`
+		return `${chalk.yellow("No skills found.")}\n\nSkill directories scanned (precedence order):\n  .novacode/skills/\n  .agents/skills/\n  ~/.novacode/skills/\n  ~/.agents/skills/`
 	}
 
-	const globalSkills = skills.filter((s) => s.source === "global")
-	const projectSkills = skills.filter((s) => s.source === "project")
-
+	const groups = groupSkills(skills)
 	let out = `${chalk.bold("Available Skills:")}\n`
-
-	if (globalSkills.length > 0) {
-		out += `\n${chalk.cyan("Global:")}\n`
-		for (const s of globalSkills) {
-			out += `  ${chalk.green(s.name)} — ${s.description}\n`
-			out += `    ${chalk.dim(s.path)}\n`
+	let n = 1
+	for (const group of groups) {
+		const first = group[0]!
+		const name =
+			group.length > 1 ? `${chalk.yellow(`${first.name} (duplicate)`)}` : chalk.green(first.name)
+		out += `${n++}. ${name} — ${first.description}\n`
+		for (const s of group) {
+			out += `     ${chalk.dim(shortenPath(s.path))}\n`
 		}
 	}
-
-	if (projectSkills.length > 0) {
-		out += `\n${chalk.cyan("Project:")}\n`
-		for (const s of projectSkills) {
-			out += `  ${chalk.green(s.name)} — ${s.description}\n`
-			out += `    ${chalk.dim(s.path)}\n`
-		}
-	}
-
 	out += chalk.dim("\nSkills are auto-loaded by the agent when relevant to your task.")
 	return out
 }

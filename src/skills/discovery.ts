@@ -80,33 +80,26 @@ async function scanDirectory(dir: string, source: "global" | "project"): Promise
 }
 
 export async function discoverSkills(cwd: string): Promise<Skill[]> {
-	const globalDirs = [join(homedir(), ".agents", "skills"), join(homedir(), ".novacode", "skills")]
-	const projectDirs = [resolve(cwd, ".agents", "skills"), resolve(cwd, ".novacode", "skills")]
+	// Scan project dirs first, then global; within each, .novacode before .agents.
+	const dirs = [
+		{ dir: resolve(cwd, ".novacode", "skills"), source: "project" as const },
+		{ dir: resolve(cwd, ".agents", "skills"), source: "project" as const },
+		{ dir: join(homedir(), ".novacode", "skills"), source: "global" as const },
+		{ dir: join(homedir(), ".agents", "skills"), source: "global" as const },
+	]
 
 	const raw: RawSkill[] = []
-
-	for (const dir of globalDirs) {
-		raw.push(...(await scanDirectory(dir, "global")))
-	}
-	for (const dir of projectDirs) {
-		raw.push(...(await scanDirectory(dir, "project")))
+	for (const { dir, source } of dirs) {
+		raw.push(...(await scanDirectory(dir, source)))
 	}
 
-	// Deduplicate by name, keep first found
-	const seen = new Set<string>()
+	// Return all skills (including duplicates); callers dedupe as needed
 	const skills: Skill[] = []
-
 	for (const s of raw) {
 		const nameCheck = validateName(s.name)
 		if (!nameCheck.valid) {
 			console.warn(nameCheck.warning)
 		}
-
-		if (seen.has(s.name)) {
-			console.warn(`Duplicate skill name "${s.name}", keeping first occurrence`)
-			continue
-		}
-		seen.add(s.name)
 
 		if (s.description.length > 1024) {
 			console.warn(`Skill description exceeds 1024 characters: "${s.name}"`)
@@ -121,4 +114,27 @@ export async function discoverSkills(cwd: string): Promise<Skill[]> {
 	}
 
 	return skills
+}
+
+// Precedence rank: lower wins. project beats global; .novacode beats .agents.
+function precedence(s: Skill): number {
+	const src = s.source === "project" ? 0 : 2
+	const dir = s.path.includes(".novacode/skills") ? 0 : 1
+	return src + dir
+}
+
+// Group skills by name, each group sorted highest-precedence (winner) first.
+export function groupSkills(skills: Skill[]): Skill[][] {
+	const groups = new Map<string, Skill[]>()
+	for (const s of skills) {
+		const arr = groups.get(s.name)
+		if (arr) arr.push(s)
+		else groups.set(s.name, [s])
+	}
+	return [...groups.values()].map((g) => g.sort((a, b) => precedence(a) - precedence(b)))
+}
+
+// One skill per name — the winner of each precedence group.
+export function dedupeSkills(skills: Skill[]): Skill[] {
+	return groupSkills(skills).map((g) => g[0]!)
 }

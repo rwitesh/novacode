@@ -7,6 +7,7 @@ import { getProvider, MODELS } from "../config/providers.ts"
 import { loadAuth } from "../config/store.ts"
 import { generateSessionTitle } from "../session/compact.ts"
 import type { SessionStore } from "../session/store.ts"
+import { groupSkills } from "../skills/index.ts"
 import type { Msg, Prompts, Skill, Usage } from "../types.ts"
 import { checkForUpdate, getCurrentVersion } from "../update.ts"
 import { Cursor, LiveArea } from "./components/liveArea.tsx"
@@ -46,7 +47,13 @@ export async function interactive(
 		process.stdout.write(`${chalk.dim("  context:")} ${chalk.cyan("AGENTS.md")}\n`)
 	}
 	if (skills.length > 0) {
-		const skillNames = skills.map((s) => chalk.cyan(s.name)).join(", ")
+		const skillNames = groupSkills(skills)
+			.map((g) =>
+				g.length > 1
+					? `${chalk.cyan(g[0]!.name)} ${chalk.yellow("(duplicate)")}`
+					: chalk.cyan(g[0]!.name),
+			)
+			.join(", ")
 		process.stdout.write(`${chalk.dim("  skills:")}  ${skillNames}\n`)
 	}
 

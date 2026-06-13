@@ -13,6 +13,7 @@ import { configExists, loadAuth, loadConfig } from "./config/store.ts"
 import { runOnboarding } from "./onboarding/wizard.ts"
 import { loadResources } from "./resource.ts"
 import { getSessionStore } from "./session/store.ts"
+import { dedupeSkills } from "./skills/index.ts"
 import { getAllTools } from "./tools/index.ts"
 import type { Session } from "./types.ts"
 import { getCurrentVersion, runUpdate } from "./update.ts"
@@ -188,7 +189,7 @@ Options:
 	const cwd = process.cwd()
 	const tools = getAllTools(cwd)
 	const { skills, agentsMd } = await loadResources(cwd)
-	const system = buildSystemPrompt(cwd, tools, skills, agentsMd ?? undefined)
+	const system = buildSystemPrompt(cwd, tools, dedupeSkills(skills), agentsMd ?? undefined)
 
 	if (!session) {
 		session = await store.create(cwd, model.id, providerId)

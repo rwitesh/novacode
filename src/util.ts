@@ -1,3 +1,4 @@
+import { homedir } from "node:os"
 import { isAbsolute, relative } from "node:path"
 import chalk from "chalk"
 import type { Msg, TextPart } from "./types.ts"
@@ -43,6 +44,15 @@ export function makeRelative(val: string): string {
 		return prefix + getRelativeIfInside(cwd, pathVal)
 	}
 	return val
+}
+
+// Compact a path for display: relative to cwd when inside it, else ~/ for home, else as-is.
+export function shortenPath(path: string): string {
+	const cwd = process.cwd()
+	if (path === cwd || path.startsWith(`${cwd}/`)) return relative(cwd, path) || "."
+	const home = homedir()
+	if (path === home || path.startsWith(`${home}/`)) return `~${path.slice(home.length)}`
+	return path
 }
 
 export function formatToolArgs(
