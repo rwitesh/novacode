@@ -3,7 +3,7 @@ import { memo } from "react"
 import { formatToolArgs } from "../../format.ts"
 import type { Msg } from "../../types.ts"
 import { TERMINATION_PHRASES, TOOL_STYLE } from "../constants.ts"
-import { formatMarkdown } from "../markdown.ts"
+import { formatMarkdown } from "../markdown/index.ts"
 
 export function hasMeaningfulContent(msg: Msg): boolean {
 	if (msg.role === "user") return true

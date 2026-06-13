@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react"
-import { IncrementalMarkdownRenderer } from "../markdown.ts"
+import { StreamingMarkdownRenderer } from "../markdown/index.ts"
 
 const FLUSH_MS = 16
 
@@ -22,7 +22,7 @@ export function useStreamBuffer(): {
 } {
 	const [bufferedStream, setBufferedStream] = useState("")
 	const rawBuf = useRef("")
-	const renderer = useRef(new IncrementalMarkdownRenderer())
+	const renderer = useRef(new StreamingMarkdownRenderer())
 	const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const dirty = useRef(false)
 
