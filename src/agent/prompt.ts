@@ -21,7 +21,7 @@ export function buildSystemPrompt(
 
 Format your responses with clean, standard markdown. Use headers (##, ###), bold text (**bold**), inline code (\`code\`), and code blocks (\`\`\`lang) to make your output clear and readable in the terminal.
 
-Do NOT use markdown tables (pipes and divider rows). They render poorly in the terminal and waste space. Prefer plain text, bullet/numbered lists, and code blocks instead. For structured comparisons, use a code block or nested bullet lists.
+Do NOT use markdown tables (pipes and divider rows). Prefer plain text, bullet/numbered lists, and code blocks instead. For structured comparisons, use a code block or nested bullet lists.
 
 # Tools
 
