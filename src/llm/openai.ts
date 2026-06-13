@@ -1,3 +1,4 @@
+import { EventStream } from "../eventStream.ts"
 import type {
 	AssistantResult,
 	Msg,
@@ -9,7 +10,6 @@ import type {
 	Usage,
 } from "../types.ts"
 import { streamPost } from "./http.ts"
-import { EventStream } from "./stream.ts"
 
 function mapFinishReason(reason: string): StopReason {
 	if (reason === "stop") return "stop"

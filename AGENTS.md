@@ -6,7 +6,7 @@ Project knowledge for coding agents working on this codebase.
 
 Novacode is an open-source, multi-provider coding agent built with Node.js. It follows a ReAct agent loop pattern (Reason → Act → Observe).
 
-**Stack:** Node.js (>= 24), TypeScript, `node:sqlite` (built-in) for session storage, `node:fs/promises` for file I/O, `node:child_process` for spawning processes, `axios` for HTTP requests and LLM streaming.
+**Stack:** Node.js (>= 24), TypeScript, `node:sqlite` (built-in) for session storage, `node:fs/promises` for file I/O, `node:child_process` for spawning processes, native `fetch` for HTTP and LLM streaming.
 
 **Config dir:** `~/.novacode/` (config.json, auth.json, state.db)
 
@@ -30,11 +30,19 @@ npm run check        # build + typecheck + lint + test (run this before committi
 src/
 ├── main.ts              # entry: CLI parse → onboarding → interactive mode
 ├── types.ts             # ALL shared types (single source of truth)
+├── eventStream.ts       # EventStream<T,R> — generic push-based async event stream
+├── bootstrap.ts         # startup resource loader (skills discovery + AGENTS.md)
+├── content.ts           # textPart content-part factory
+├── paths.ts             # path relativization helpers (getRelativeIfInside, makeRelative, shortenPath)
+├── format.ts            # display formatters (formatToolArgs, formatRelativeTime)
+├── tokens.ts            # estimateTokens — rough token estimation
+├── update.ts            # version check + self-update
 ├── config/
 │   ├── store.ts         # config.json (settings) + auth.json (API keys, 0600)
-│   └── providers.ts     # provider catalog (GLM, Gemini, DeepSeek, OpenAI, Anthropic)
-├── provider/
-│   ├── stream.ts        # EventStream<T,R> — push-based async event stream & provider registry
+│   └── catalog.ts       # static provider + model catalog (GLM, Gemini, DeepSeek, OpenAI, Anthropic)
+├── llm/
+│   ├── stream.ts        # LLM stream registry + AgentEvent bridge
+│   ├── http.ts          # streaming HTTP client built on native fetch (SSE)
 │   ├── openai.ts        # OpenAI-compatible streaming (GLM, DeepSeek, OpenAI)
 │   ├── gemini.ts        # Gemini-compatible streaming
 │   └── anthropic.ts     # Anthropic streaming with native thinking support
@@ -56,6 +64,7 @@ src/
 ├── onboarding/
 │   └── wizard.ts        # first-run setup using Ink standalone prompts
 ├── commands/            # slash command handlers (/models, /providers, /compact, etc)
+├── skills/              # skill discovery + dedupe/grouping
 └── tui/
     ├── app.tsx          # interactive TUI application using Ink (orchestrator)
     ├── prompts.tsx      # Ink-based select/password/confirm prompt components
@@ -73,7 +82,7 @@ Novacode follows a ReAct (Reason → Act → Observe) pattern:
 
 1. **Pure loop** – `src/agent/loop.ts` builds the prompt, streams the LLM via a provider, parses the reply, and returns an updated `AgentState` plus an `Action`.
 2. **Stateful wrapper** – `src/agent/agent.ts` holds the mutable state, repeatedly calls `loop.run`, executes any tool actions, and feeds the tool result back as the next observation.
-3. **Provider abstraction** – `src/provider/stream.ts` maps an `ApiFormat` to a concrete streaming implementation (e.g., `openai.ts`, `gemini.ts`, `anthropic.ts`). The provider streams the request to the LLM API using Axios.
+3. **LLM streaming** – `src/llm/stream.ts` maps an `ApiFormat` to a concrete streaming implementation (e.g., `openai.ts`, `gemini.ts`, `anthropic.ts`). Each streams the request to the LLM API over native `fetch`.
 4. **Tool execution** – the toolbox (`src/tools/`) runs the requested tool, returns a `ToolResult`, which becomes the next observation for the loop.
 5. The loop repeats until the LLM emits a final‑answer marker or an error aborts.
 
@@ -115,7 +124,7 @@ These rules prevent the most common mistakes AI agents make when editing this co
 
 ### No Redundant Code
 
-- **No duplicate logic.** If two files have the same helper (e.g. the `text()` helper in tools), keep it in each file since it's tiny — but don't create a third copy. If it grows, extract to a shared util.
+- **No duplicate logic.** If two files have the same helper (e.g. the `text()` helper in tools), keep it in each file since it's tiny — but don't create a third copy. If it grows, extract to a shared module (`src/content.ts`, `src/paths.ts`, `src/format.ts`).
 - **No redundant type assertions.** Don't write `as string` when TypeScript already infers `string`. Don't double-cast.
 - **No unnecessary imports.** Don't import a type you don't use. Don't import `{ type Foo }` if `Foo` isn't referenced.
 - **No re-exporting through intermediaries.** Import from the source module directly.
@@ -152,13 +161,13 @@ These rules prevent the most common mistakes AI agents make when editing this co
 ### Module Boundaries
 
 - **`types.ts`** — types only. No runtime code, no imports from other src files.
-- **`provider/`** — streaming and API logic only. No agent logic, no tool definitions.
+- **`config/`** — reads/writes config files (`store.ts`) plus the static provider/model catalog (`catalog.ts`). No agent or streaming logic.
+- **`llm/`** — streaming and API logic only. No agent logic, no tool definitions.
 - **`tools/`** — tool definitions only. No agent loop logic. Tools receive `cwd` as a parameter, they don't read config.
-- **`agent/`** — orchestrates providers and tools. No direct HTTP calls or file I/O (those live in tools and providers).
-- **`config/`** — reads/writes config files. No agent or provider logic.
+- **`agent/`** — orchestrates LLM streams and tools. No direct HTTP calls or file I/O (those live in tools and `llm/`).
 - **`commands/`** — slash command handlers. Receive a `Prompts` interface from the TUI for interactive menus. Never import Ink or render directly — use the injected `Prompts` object.
 - **`tui/`** — all rendering lives here. `app.tsx` owns the Ink app and exposes a `Prompts` implementation. `prompts.tsx` has reusable Ink prompt components plus standalone wrappers for onboarding (outside the main TUI).
-- **Cross-module imports go one direction:** `main → agent → provider`, `main → tools`, `main → config`, `main → tui`. Never `tools → agent` or `provider → agent` or `commands → tui`.
+- **Cross-module imports go one direction:** `main → agent → llm`, `main → tools`, `main → config`, `main → tui`. Never `tools → agent` or `llm → agent` or `commands → tui`.
 
 ## Before Every Commit
 

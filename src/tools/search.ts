@@ -7,9 +7,8 @@ import { spawn } from "node:child_process"
 import { readdir, readFile } from "node:fs/promises"
 import { relative, resolve } from "node:path"
 import { glob } from "glob"
+import { textPart } from "../content.ts"
 import type { Tool, ToolResult } from "../types.ts"
-
-import { textPart } from "../util.ts"
 
 /**
  * Tool for finding files by glob pattern.

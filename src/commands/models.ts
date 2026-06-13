@@ -1,6 +1,6 @@
 import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
-import { getProvider, MODELS } from "../config/providers.ts"
+import { getProvider, MODELS } from "../config/catalog.ts"
 import { loadAuth, loadConfig, saveConfig } from "../config/store.ts"
 import type { Prompts } from "../types.ts"
 

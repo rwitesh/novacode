@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest"
 import { buildSystemPrompt } from "../src/agent/prompt.ts"
-import { EventStream } from "../src/provider/stream.ts"
+import { EventStream } from "../src/eventStream.ts"
+import { formatToolArgs } from "../src/format.ts"
+import { getRelativeIfInside, makeRelative } from "../src/paths.ts"
 import { getAllTools, getDefaultTools } from "../src/tools/index.ts"
-import { formatToolArgs, getRelativeIfInside, makeRelative } from "../src/util.ts"
 
 describe("tool registration", () => {
 	it("getAllTools returns 11 tools", () => {
@@ -65,7 +66,7 @@ describe("EventStream", () => {
 	})
 })
 
-describe("util helpers", () => {
+describe("path helpers", () => {
 	it("makeRelative converts absolute path to relative", () => {
 		const cwd = process.cwd()
 		const absPath = `${cwd}/src/main.ts`

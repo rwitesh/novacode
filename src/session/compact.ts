@@ -1,7 +1,7 @@
-import { getProvider } from "../config/providers.ts"
-import { stream } from "../provider/stream.ts"
+import { getProvider } from "../config/catalog.ts"
+import { stream } from "../llm/stream.ts"
+import { estimateTokens } from "../tokens.ts"
 import type { CompactResult, Model, Msg } from "../types.ts"
-import { estimateTokens } from "../util.ts"
 import type { SessionStore } from "./store.ts"
 
 function extractText(msg: Msg): string {

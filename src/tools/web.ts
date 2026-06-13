@@ -3,8 +3,9 @@
  * Uses DuckDuckGo HTML for search (no API key needed) and Node's built-in
  * fetch for reading URLs.
  */
+
+import { textPart } from "../content.ts"
 import type { Tool, ToolResult } from "../types.ts"
-import { textPart } from "../util.ts"
 
 const MAX_CONTENT = 50_000
 

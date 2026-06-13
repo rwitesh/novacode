@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { EventStream } from "../src/provider/stream.ts"
+import { EventStream } from "../src/eventStream.ts"
 
 // Helper: suspend caller for one microtask tick so an async consumer can advance
 const tick = () => new Promise<void>((r) => queueMicrotask(r))

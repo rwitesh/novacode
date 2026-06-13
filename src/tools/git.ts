@@ -2,8 +2,8 @@
  * Git tools for executing safe repository operations programmatically.
  */
 import { spawn } from "node:child_process"
+import { textPart } from "../content.ts"
 import type { Tool, ToolResult } from "../types.ts"
-import { textPart } from "../util.ts"
 
 export function gitTool(cwd: string): Tool {
 	return {

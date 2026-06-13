@@ -3,9 +3,8 @@
  * Supports timeouts and output truncation to protect the context window.
  */
 import { spawn } from "node:child_process"
+import { textPart } from "../content.ts"
 import type { Tool, ToolResult } from "../types.ts"
-
-import { textPart } from "../util.ts"
 
 export function bashTool(cwd: string): Tool {
 	return {

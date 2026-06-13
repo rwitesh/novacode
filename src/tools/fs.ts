@@ -4,8 +4,9 @@
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, extname, resolve } from "node:path"
+import { textPart } from "../content.ts"
+import { getRelativeIfInside } from "../paths.ts"
 import type { Tool, ToolResult } from "../types.ts"
-import { getRelativeIfInside, textPart } from "../util.ts"
 
 // Extensions we return as base64 images instead of text
 const IMAGES = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"])

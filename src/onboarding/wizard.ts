@@ -1,5 +1,5 @@
 import chalk from "chalk"
-import { getModelsForProvider, getProvider, PROVIDERS } from "../config/providers.ts"
+import { getModelsForProvider, getProvider, PROVIDERS } from "../config/catalog.ts"
 import { saveAuth, saveConfig } from "../config/store.ts"
 import { standalonePassword, standaloneSelect } from "../tui/prompts.tsx"
 import type { NovaConfig } from "../types.ts"

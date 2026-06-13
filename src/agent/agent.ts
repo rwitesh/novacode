@@ -1,4 +1,4 @@
-import type { EventStream } from "../provider/stream.ts"
+import type { EventStream } from "../eventStream.ts"
 import type { AgentEvent, ApiFormat, LlmContext, LoopOpts, Model, Msg, Tool } from "../types.ts"
 import { run } from "./loop.ts"
 

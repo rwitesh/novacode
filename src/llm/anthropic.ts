@@ -1,3 +1,4 @@
+import { EventStream } from "../eventStream.ts"
 import type {
 	AssistantResult,
 	ContentPart,
@@ -10,7 +11,6 @@ import type {
 	Usage,
 } from "../types.ts"
 import { streamPost } from "./http.ts"
-import { EventStream } from "./stream.ts"
 
 function msgsToAnthropic(messages: Msg[]): Record<string, unknown>[] {
 	const contents: Record<string, unknown>[] = []

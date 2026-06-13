@@ -1,7 +1,7 @@
 import { Box, Text } from "ink"
 import { memo } from "react"
+import { formatToolArgs } from "../../format.ts"
 import type { Msg } from "../../types.ts"
-import { formatToolArgs } from "../../util.ts"
 import { TERMINATION_PHRASES, TOOL_STYLE } from "../constants.ts"
 import { formatMarkdown } from "../markdown.ts"
 

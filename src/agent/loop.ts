@@ -2,7 +2,11 @@
  * Core agent loop that orchestrates model interaction and tool execution.
  * Handles turns, tool routing, safety checks, and event streaming.
  */
-import { EventStream, stream } from "../provider/stream.ts"
+
+import { textPart } from "../content.ts"
+import { EventStream } from "../eventStream.ts"
+import { stream } from "../llm/stream.ts"
+import { estimateTokens } from "../tokens.ts"
 import type {
 	AgentEvent,
 	AssistantMsg,
@@ -12,7 +16,6 @@ import type {
 	ToolCallPart,
 	ToolResultMsg,
 } from "../types.ts"
-import { estimateTokens, textPart } from "../util.ts"
 
 // Safety cap so a misbehaving model can't loop forever
 const MAX_TURNS = 50
