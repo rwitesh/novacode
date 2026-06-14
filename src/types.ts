@@ -141,6 +141,7 @@ export type AgentEvent =
 	| { type: "turn" }
 	| { type: "text_delta"; text: string }
 	| { type: "thinking_delta"; text: string }
+	| { type: "retry"; attempt: number; maxAttempts: number; delayMs: number; reason: string }
 	| { type: "tool_call"; call: ToolCallPart }
 	| { type: "assistant_msg"; msg: AssistantMsg }
 	| { type: "tool_result"; callId: string; result: ToolResultMsg; args?: Record<string, unknown> }
@@ -235,12 +236,12 @@ export interface IEventStream<T, R> {
 
 export type StreamFn = (opts: StreamOpts) => IEventStream<StreamEvent, AssistantResult>
 
-export interface StreamEvent {
-	type: "text_delta" | "thinking_delta" | "tool_call" | "usage"
-	text?: string
-	call?: ToolCallPart
-	usage?: Usage
-}
+export type StreamEvent =
+	| { type: "text_delta"; text: string }
+	| { type: "thinking_delta"; text: string }
+	| { type: "retry"; attempt: number; maxAttempts: number; delayMs: number; reason: string }
+	| { type: "tool_call"; call: ToolCallPart }
+	| { type: "usage"; usage: Usage }
 
 export interface AssistantResult {
 	content: ContentPart[]

@@ -138,7 +138,11 @@ export const streamGemini: StreamFn = (
 				body.generationConfig = { thinkingConfig }
 			}
 
-			const res = await streamPost(url, { "Api-Revision": "2026-05-20" }, body, opts.signal)
+			const res = await streamPost(url, { "Api-Revision": "2026-05-20" }, body, opts.signal, {
+				onRetry: (attempt, maxAttempts, delayMs, reason) => {
+					es.push({ type: "retry", attempt, maxAttempts, delayMs, reason })
+				},
+			})
 
 			if (!res.ok) {
 				const errorText = await res.text()

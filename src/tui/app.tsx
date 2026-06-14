@@ -374,12 +374,20 @@ function App({
 					case "text_delta":
 						if (ev.text) {
 							setThinking(false)
+							setStatus("")
 							appendStream(ev.text)
 						}
 						break
 					case "thinking_delta":
 						setThinking(true)
+						setStatus("")
 						break
+					case "retry": {
+						setStatus(
+							chalk.yellow(`${ev.reason}. Retrying request ${ev.attempt}/${ev.maxAttempts}`),
+						)
+						break
+					}
 					case "assistant_msg":
 						commitMsg(ev.msg)
 						resetStream()

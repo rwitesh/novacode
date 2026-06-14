@@ -187,6 +187,8 @@ async function getReply(
 			es.push({ type: "text_delta", text: ev.text })
 		} else if (ev.type === "thinking_delta" && ev.text) {
 			es.push({ type: "thinking_delta", text: ev.text })
+		} else if (ev.type === "retry") {
+			es.push(ev)
 		} else if (ev.type === "tool_call" && ev.call) {
 			content.push(ev.call)
 			es.push({ type: "tool_call", call: ev.call })

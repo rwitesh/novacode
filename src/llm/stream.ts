@@ -28,10 +28,18 @@ export function stream(opts: StreamOpts): EventStream<AgentEvent, AssistantResul
 	;(async () => {
 		for await (const event of providerStream) {
 			if (event.type === "text_delta") {
-				agentStream.push({ type: "text_delta", text: event.text ?? "" })
+				agentStream.push({ type: "text_delta", text: event.text })
 			} else if (event.type === "thinking_delta") {
-				agentStream.push({ type: "thinking_delta", text: event.text ?? "" })
-			} else if (event.type === "tool_call" && event.call) {
+				agentStream.push({ type: "thinking_delta", text: event.text })
+			} else if (event.type === "retry") {
+				agentStream.push({
+					type: "retry",
+					attempt: event.attempt,
+					maxAttempts: event.maxAttempts,
+					delayMs: event.delayMs,
+					reason: event.reason,
+				})
+			} else if (event.type === "tool_call") {
 				agentStream.push({
 					type: "tool_call",
 					call: {
@@ -41,7 +49,7 @@ export function stream(opts: StreamOpts): EventStream<AgentEvent, AssistantResul
 						args: event.call.args,
 					},
 				})
-			} else if (event.type === "usage" && event.usage) {
+			} else if (event.type === "usage") {
 				agentStream.push({ type: "usage", usage: event.usage })
 			}
 		}

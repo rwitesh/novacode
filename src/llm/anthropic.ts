@@ -171,6 +171,11 @@ export const streamAnthropic: StreamFn = (
 				},
 				body,
 				opts.signal,
+				{
+					onRetry: (attempt, maxAttempts, delayMs, reason) => {
+						es.push({ type: "retry", attempt, maxAttempts, delayMs, reason })
+					},
+				},
 			)
 
 			if (!res.ok) {
