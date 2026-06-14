@@ -12,10 +12,12 @@ import { handleSessionCommand } from "./commands/session.ts"
 import { getProvider, MODELS } from "./config/catalog.ts"
 import { configExists, loadAuth, loadConfig } from "./config/store.ts"
 import { runOnboarding } from "./onboarding/wizard.ts"
+import { PolicyEngine } from "./policy/engine.ts"
 import { getSessionStore } from "./session/store.ts"
 import { dedupeSkills } from "./skills/index.ts"
 import { getAllTools } from "./tools/index.ts"
-import type { Session } from "./types.ts"
+import { standaloneSelect } from "./tui/prompts.tsx"
+import type { PermissionMode, Session } from "./types.ts"
 import { getCurrentVersion, runUpdate } from "./update.ts"
 
 function parseCli() {
@@ -29,6 +31,8 @@ function parseCli() {
 			sessions: { type: "string", short: "s" },
 			resume: { type: "boolean", short: "r" },
 			all: { type: "boolean" },
+			restricted: { type: "boolean" },
+			unrestricted: { type: "boolean" },
 		},
 		strict: false,
 		allowPositionals: true,
@@ -82,7 +86,9 @@ Options:
   --model <id>            Model to use
   --api-key <key>         API key override
   -s, --sessions <id>     Resume/manage sessions
-  -r, --resume            Resume the most recent session`)
+  -r, --resume            Resume the most recent session
+  --restricted            Start in restricted mode (approve every action)
+  --unrestricted          Start in unrestricted mode (no approvals)`)
 		process.exit(0)
 	}
 
@@ -187,6 +193,12 @@ Options:
 	}
 
 	const cwd = process.cwd()
+
+	// Resolve permission mode (interactive gate for tool execution).
+	const mode = await resolvePermissionMode(flags)
+	if (!mode) return
+	const policy = new PolicyEngine(mode, cwd)
+
 	const tools = getAllTools(cwd)
 	const { skills, agentsMd } = await loadResources(cwd)
 	const system = buildSystemPrompt(cwd, tools, dedupeSkills(skills), agentsMd ?? undefined)
@@ -206,13 +218,45 @@ Options:
 		system,
 		tools,
 		messages: existingMessages,
+		policy,
 	})
 
 	// Interactive TUI mode
 	process.off("SIGINT", onSignal)
 	process.off("SIGTERM", onSignal)
 	const { interactive } = await import("./tui/app.tsx")
-	await interactive(agent, store, sessionId, skills, !!agentsMd)
+	await interactive(agent, store, sessionId, skills, !!agentsMd, policy)
+}
+
+async function resolvePermissionMode(flags: {
+	restricted?: unknown
+	unrestricted?: unknown
+}): Promise<PermissionMode | null> {
+	if (flags.restricted) return "restricted"
+	if (flags.unrestricted) return "unrestricted"
+
+	const picked = await standaloneSelect(
+		"Choose a permission mode",
+		[
+			{
+				value: "restricted",
+				label: "Restricted  — ask permission before each action",
+			},
+			{
+				value: "unrestricted",
+				label: "Unrestricted — run without approval (may be dangerous)",
+			},
+		],
+		undefined,
+		chalk.dim(
+			"Use /permission to switch later, or --restricted/--unrestricted to skip this prompt.",
+		),
+	)
+	if (picked !== "restricted" && picked !== "unrestricted") {
+		console.log(chalk.dim("Cancelled"))
+		return null
+	}
+	return picked
 }
 
 process.on("unhandledRejection", (reason) => {

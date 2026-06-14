@@ -1,5 +1,5 @@
 import { Box, Text } from "ink"
-import type { Model, Usage } from "../../types.ts"
+import type { Model, PermissionMode, Usage } from "../../types.ts"
 
 function fmtK(n: number): string {
 	const k = n / 1000
@@ -20,6 +20,7 @@ export function StatusBar({
 	selCmdIdx,
 	exitConfirmKey,
 	tip,
+	permissionMode,
 }: {
 	model: Model
 	usage: Usage
@@ -28,6 +29,7 @@ export function StatusBar({
 	selCmdIdx: number
 	exitConfirmKey: "C" | null
 	tip: string | null
+	permissionMode: PermissionMode
 }) {
 	return (
 		<Box justifyContent="space-between">
@@ -40,7 +42,7 @@ export function StatusBar({
 									color={i === selCmdIdx ? "black" : "yellow"}
 									backgroundColor={i === selCmdIdx ? "yellow" : undefined}
 								>
-									/{s.name.padEnd(10)}
+									/{s.name.padEnd(12)}
 								</Text>
 								<Text dimColor> {s.desc}</Text>
 							</Box>
@@ -66,6 +68,9 @@ export function StatusBar({
 			</Box>
 
 			<Box>
+				<Text color={permissionMode === "restricted" ? "yellow" : "green"}>●</Text>
+				<Text dimColor> {permissionMode}</Text>
+				<Text dimColor> │ </Text>
 				<Text dimColor>{formatTokenUsage(usage.in, model.contextWindow)}</Text>
 				<Text dimColor> │ </Text>
 				<Text dimColor>{model.id}</Text>

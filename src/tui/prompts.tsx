@@ -1,5 +1,6 @@
 import { Box, render, Text, useInput } from "ink"
 import { useState } from "react"
+import type { ApprovalRequest, ToolRisk } from "../types.ts"
 
 interface SelectOption {
 	value: string
@@ -166,6 +167,76 @@ export function ConfirmPrompt({
 			</Box>
 			<Box marginTop={1}>
 				<Text dimColor>←→ toggle · Enter confirm · Esc cancel</Text>
+			</Box>
+		</Box>
+	)
+}
+
+const RISK_COLOR: Record<ToolRisk, string> = {
+	safe: "cyan",
+	write: "yellow",
+	network: "yellow",
+	execution: "red",
+}
+
+export function ApprovalPrompt({
+	req,
+	onResolve,
+}: {
+	req: ApprovalRequest
+	onResolve: (allow: boolean | null) => void
+}) {
+	const [allow, setAllow] = useState(true)
+	const color = RISK_COLOR[req.risk]
+
+	useInput((_, key) => {
+		if (key.escape) {
+			onResolve(null)
+			return
+		}
+		if (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow || key.tab) {
+			setAllow((a) => !a)
+			return
+		}
+		if (key.return) {
+			onResolve(allow)
+		}
+	})
+
+	return (
+		<Box flexDirection="column" paddingX={1}>
+			<Box marginBottom={1}>
+				<Text bold color="yellow">
+					⚠ Approve tool call?
+				</Text>
+			</Box>
+			<Box marginBottom={1}>
+				<Text bold color={color}>
+					{req.tool}
+				</Text>
+				<Text dimColor>
+					{" · "}
+					{req.risk}
+				</Text>
+			</Box>
+			{req.summary && (
+				<Box marginBottom={1} borderStyle="round" borderColor="gray" paddingX={1}>
+					<Text wrap="truncate-end">{req.summary}</Text>
+				</Box>
+			)}
+			{req.warning && (
+				<Box marginBottom={1}>
+					<Text color="red">{req.warning}</Text>
+				</Box>
+			)}
+			<Box>
+				<Text color={allow ? "green" : undefined}>{allow ? "❯ " : "  "}Allow once</Text>
+			</Box>
+			<Box>
+				<Text color={!allow ? "red" : undefined}>{!allow ? "❯ " : "  "}Deny</Text>
+			</Box>
+			<Box marginTop={1}>
+				<Text dimColor>↑↓ toggle · Enter confirm · Esc deny</Text>
 			</Box>
 		</Box>
 	)
