@@ -174,7 +174,7 @@ export function ConfirmPrompt({
 
 const RISK_COLOR: Record<ToolRisk, string> = {
 	safe: "cyan",
-	write: "yellow",
+	write: "magenta",
 	network: "yellow",
 	execution: "red",
 }
