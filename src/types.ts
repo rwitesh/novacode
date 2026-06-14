@@ -193,6 +193,22 @@ export interface CompactResult {
 	newSessionId?: string
 }
 
+/** Policy & Permissions */
+
+export type PermissionMode = "restricted" | "unrestricted"
+export type ToolRisk = "safe" | "write" | "network" | "execution"
+
+export interface ApprovalRequest {
+	tool: string
+	risk: ToolRisk
+	summary: string
+	warning?: string
+}
+
+export interface PolicyApprover {
+	request(req: ApprovalRequest): Promise<boolean>
+}
+
 /** Loop & Provider Types */
 
 export interface LlmContext {

@@ -1,4 +1,5 @@
 import type { EventStream } from "../eventStream.ts"
+import type { PolicyEngine } from "../policy/engine.ts"
 import type { AgentEvent, ApiFormat, LlmContext, LoopOpts, Model, Msg, Tool } from "../types.ts"
 import { run } from "./loop.ts"
 
@@ -10,6 +11,7 @@ export class Agent {
 	#tools: Tool[]
 	#apiKey: string
 	#baseUrl: string
+	#policy: PolicyEngine | null
 
 	constructor(opts: {
 		apiFormat: ApiFormat
@@ -19,6 +21,7 @@ export class Agent {
 		system: string
 		tools: Tool[]
 		messages?: Msg[]
+		policy?: PolicyEngine
 	}) {
 		this.#apiFormat = opts.apiFormat
 		this.#model = opts.model
@@ -27,6 +30,7 @@ export class Agent {
 		this.#system = opts.system
 		this.#tools = opts.tools
 		this.#messages = opts.messages ?? []
+		this.#policy = opts.policy ?? null
 	}
 
 	get model(): Model {
@@ -47,6 +51,10 @@ export class Agent {
 
 	get baseUrl(): string {
 		return this.#baseUrl
+	}
+
+	get policy(): PolicyEngine | null {
+		return this.#policy
 	}
 
 	updateConfig(opts: {
@@ -80,11 +88,20 @@ export class Agent {
 			tools: this.#tools,
 		}
 
+		const policy = this.#policy
 		const opts: LoopOpts = {
 			apiFormat: this.#apiFormat,
 			model: this.#model,
 			apiKey: this.#apiKey,
 			baseUrl: this.#baseUrl,
+			beforeTool: policy
+				? async (call) => {
+						const decision = await policy.check(call)
+						return decision.allow
+							? undefined
+							: { block: true, reason: decision.reason ?? "Blocked by policy" }
+					}
+				: undefined,
 		}
 
 		return run(context, opts, signal)

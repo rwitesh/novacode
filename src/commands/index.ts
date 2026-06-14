@@ -19,6 +19,11 @@ export const COMMANDS: Cmd[] = [
 	{ name: "resume", desc: "Resume previous session" },
 	{ name: "update", desc: "Update novacode" },
 	{ name: "skills", desc: "List available skills" },
+	{
+		name: "permission",
+		desc: "Switch permission mode (restricted/unrestricted)",
+		aliases: ["perm", "mode", "permiso", "permesso"],
+	},
 	{ name: "reset", desc: "Reset all nova data" },
 	{ name: "help", desc: "Show help" },
 	{ name: "clear", desc: "Clear screen & start new session", aliases: ["new"] },

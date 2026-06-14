@@ -5,17 +5,26 @@ import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
 import { getProvider, MODELS } from "../config/catalog.ts"
 import { loadAuth } from "../config/store.ts"
+import type { PolicyEngine } from "../policy/engine.ts"
 import { generateSessionTitle } from "../session/compact.ts"
 import type { SessionStore } from "../session/store.ts"
 import { groupSkills } from "../skills/index.ts"
-import type { Msg, Prompts, Skill, Usage } from "../types.ts"
+import type {
+	ApprovalRequest,
+	Msg,
+	PermissionMode,
+	PolicyApprover,
+	Prompts,
+	Skill,
+	Usage,
+} from "../types.ts"
 import { checkForUpdate, getCurrentVersion } from "../update.ts"
 import { Cursor, LiveArea } from "./components/liveArea.tsx"
 import { hasMeaningfulContent, Message } from "./components/message.tsx"
 import { StatusBar } from "./components/statusBar.tsx"
 import { useStreamBuffer } from "./hooks/useStreamBuffer.ts"
 import { useTip } from "./hooks/useTip.ts"
-import { ConfirmPrompt, PasswordPrompt, SelectPrompt } from "./prompts.tsx"
+import { ApprovalPrompt, ConfirmPrompt, PasswordPrompt, SelectPrompt } from "./prompts.tsx"
 
 type PromptMode =
 	| { type: "chat" }
@@ -32,6 +41,7 @@ type PromptMode =
 			validate?: (v: string) => string | undefined
 	  }
 	| { type: "confirm"; message: string }
+	| { type: "approval"; req: ApprovalRequest }
 
 export async function interactive(
 	agent: Agent,
@@ -39,10 +49,14 @@ export async function interactive(
 	sessionId: string,
 	skills: Skill[] = [],
 	hasAgentsMd = false,
+	policy: PolicyEngine,
 ): Promise<void> {
 	process.stdout.write("\x1B[?25l")
 	const version = await getCurrentVersion()
 	process.stdout.write(`${chalk.cyan.bold("⚡ novacode")} ${chalk.gray(`v${version}`)}\n`)
+	process.stdout.write(
+		`${chalk.dim("  mode:")}    ${policy.mode === "restricted" ? chalk.yellow("restricted") : chalk.green("unrestricted")}\n`,
+	)
 	if (hasAgentsMd) {
 		process.stdout.write(`${chalk.dim("  context:")} ${chalk.cyan("AGENTS.md")}\n`)
 	}
@@ -67,6 +81,7 @@ export async function interactive(
 				sessionId={sessionId}
 				skills={skills}
 				initialHistory={initialHistory}
+				policy={policy}
 			/>,
 			{ exitOnCtrlC: false },
 		)
@@ -83,12 +98,14 @@ function App({
 	sessionId: initialSessionId,
 	skills,
 	initialHistory,
+	policy,
 }: {
 	agent: Agent
 	store: SessionStore
 	sessionId: string
 	skills: Skill[]
 	initialHistory: Msg[]
+	policy: PolicyEngine
 }) {
 	const [currSessionId, setCurrSessionId] = useState(initialSessionId)
 	const [msgs, setMsgs] = useState<Msg[]>(initialHistory)
@@ -137,6 +154,7 @@ function App({
 	const [usage, setUsage] = useState<Usage>({ in: 0, out: 0 })
 	const [selCmdIdx, setSelCmdIdx] = useState(0)
 	const [mode, setMode] = useState<PromptMode>({ type: "chat" })
+	const [permissionMode, setPermissionMode] = useState<PermissionMode>(policy.mode)
 	const resolveRef = useRef<((v: unknown) => void) | null>(null)
 	const history = useRef<string[]>([])
 	const hIdx = useRef(-1)
@@ -198,6 +216,22 @@ function App({
 		),
 	}
 
+	const approver: PolicyApprover = useMemo(
+		() => ({
+			request: (req: ApprovalRequest) =>
+				new Promise<boolean>((resolve) => {
+					resolveRef.current = (v: unknown) => resolve(v === true)
+					setMode({ type: "approval", req })
+				}),
+		}),
+		[],
+	)
+
+	useEffect(() => {
+		policy.setApprover(approver)
+		return () => policy.setApprover(null)
+	}, [policy, approver])
+
 	function resolvePrompt(value: unknown) {
 		const fn = resolveRef.current
 		resolveRef.current = null
@@ -210,6 +244,36 @@ function App({
 		agent.setMessages([...agent.messages, msg])
 		store.append(currSessionId, msg).catch((err) => {
 			console.error("Error appending message to session store:", err)
+		})
+	}
+
+	async function handlePermissionSwitch() {
+		const picked = await prompts.select({
+			message: "Permission mode",
+			options: [
+				{
+					value: "restricted",
+					label: "Restricted — ask permission before each action",
+					hint: permissionMode === "restricted" ? "current" : undefined,
+				},
+				{
+					value: "unrestricted",
+					label: "Unrestricted — run without approval (may be dangerous)",
+					hint: permissionMode === "unrestricted" ? "current" : undefined,
+				},
+			],
+		})
+		if (picked !== "restricted" && picked !== "unrestricted") return
+		policy.setMode(picked)
+		setPermissionMode(picked)
+		commitMsg({
+			role: "assistant",
+			content: [{ type: "text", text: chalk.green(`✓ Permission mode set to ${picked}.`) }],
+			model: "system",
+			provider: "system",
+			usage: { in: 0, out: 0 },
+			stop: "stop",
+			ts: Date.now(),
 		})
 	}
 
@@ -320,6 +384,16 @@ function App({
 		hIdx.current = -1
 
 		if (line.startsWith("/")) {
+			const cmdParts = line.slice(1).split(" ")
+			const cmdName = cmdParts[0]?.toLowerCase()
+			const matchedCmd = COMMANDS.find(
+				(c) => c.name === cmdName || c.aliases?.includes(cmdName ?? ""),
+			)
+
+			if (matchedCmd?.name === "permission") {
+				void handlePermissionSwitch()
+				return
+			}
 			if (line === "/compact") {
 				setBusy(true)
 				setStatus("Compacting...")
@@ -466,6 +540,9 @@ function App({
 	if (mode.type === "confirm") {
 		return <ConfirmPrompt message={mode.message} onConfirm={resolvePrompt} />
 	}
+	if (mode.type === "approval") {
+		return <ApprovalPrompt req={mode.req} onResolve={resolvePrompt} />
+	}
 
 	return (
 		<Box flexDirection="column" paddingX={1} width="100%">
@@ -532,6 +609,7 @@ function App({
 					selCmdIdx={selCmdIdx}
 					exitConfirmKey={exitConfirmKey}
 					tip={tip}
+					permissionMode={permissionMode}
 				/>
 			</Box>
 		</Box>

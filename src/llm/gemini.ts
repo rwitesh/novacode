@@ -2,6 +2,7 @@ import { EventStream } from "../eventStream.ts"
 import type {
 	AssistantResult,
 	ContentPart,
+	Effort,
 	Msg,
 	StopReason,
 	StreamEvent,
@@ -89,9 +90,21 @@ function toolsToGemini(tools: ToolDef[]): unknown[] {
 
 function buildThinkingConfig(model: {
 	supportsThinking: boolean
+	effort?: Effort
 }): { thinkingLevel: string } | undefined {
 	if (!model.supportsThinking) return undefined
-	return { thinkingLevel: "adaptive" }
+	const level = model.effort || "medium"
+	switch (level) {
+		case "low":
+			return { thinkingLevel: "LOW" }
+		case "medium":
+			return { thinkingLevel: "MEDIUM" }
+		case "high":
+		case "xhigh":
+			return { thinkingLevel: "HIGH" }
+		default:
+			return { thinkingLevel: "MEDIUM" }
+	}
 }
 
 function mapFinishReason(reason: string): StopReason {
