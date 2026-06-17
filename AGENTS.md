@@ -41,11 +41,16 @@ src/
 │   ├── store.ts         # config.json (settings) + auth.json (API keys, 0600)
 │   └── catalog.ts       # static provider + model catalog (GLM, Gemini, DeepSeek, OpenAI, Anthropic)
 ├── llm/
-│   ├── stream.ts        # LLM stream registry + AgentEvent bridge
+│   ├── stream.ts        # provider registry (by id) + AgentEvent bridge + effort helpers
 │   ├── http.ts          # streaming HTTP client built on native fetch (SSE)
-│   ├── openai.ts        # OpenAI-compatible streaming (GLM, DeepSeek, OpenAI)
-│   ├── gemini.ts        # Gemini-compatible streaming
-│   └── anthropic.ts     # Anthropic streaming with native thinking support
+│   ├── base/
+│   │   ├── openai.ts    # OpenAI Chat Completions stream engine (createStream)
+│   │   └── anthropic.ts # Anthropic Messages stream engine (createStream)
+│   ├── glm.ts           # plugin → base/openai (reasoning_effort max..low + thinking toggle)
+│   ├── deepseek.ts      # plugin → base/openai (effort clamped high/max)
+│   ├── openai.ts        # plugin → base/openai (reasoning_effort low..high)
+│   ├── gemini.ts        # plugin: standalone (thinkingLevel LOW/MEDIUM/HIGH)
+│   └── anthropic.ts     # plugin → base/anthropic (output_config.effort)
 ├── agent/
 │   ├── loop.ts          # pure ReAct loop function (run)
 │   ├── agent.ts         # stateful Agent class wrapping loop
@@ -82,7 +87,7 @@ Novacode follows a ReAct (Reason → Act → Observe) pattern:
 
 1. **Pure loop** – `src/agent/loop.ts` builds the prompt, streams the LLM via a provider, parses the reply, and returns an updated `AgentState` plus an `Action`.
 2. **Stateful wrapper** – `src/agent/agent.ts` holds the mutable state, repeatedly calls `loop.run`, executes any tool actions, and feeds the tool result back as the next observation.
-3. **LLM streaming** – `src/llm/stream.ts` maps an `ApiFormat` to a concrete streaming implementation (e.g., `openai.ts`, `gemini.ts`, `anthropic.ts`). Each streams the request to the LLM API over native `fetch`.
+3. **LLM streaming** – `src/llm/stream.ts` is a provider-id registry of `ProviderStream` plugins (`glm.ts`, `gemini.ts`, `deepseek.ts`, `openai.ts`, `anthropic.ts`). Each plugin is thin config; the actual streaming lives in pluggable engines under `src/llm/base/` (`openai.ts`, `anthropic.ts`). GLM/DeepSeek/OpenAI share one engine parameterized by effort mapping + thinking toggle.
 4. **Tool execution** – the toolbox (`src/tools/`) runs the requested tool, returns a `ToolResult`, which becomes the next observation for the loop.
 5. The loop repeats until the LLM emits a final‑answer marker or an error aborts.
 

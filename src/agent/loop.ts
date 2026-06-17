@@ -162,8 +162,9 @@ async function getReply(
 	signal?: AbortSignal,
 ): Promise<AssistantMsg> {
 	const providerStream = stream({
-		apiFormat: opts.apiFormat,
+		provider: opts.provider,
 		model: opts.model,
+		effort: opts.effort,
 		apiKey: opts.apiKey,
 		baseUrl: opts.baseUrl,
 		system: context.system,

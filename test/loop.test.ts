@@ -3,14 +3,14 @@ import { run } from "../src/agent/loop.ts"
 import { EventStream } from "../src/eventStream.ts"
 import type { AssistantResult, StreamEvent } from "../src/llm/stream.ts"
 import { register } from "../src/llm/stream.ts"
-import type { AgentEvent, ApiFormat, Msg, Tool } from "../src/types.ts"
+import type { AgentEvent, Effort, Msg, ProviderStream, Tool } from "../src/types.ts"
 
-// Use a unique api format to avoid clashing with real providers
-const MOCK_API = "mock_test" as const
+// Use a unique provider id to avoid clashing with real providers
+const MOCK_PROVIDER = "mock_test" as const
 
 function mockProvider(responses: AssistantResult[]) {
 	let idx = 0
-	const fn = () => {
+	const stream = () => {
 		const es = new EventStream<StreamEvent, AssistantResult>()
 		queueMicrotask(() => {
 			const res = responses[idx] ?? responses[responses.length - 1]
@@ -39,16 +39,21 @@ function mockProvider(responses: AssistantResult[]) {
 		})
 		return es
 	}
-	// biome-ignore lint/suspicious/noExplicitAny: test mock needs type coercion
-	register(MOCK_API as any, fn as any)
+	const plugin: ProviderStream = {
+		id: MOCK_PROVIDER,
+		efforts: { options: ["high"], default: "high" },
+		// biome-ignore lint/suspicious/noExplicitAny: test mock needs type coercion
+		stream: stream as any,
+	}
+	register(plugin)
 }
 
 const fakeModel = {
 	id: "test",
 	name: "Test",
-	provider: MOCK_API,
+	provider: MOCK_PROVIDER,
 	contextWindow: 1000,
-	maxTokens: 100,
+	maxOutput: 100,
 	supportsThinking: false,
 }
 
@@ -94,8 +99,9 @@ describe("agent loop", () => {
 			tools: [noopTool],
 		}
 		const opts = {
-			apiFormat: MOCK_API as unknown as ApiFormat,
+			provider: MOCK_PROVIDER,
 			model: fakeModel,
+			effort: "high" as Effort,
 			apiKey: "test",
 			baseUrl: "http://test",
 			maxTurns: 3,
@@ -121,8 +127,9 @@ describe("agent loop", () => {
 			tools: [noopTool],
 		}
 		const opts = {
-			apiFormat: MOCK_API as unknown as ApiFormat,
+			provider: MOCK_PROVIDER,
 			model: fakeModel,
+			effort: "high" as Effort,
 			apiKey: "test",
 			baseUrl: "http://test",
 			maxTurns: 1,
@@ -149,8 +156,9 @@ describe("agent loop", () => {
 			tools: [],
 		}
 		const opts = {
-			apiFormat: MOCK_API as unknown as ApiFormat,
+			provider: MOCK_PROVIDER,
 			model: fakeModel,
+			effort: "high" as Effort,
 			apiKey: "test",
 			baseUrl: "http://test",
 		}

@@ -5,6 +5,7 @@ import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
 import { getProvider, MODELS } from "../config/catalog.ts"
 import { loadAuth } from "../config/store.ts"
+import { resolveEffort } from "../llm/stream.ts"
 import type { PolicyEngine } from "../policy/engine.ts"
 import { generateSessionTitle } from "../session/compact.ts"
 import type { SessionStore } from "../session/store.ts"
@@ -122,9 +123,11 @@ function App({
 			if (provider && model) {
 				const auth = await loadAuth()
 				const apiKey = auth.apiKeys[s.provider] || ""
+				const effort = resolveEffort(provider.id, agent.effort)
 				agent.updateConfig({
-					apiFormat: provider.apiFormat,
+					provider: provider.id,
 					model,
+					effort,
 					apiKey,
 					baseUrl: provider.baseUrl,
 				})
@@ -603,6 +606,7 @@ function App({
 
 				<StatusBar
 					model={agent.model}
+					effort={agent.effort}
 					usage={usage}
 					busy={busy}
 					suggestions={suggestions}

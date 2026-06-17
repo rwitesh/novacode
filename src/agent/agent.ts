@@ -1,11 +1,12 @@
 import type { EventStream } from "../eventStream.ts"
 import type { PolicyEngine } from "../policy/engine.ts"
-import type { AgentEvent, ApiFormat, LlmContext, LoopOpts, Model, Msg, Tool } from "../types.ts"
+import type { AgentEvent, Effort, LlmContext, LoopOpts, Model, Msg, Tool } from "../types.ts"
 import { run } from "./loop.ts"
 
 export class Agent {
-	#apiFormat: ApiFormat
+	#provider: string
 	#model: Model
+	#effort: Effort
 	#system: string
 	#messages: Msg[] = []
 	#tools: Tool[]
@@ -14,8 +15,9 @@ export class Agent {
 	#policy: PolicyEngine | null
 
 	constructor(opts: {
-		apiFormat: ApiFormat
+		provider: string
 		model: Model
+		effort: Effort
 		apiKey: string
 		baseUrl: string
 		system: string
@@ -23,8 +25,9 @@ export class Agent {
 		messages?: Msg[]
 		policy?: PolicyEngine
 	}) {
-		this.#apiFormat = opts.apiFormat
+		this.#provider = opts.provider
 		this.#model = opts.model
+		this.#effort = opts.effort
 		this.#apiKey = opts.apiKey
 		this.#baseUrl = opts.baseUrl
 		this.#system = opts.system
@@ -35,6 +38,10 @@ export class Agent {
 
 	get model(): Model {
 		return this.#model
+	}
+
+	get effort(): Effort {
+		return this.#effort
 	}
 
 	get messages(): Msg[] {
@@ -58,13 +65,15 @@ export class Agent {
 	}
 
 	updateConfig(opts: {
-		apiFormat: ApiFormat
+		provider: string
 		model: Model
+		effort: Effort
 		apiKey: string
 		baseUrl: string
 	}): void {
-		this.#apiFormat = opts.apiFormat
+		this.#provider = opts.provider
 		this.#model = opts.model
+		this.#effort = opts.effort
 		this.#apiKey = opts.apiKey
 		this.#baseUrl = opts.baseUrl
 	}
@@ -81,6 +90,10 @@ export class Agent {
 		this.#model = model
 	}
 
+	setEffort(effort: Effort): void {
+		this.#effort = effort
+	}
+
 	prompt(signal?: AbortSignal): EventStream<AgentEvent, Msg[]> {
 		const context: LlmContext = {
 			system: this.#system,
@@ -90,8 +103,9 @@ export class Agent {
 
 		const policy = this.#policy
 		const opts: LoopOpts = {
-			apiFormat: this.#apiFormat,
+			provider: this.#provider,
 			model: this.#model,
+			effort: this.#effort,
 			apiKey: this.#apiKey,
 			baseUrl: this.#baseUrl,
 			beforeTool: policy

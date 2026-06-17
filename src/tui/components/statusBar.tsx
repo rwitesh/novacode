@@ -1,5 +1,5 @@
 import { Box, Text } from "ink"
-import type { Model, PermissionMode, Usage } from "../../types.ts"
+import type { Effort, Model, PermissionMode, Usage } from "../../types.ts"
 
 function fmtK(n: number): string {
 	const k = n / 1000
@@ -14,6 +14,7 @@ function formatTokenUsage(used: number, contextWindow: number): string {
 
 export function StatusBar({
 	model,
+	effort,
 	usage,
 	busy,
 	suggestions,
@@ -23,6 +24,7 @@ export function StatusBar({
 	permissionMode,
 }: {
 	model: Model
+	effort: Effort
 	usage: Usage
 	busy: boolean
 	suggestions: Array<{ name: string; desc: string }>
@@ -74,6 +76,12 @@ export function StatusBar({
 				<Text dimColor>{formatTokenUsage(usage.in, model.contextWindow)}</Text>
 				<Text dimColor> │ </Text>
 				<Text dimColor>{model.id}</Text>
+				{model.supportsThinking && (
+					<>
+						<Text dimColor> </Text>
+						<Text dimColor>{effort}</Text>
+					</>
+				)}
 			</Box>
 		</Box>
 	)

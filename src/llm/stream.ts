@@ -1,28 +1,41 @@
 import { EventStream } from "../eventStream.ts"
-import type { AgentEvent, ApiFormat, AssistantResult, StreamFn, StreamOpts } from "../types.ts"
-import { streamAnthropic } from "./anthropic.ts"
-import { streamGemini } from "./gemini.ts"
-import { streamOpenAI } from "./openai.ts"
+import type { AgentEvent, AssistantResult, Effort, ProviderStream, StreamOpts } from "../types.ts"
+import { anthropicProvider } from "./anthropic.ts"
+import { deepseekProvider } from "./deepseek.ts"
+import { geminiProvider } from "./gemini.ts"
+import { glmProvider } from "./glm.ts"
+import { openaiProvider } from "./openai.ts"
 
 export type { AssistantResult, StreamEvent, StreamFn, StreamOpts } from "../types.ts"
 
-// Internal map of registered provider implementations
-const registry = new Map<ApiFormat, StreamFn>([
-	["openai", streamOpenAI],
-	["gemini", streamGemini],
-	["anthropic", streamAnthropic],
+const registry = new Map<string, ProviderStream>([
+	[glmProvider.id, glmProvider],
+	[geminiProvider.id, geminiProvider],
+	[deepseekProvider.id, deepseekProvider],
+	[openaiProvider.id, openaiProvider],
+	[anthropicProvider.id, anthropicProvider],
 ])
 
-export function register(apiFormat: ApiFormat, fn: StreamFn): void {
-	registry.set(apiFormat, fn)
+export function register(stream: ProviderStream): void {
+	registry.set(stream.id, stream)
 }
 
-// Bridges provider-specific StreamEvents into AgentEvents so the loop and TUI deal with one type.
-export function stream(opts: StreamOpts): EventStream<AgentEvent, AssistantResult> {
-	const fn = registry.get(opts.apiFormat)
-	if (!fn) throw new Error(`No provider registered for API format: ${opts.apiFormat}`)
+export function getEfforts(id: string): Effort[] {
+	return registry.get(id)?.efforts.options ?? []
+}
 
-	const providerStream = fn(opts)
+export function resolveEffort(providerId: string, effort?: Effort): Effort {
+	const p = registry.get(providerId)
+	if (!p) return "high"
+	if (effort && p.efforts.options.includes(effort)) return effort
+	return p.efforts.default
+}
+
+export function stream(opts: StreamOpts): EventStream<AgentEvent, AssistantResult> {
+	const provider = registry.get(opts.provider)
+	if (!provider) throw new Error(`No provider registered for provider id: ${opts.provider}`)
+
+	const providerStream = provider.stream(opts)
 	const agentStream = new EventStream<AgentEvent, AssistantResult>()
 
 	;(async () => {
@@ -58,14 +71,9 @@ export function stream(opts: StreamOpts): EventStream<AgentEvent, AssistantResul
 		if (res) {
 			agentStream.finish(res)
 		} else {
-			// Fallback for unexpected closure
 			agentStream.finish({ content: [], usage: { in: 0, out: 0 }, stop: "stop" })
 		}
 	})()
 
 	return agentStream
-}
-
-export function getRegisteredApis(): ApiFormat[] {
-	return [...registry.keys()]
 }

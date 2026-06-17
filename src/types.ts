@@ -73,14 +73,14 @@ export interface Usage {
 
 /** Provider */
 
-export type ApiFormat = "openai" | "gemini" | "anthropic"
-
-export type Effort = "low" | "medium" | "high" | "xhigh"
+// Canonical reasoning effort. Each provider maps these onto its own API
+// param (reasoning_effort / thinkingLevel / output_config.effort) and clamps
+// unsupported levels. See src/llm/<provider>.ts for the per-provider mapping.
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max"
 
 export interface ProviderDef {
 	id: string
 	name: string
-	apiFormat: ApiFormat
 	baseUrl: string
 	envKey: string // env var name for API key
 }
@@ -90,10 +90,25 @@ export interface Model {
 	name: string
 	provider: string
 	contextWindow: number
-	maxTokens: number
+	maxOutput: number
+	// Whether the model accepts effort/thinking control. When false, no
+	// reasoning params are sent and /effort is a no-op for this model.
 	supportsThinking: boolean
-	effort?: Effort
 	default?: boolean
+}
+
+// A provider's streaming plugin, registered by provider id in src/llm/stream.ts.
+export interface ProviderStream {
+	id: string
+	efforts: EffortConfig
+	stream: StreamFn
+}
+
+// Effort control offered by a provider. `options` is the full set surfaced via
+// /effort; `default` is used when the user has not chosen one.
+export interface EffortConfig {
+	options: Effort[]
+	default: Effort
 }
 
 /** Tools */
@@ -153,6 +168,7 @@ export type AgentEvent =
 export interface NovaConfig {
 	provider: string
 	model: string
+	effort?: Effort
 }
 
 export interface NovaAuth {
@@ -218,8 +234,9 @@ export interface LlmContext {
 }
 
 export interface LoopOpts {
-	apiFormat: ApiFormat
+	provider: string
 	model: Model
+	effort: Effort
 	apiKey: string
 	baseUrl: string
 	maxTurns?: number
@@ -234,8 +251,9 @@ export interface LoopOpts {
 }
 
 export interface StreamOpts {
-	apiFormat: ApiFormat
+	provider: string
 	model: Model
+	effort: Effort
 	apiKey: string
 	baseUrl: string
 	system: string
