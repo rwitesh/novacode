@@ -1,24 +1,17 @@
+import type { ModelMessage, ToolCallPart, ToolResultPart } from "ai"
 import { Box, Text } from "ink"
 import { memo } from "react"
+import { summarizeToolOutput } from "../../content.ts"
 import { formatToolArgs } from "../../format.ts"
-import type { Msg } from "../../types.ts"
-import { TERMINATION_PHRASES, TOOL_STYLE } from "../constants.ts"
+import { TOOL_STYLE } from "../constants.ts"
 import { formatMarkdown } from "../markdown/index.ts"
 
-export function hasMeaningfulContent(msg: Msg): boolean {
+export function hasMeaningfulContent(msg: ModelMessage): boolean {
 	if (msg.role === "user") return true
-	if (msg.role === "tool_result") return true
-	if (msg.role === "assistant") {
-		if (msg.model === "system") return true
-		if (msg.stop === "aborted") return true
-		return msg.content.some((c) => {
-			if (c.type === "text") return c.text.trim().length > 0
-			return false
-		})
-	}
-	return false
+	if (msg.role === "tool") return msg.content.some((p) => p.type === "tool-result")
+	if (typeof msg.content === "string") return msg.content.trim().length > 0
+	return msg.content.some((p) => p.type === "text" || p.type === "tool-call")
 }
-
 const UserMessage = memo(function UserMessage({
 	content,
 	isFirst,
@@ -48,47 +41,26 @@ const UserMessage = memo(function UserMessage({
 	)
 })
 
-const SystemMessage = memo(function SystemMessage({ text }: { text: string }) {
-	return <Text>{formatMarkdown(text)}</Text>
-})
-
-const AssistantMessage = memo(function AssistantMessage({
-	content,
-	isAborted,
-	termPhrase,
-}: {
-	content: string
-	isAborted: boolean
-	termPhrase: string
-}) {
+const ToolCallLine = memo(function ToolCallLine({ part }: { part: ToolCallPart }) {
+	const tool = part.toolName
+	const args = formatToolArgs(part.input as Record<string, unknown>, true)
+	const color = TOOL_STYLE[tool] ?? "white"
 	return (
-		<Box flexDirection="column" marginTop={0}>
-			<Text>{content}</Text>
-			{isAborted && (
-				<Box marginTop={0}>
-					<Text color="red" italic>
-						▲ {termPhrase}
-					</Text>
-				</Box>
-			)}
+		<Box flexDirection="row" marginTop={0}>
+			<Text dimColor color={color}>
+				→ {tool}
+			</Text>
+			{args && <Text dimColor> {args}</Text>}
 		</Box>
 	)
 })
 
-const ToolResultMessage = memo(function ToolResultMessage({
-	tool,
-	args,
-	isError,
-	resText,
-}: {
-	tool: string
-	args: string
-	isError: boolean
-	resText: string
-}) {
+const ToolResultMessage = memo(function ToolResultMessage({ part }: { part: ToolResultPart }) {
+	const { text, isError } = summarizeToolOutput(part.output)
+	const tool = part.toolName
 	const isRead = tool === "read"
-	const lineCount = isRead ? resText.split("\n").length : 0
-	const color = TOOL_STYLE[tool] || "white"
+	const lineCount = isRead && !isError ? text.split("\n").length : 0
+	const color = TOOL_STYLE[tool] ?? "white"
 
 	return (
 		<Box flexDirection="row" marginTop={0}>
@@ -96,14 +68,19 @@ const ToolResultMessage = memo(function ToolResultMessage({
 			<Text color={color} bold>
 				{tool}
 			</Text>
-			{args && <Text> {args}</Text>}
 			{isRead && !isError && <Text dimColor> ({lineCount} lines)</Text>}
-			{isError && resText && <Text color="red"> {resText.slice(0, 80)}</Text>}
+			{isError && text && <Text color="red"> {text.slice(0, 80)}</Text>}
 		</Box>
 	)
 })
 
-export const Message = memo(function Message({ msg, isFirst }: { msg: Msg; isFirst: boolean }) {
+export const Message = memo(function Message({
+	msg,
+	isFirst,
+}: {
+	msg: ModelMessage
+	isFirst: boolean
+}) {
 	if (msg.role === "user") {
 		const content =
 			typeof msg.content === "string"
@@ -113,43 +90,37 @@ export const Message = memo(function Message({ msg, isFirst }: { msg: Msg; isFir
 	}
 
 	if (msg.role === "assistant") {
-		if (msg.model === "system") {
-			return (
-				<Box flexDirection="column" marginTop={0}>
-					{msg.content.map((c, i) =>
-						// biome-ignore lint/suspicious/noArrayIndexKey: stable turn content
-						c.type === "text" ? <SystemMessage key={i} text={c.text} /> : null,
-					)}
-				</Box>
-			)
-		}
-
-		const isAborted = msg.stop === "aborted"
-		const hasVisibleContent = isAborted || msg.content.some((c) => c.type === "text")
-		if (!hasVisibleContent) return null
-
-		const textContent = msg.content
-			.filter((c) => c.type === "text")
-			.map((c) => c.text)
+		const parts =
+			typeof msg.content === "string" ? [{ type: "text" as const, text: msg.content }] : msg.content
+		const textContent = parts
+			.filter((p): p is { type: "text"; text: string } => p.type === "text")
+			.map((p) => p.text)
 			.join("")
+		const toolCalls = parts.filter((p): p is ToolCallPart => p.type === "tool-call")
 
-		const termPhrase = isAborted
-			? (TERMINATION_PHRASES[msg.ts % TERMINATION_PHRASES.length] ?? "Terminated by user")
-			: ""
+		if (!textContent.trim() && toolCalls.length === 0) return null
 
-		const rendered = formatMarkdown(textContent)
-		return <AssistantMessage content={rendered} isAborted={isAborted} termPhrase={termPhrase} />
+		return (
+			<Box flexDirection="column" marginTop={0}>
+				{textContent.trim() && <Text>{formatMarkdown(textContent)}</Text>}
+				{toolCalls.map((c, i) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: stable within a message
+					<ToolCallLine key={i} part={c} />
+				))}
+			</Box>
+		)
 	}
 
-	if (msg.role === "tool_result") {
-		const args = msg.args ? formatToolArgs(msg.args, true) : ""
-		const resText = msg.content
-			.map((c) => (c.type === "text" ? c.text : ""))
-			.join("")
-			.trim()
-
-		return <ToolResultMessage tool={msg.tool} args={args} isError={msg.isError} resText={resText} />
-	}
-
-	return null
+	// tool message: content is always an array of tool-result parts
+	if (msg.role !== "tool") return null
+	const results = msg.content.filter((p): p is ToolResultPart => p.type === "tool-result")
+	if (results.length === 0) return null
+	return (
+		<Box flexDirection="column">
+			{results.map((p, i) => (
+				// biome-ignore lint/suspicious/noArrayIndexKey: stable within a message
+				<ToolResultMessage key={i} part={p} />
+			))}
+		</Box>
+	)
 })

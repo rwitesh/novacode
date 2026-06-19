@@ -8,12 +8,12 @@ import {
 	PolicyEngine,
 	summarizeCall,
 } from "../src/policy/engine.ts"
-import type { PolicyApprover, ToolCallPart } from "../src/types.ts"
+import type { PolicyApprover, PolicyCall } from "../src/types.ts"
 
 const cwd = join(tmpdir(), "nova-policy-test")
 
-function call(name: string, args: Record<string, unknown> = {}): ToolCallPart {
-	return { type: "tool_call", id: "1", name, args }
+function call(name: string, args: Record<string, unknown> = {}): PolicyCall {
+	return { name, args }
 }
 
 describe("isSecretFile", () => {

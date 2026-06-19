@@ -11,7 +11,6 @@ import { loadResources } from "./bootstrap.ts"
 import { handleSessionCommand } from "./commands/session.ts"
 import { getProvider, MODELS } from "./config/catalog.ts"
 import { configExists, loadAuth, loadConfig } from "./config/store.ts"
-import { resolveEffort } from "./llm/stream.ts"
 import { runOnboarding } from "./onboarding/wizard.ts"
 import { PolicyEngine } from "./policy/engine.ts"
 import { getSessionStore } from "./session/store.ts"
@@ -214,7 +213,6 @@ Options:
 	const agent = new Agent({
 		provider: provider.id,
 		model,
-		effort: resolveEffort(provider.id, config.effort),
 		apiKey,
 		baseUrl: provider.baseUrl,
 		system,

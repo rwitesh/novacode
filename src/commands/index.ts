@@ -7,14 +7,12 @@ import { groupSkills } from "../skills/index.ts"
 import type { Cmd, Prompts, Skill } from "../types.ts"
 import { checkForUpdate, runUpdate } from "../update.ts"
 import { handleCompact } from "./compact.ts"
-import { handleEffort } from "./effort.ts"
 import { handleModels } from "./models.ts"
 import { handleProviders } from "./providers.ts"
 import { handleInteractiveReset } from "./reset.ts"
 
 export const COMMANDS: Cmd[] = [
 	{ name: "models", desc: "Switch model", aliases: ["model"] },
-	{ name: "effort", desc: "Change reasoning effort" },
 	{ name: "providers", desc: "Manage providers", aliases: ["prov", "config", "cfg"] },
 	{ name: "compact", desc: "Compact context" },
 	{ name: "sessions", desc: "List and switch sessions" },
@@ -68,8 +66,6 @@ export async function dispatch(
 		case "models":
 		case "model":
 			return handleModels(args, agent, prompts)
-		case "effort":
-			return handleEffort(args, agent, prompts)
 		case "providers":
 		case "prov":
 		case "config":

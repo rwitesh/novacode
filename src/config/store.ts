@@ -25,9 +25,15 @@ export async function configExists(): Promise<boolean> {
 }
 
 export async function loadConfig(): Promise<NovaConfig> {
+	// Pick only known fields: permissionMode/effort are never persisted (permission
+	// mode is asked per-session at startup), and legacy values left in the file by
+	// older versions must be dropped rather than round-tripped back on save.
 	try {
-		const raw = JSON.parse(await readFile(CONFIG_PATH(), "utf-8"))
-		return { ...defaultConfig, ...raw }
+		const raw = JSON.parse(await readFile(CONFIG_PATH(), "utf-8")) as Partial<NovaConfig>
+		return {
+			provider: raw.provider ?? defaultConfig.provider,
+			model: raw.model ?? defaultConfig.model,
+		}
 	} catch {
 		return { ...defaultConfig }
 	}

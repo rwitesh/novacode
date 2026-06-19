@@ -1,57 +1,10 @@
 import { DatabaseSync } from "node:sqlite"
-import type { ContentPart, Msg, PendingSession, Session } from "../types.ts"
+import type { ModelMessage } from "ai"
+import type { PendingSession, Session } from "../types.ts"
 import { closeDb, getDb } from "./db.ts"
 
 function generateId(): string {
 	return `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`
-}
-
-const JSON_SENTINEL = "$json:"
-
-function serializeContent(content: string | ContentPart[]): string | null {
-	if (content === undefined || content === null) return null
-	if (typeof content === "string") return content
-	return JSON_SENTINEL + JSON.stringify(content)
-}
-
-function deserializeContent(raw: string | null): string | ContentPart[] {
-	if (raw === null) return ""
-	if (raw.startsWith(JSON_SENTINEL)) return JSON.parse(raw.slice(JSON_SENTINEL.length))
-	return raw
-}
-
-function rowToMsg(row: Record<string, unknown>): Msg {
-	const role = row.role as string
-	const content = deserializeContent(row.content as string | null)
-	const ts = row.ts as number
-
-	if (role === "user") {
-		return { role: "user", content: content as string | ContentPart[], ts }
-	}
-
-	if (role === "assistant") {
-		return {
-			role: "assistant",
-			content: (content || []) as ContentPart[],
-			model: (row.model as string) ?? "",
-			provider: (row.provider as string) ?? "",
-			usage: { in: (row.usage_input as number) ?? 0, out: (row.usage_output as number) ?? 0 },
-			stop: (row.stop_reason as "stop" | "length" | "tool_use" | "error" | "aborted") ?? "stop",
-			error: undefined,
-			ts,
-		}
-	}
-
-	// tool_result
-	return {
-		role: "tool_result",
-		callId: (row.tool_call_id as string) ?? "",
-		tool: (row.tool_name as string) ?? "",
-		args: row.tool_args ? JSON.parse(row.tool_args as string) : undefined,
-		content: (content || []) as ContentPart[],
-		isError: !!(row.is_error as number),
-		ts,
-	}
 }
 
 function rowToSession(row: Record<string, unknown>): Session {
@@ -183,82 +136,38 @@ export class SessionStore {
 		this.#db.exec("DELETE FROM messages; DELETE FROM sessions")
 	}
 
-	async append(sessionId: string, msg: Msg): Promise<void> {
+	async append(sessionId: string, msg: ModelMessage): Promise<void> {
 		this.#ensurePersisted(sessionId)
 		const now = Date.now()
-
-		const role = msg.role
-		let content: string | null = null
-		let toolCallId: string | null = null
-		let toolName: string | null = null
-		let toolArgs: string | null = null
-		let model: string | null = null
-		let provider: string | null = null
-		let usageInput = 0
-		let usageOutput = 0
-		let stopReason: string | null = null
-		let isError = 0
-
-		if (role === "user") {
-			content = serializeContent(msg.content)
-		} else if (role === "assistant") {
-			content = serializeContent(msg.content)
-			model = msg.model ?? null
-			provider = msg.provider ?? null
-			usageInput = msg.usage?.in ?? 0
-			usageOutput = msg.usage?.out ?? 0
-			stopReason = msg.stop ?? null
-			if (msg.error) isError = 1
-		} else if (role === "tool_result") {
-			content = serializeContent(msg.content)
-			toolCallId = msg.callId ?? null
-			toolName = msg.tool ?? null
-			toolArgs = msg.args ? JSON.stringify(msg.args) : null
-			isError = msg.isError ? 1 : 0
-		}
 
 		const seqRow = this.#db
 			.prepare("SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq FROM messages WHERE session_id = ?")
 			.get(sessionId) as Record<string, unknown>
 		const seq = seqRow?.next_seq as number
 
+		this.#insert(sessionId, seq, msg, now)
 		this.#db
-			.prepare(
-				`INSERT INTO messages (session_id, seq, role, content, tool_call_id, tool_name, tool_args, model, provider, usage_input, usage_output, stop_reason, is_error, ts)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			)
-			.run(
-				sessionId,
-				seq,
-				role,
-				content,
-				toolCallId,
-				toolName,
-				toolArgs,
-				model,
-				provider,
-				usageInput,
-				usageOutput,
-				stopReason,
-				isError,
-				msg.ts ?? now,
-			)
-
-		this.#db
-			.prepare(
-				"UPDATE sessions SET message_count = message_count + 1, updated = ?, input_tokens = input_tokens + ?, output_tokens = output_tokens + ? WHERE id = ?",
-			)
-			.run(now, usageInput, usageOutput, sessionId)
+			.prepare("UPDATE sessions SET message_count = message_count + 1, updated = ? WHERE id = ?")
+			.run(now, sessionId)
 	}
 
-	async messages(sessionId: string): Promise<Msg[]> {
+	async addUsage(sessionId: string, inputTokens: number, outputTokens: number): Promise<void> {
+		this.#ensurePersisted(sessionId)
+		this.#db
+			.prepare(
+				"UPDATE sessions SET input_tokens = input_tokens + ?, output_tokens = output_tokens + ?, updated = ? WHERE id = ?",
+			)
+			.run(inputTokens, outputTokens, Date.now(), sessionId)
+	}
+
+	async messages(sessionId: string): Promise<ModelMessage[]> {
 		const rows = this.#db
-			.prepare("SELECT * FROM messages WHERE session_id = ? ORDER BY seq")
+			.prepare("SELECT message FROM messages WHERE session_id = ? ORDER BY seq")
 			.all(sessionId) as Record<string, unknown>[]
-		return rows.map(rowToMsg)
+		return rows.map((r) => JSON.parse(r.message as string) as ModelMessage)
 	}
 
-	async history(sessionId: string): Promise<Msg[]> {
+	async history(sessionId: string): Promise<ModelMessage[]> {
 		const lineage = this.#getLineage(sessionId)
 		if (lineage.length <= 1) {
 			return this.messages(sessionId)
@@ -268,12 +177,12 @@ export class SessionStore {
 		const caseExpr = lineage.map((id, i) => `WHEN '${id}' THEN ${i}`).join(" ")
 		const rows = this.#db
 			.prepare(
-				`SELECT m.* FROM messages m
+				`SELECT message FROM messages m
 				 WHERE m.session_id IN (${lineage.map(() => "?").join(",")})
 				 ORDER BY CASE m.session_id ${caseExpr} END ASC, m.seq ASC`,
 			)
 			.all(...lineage) as Record<string, unknown>[]
-		return rows.map(rowToMsg)
+		return rows.map((r) => JSON.parse(r.message as string) as ModelMessage)
 	}
 
 	async messageCount(sessionId: string): Promise<number> {
@@ -290,23 +199,21 @@ export class SessionStore {
 			.run(title, Date.now(), sessionId)
 	}
 
-	async replaceMessages(sessionId: string, msgs: Msg[]): Promise<void> {
+	async replaceMessages(sessionId: string, msgs: ModelMessage[]): Promise<void> {
 		if (msgs.length > 0) {
 			this.#ensurePersisted(sessionId)
 		}
 		this.#db.prepare("DELETE FROM messages WHERE session_id = ?").run(sessionId)
-		this.#db
-			.prepare("UPDATE sessions SET message_count = 0, updated = ? WHERE id = ?")
-			.run(Date.now(), sessionId)
 
+		const now = Date.now()
 		let seq = 0
 		for (const msg of msgs) {
 			seq++
-			await this.#insertMessage(sessionId, seq, msg)
+			this.#insert(sessionId, seq, msg, now)
 		}
 		this.#db
 			.prepare("UPDATE sessions SET message_count = ?, updated = ? WHERE id = ?")
-			.run(seq, Date.now(), sessionId)
+			.run(seq, now, sessionId)
 	}
 
 	async endSession(id: string, reason: string): Promise<void> {
@@ -372,58 +279,10 @@ export class SessionStore {
 		return ids
 	}
 
-	async #insertMessage(sessionId: string, seq: number, msg: Msg): Promise<void> {
-		const role = msg.role
-		let content: string | null = null
-		let toolCallId: string | null = null
-		let toolName: string | null = null
-		let toolArgs: string | null = null
-		let model: string | null = null
-		let provider: string | null = null
-		let usageInput = 0
-		let usageOutput = 0
-		let stopReason: string | null = null
-		let isError = 0
-
-		if (role === "user") {
-			content = serializeContent(msg.content)
-		} else if (role === "assistant") {
-			content = serializeContent(msg.content)
-			model = msg.model ?? null
-			provider = msg.provider ?? null
-			usageInput = msg.usage?.in ?? 0
-			usageOutput = msg.usage?.out ?? 0
-			stopReason = msg.stop ?? null
-			if (msg.error) isError = 1
-		} else if (role === "tool_result") {
-			content = serializeContent(msg.content)
-			toolCallId = msg.callId ?? null
-			toolName = msg.tool ?? null
-			toolArgs = msg.args ? JSON.stringify(msg.args) : null
-			isError = msg.isError ? 1 : 0
-		}
-
+	#insert(sessionId: string, seq: number, msg: ModelMessage, ts: number): void {
 		this.#db
-			.prepare(
-				`INSERT INTO messages (session_id, seq, role, content, tool_call_id, tool_name, tool_args, model, provider, usage_input, usage_output, stop_reason, is_error, ts)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			)
-			.run(
-				sessionId,
-				seq,
-				role,
-				content,
-				toolCallId,
-				toolName,
-				toolArgs,
-				model,
-				provider,
-				usageInput,
-				usageOutput,
-				stopReason,
-				isError,
-				msg.ts ?? Date.now(),
-			)
+			.prepare("INSERT INTO messages (session_id, seq, message, ts) VALUES (?, ?, ?, ?)")
+			.run(sessionId, seq, JSON.stringify(msg), ts)
 	}
 
 	async prune(): Promise<void> {

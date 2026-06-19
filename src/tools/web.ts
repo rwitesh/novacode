@@ -3,9 +3,10 @@
  * Uses DuckDuckGo HTML for search (no API key needed) and Node's built-in
  * fetch for reading URLs.
  */
-
-import { textPart } from "../content.ts"
-import type { Tool, ToolResult } from "../types.ts"
+import { tool } from "ai"
+import { z } from "zod"
+import { toToolResultOutput } from "../content.ts"
+import type { ToolResult } from "../types.ts"
 
 const MAX_CONTENT = 50_000
 
@@ -60,39 +61,32 @@ function htmlToText(html: string): string {
 	return text
 }
 
-export function webSearchTool(): Tool {
-	return {
-		def: {
-			name: "web_search",
-			description:
-				"Search the web using DuckDuckGo. Returns up to 10 results with titles, URLs, and snippets. Use this when you need information from the internet.",
-			parameters: {
-				type: "object",
-				properties: {
-					query: { type: "string", description: "Search query" },
-				},
-				required: ["query"],
-			},
-		},
-		async execute(args, signal): Promise<ToolResult> {
-			const query = args.query as string
+const USER_AGENT =
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+export const webSearchTool = () =>
+	tool({
+		description:
+			"Search the web using DuckDuckGo. Returns up to 10 results with titles, URLs, and snippets. Use this when you need information from the internet.",
+		inputSchema: z.object({
+			query: z.string().describe("Search query"),
+		}),
+		execute: async (args, { abortSignal }): Promise<ToolResult> => {
+			const query = args.query
 			if (!query.trim()) {
-				return { content: [textPart("Error: empty search query")], isError: true }
+				return { content: [{ type: "text", text: "Error: empty search query" }], isError: true }
 			}
 
 			try {
 				const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
 				const resp = await fetch(url, {
-					signal: signal ?? undefined,
-					headers: {
-						"User-Agent":
-							"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-					},
+					signal: abortSignal ?? undefined,
+					headers: { "User-Agent": USER_AGENT },
 				})
 
 				if (!resp.ok) {
 					return {
-						content: [textPart(`Search failed: HTTP ${resp.status}`)],
+						content: [{ type: "text", text: `Search failed: HTTP ${resp.status}` }],
 						isError: true,
 					}
 				}
@@ -100,7 +94,6 @@ export function webSearchTool(): Tool {
 				const html = await resp.text()
 
 				// Split HTML into blocks by result__body to isolate each search result safely
-				const blocks: string[] = []
 				const containerRegex = /<div[^>]*class="[^"]*result__body[^"]*"[^>]*>/gi
 				const indices: number[] = []
 				for (const match of html.matchAll(containerRegex)) {
@@ -108,7 +101,7 @@ export function webSearchTool(): Tool {
 						indices.push(match.index)
 					}
 				}
-
+				const blocks: string[] = []
 				if (indices.length > 0) {
 					for (let i = 0; i < indices.length; i++) {
 						const start = indices[i]!
@@ -136,7 +129,6 @@ export function webSearchTool(): Tool {
 					// DuckDuckGo wraps URLs through a redirect; extract the actual URL
 					let cleanUrl = rawUrl
 					try {
-						// Prepend protocol/host if DuckDuckGo returns a relative path or protocol-relative URL
 						const urlToParse = rawUrl.startsWith("//")
 							? `https:${rawUrl}`
 							: rawUrl.startsWith("/")
@@ -152,59 +144,48 @@ export function webSearchTool(): Tool {
 				}
 
 				if (results.length === 0) {
-					return { content: [textPart("No results found.")], isError: false }
+					return { content: [{ type: "text", text: "No results found." }], isError: false }
 				}
 
-				return {
-					content: [textPart(results.join("\n\n"))],
-					isError: false,
-				}
+				return { content: [{ type: "text", text: results.join("\n\n") }], isError: false }
 			} catch (e) {
 				const msg = (e as Error).message
 				if (msg.includes("abort")) {
-					return { content: [textPart("Search aborted.")], isError: true }
+					return { content: [{ type: "text", text: "Search aborted." }], isError: true }
 				}
 				return {
-					content: [textPart(`Search error: ${msg}`)],
+					content: [{ type: "text", text: `Search error: ${msg}` }],
 					isError: true,
 				}
 			}
 		},
-	}
-}
+		toModelOutput: ({ output }) => toToolResultOutput(output),
+	})
 
-export function webFetchTool(): Tool {
-	return {
-		def: {
-			name: "web_fetch",
-			description:
-				"Fetch and read the content of a web page. Returns the page text with HTML tags stripped. Useful for reading documentation, articles, or API references.",
-			parameters: {
-				type: "object",
-				properties: {
-					url: { type: "string", description: "URL to fetch" },
-				},
-				required: ["url"],
-			},
-		},
-		async execute(args, signal): Promise<ToolResult> {
-			const url = args.url as string
+export const webFetchTool = () =>
+	tool({
+		description:
+			"Fetch and read the content of a web page. Returns the page text with HTML tags stripped. Useful for reading documentation, articles, or API references.",
+		inputSchema: z.object({
+			url: z.string().describe("URL to fetch"),
+		}),
+		execute: async (args, { abortSignal }): Promise<ToolResult> => {
+			const url = args.url
 			if (!url.trim()) {
-				return { content: [textPart("Error: empty URL")], isError: true }
+				return { content: [{ type: "text", text: "Error: empty URL" }], isError: true }
 			}
 
 			try {
 				new URL(url)
 			} catch {
-				return { content: [textPart(`Error: invalid URL: ${url}`)], isError: true }
+				return { content: [{ type: "text", text: `Error: invalid URL: ${url}` }], isError: true }
 			}
 
 			try {
 				const resp = await fetch(url, {
-					signal: signal ?? undefined,
+					signal: abortSignal ?? undefined,
 					headers: {
-						"User-Agent":
-							"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+						"User-Agent": USER_AGENT,
 						Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 					},
 					redirect: "follow",
@@ -212,7 +193,9 @@ export function webFetchTool(): Tool {
 
 				if (!resp.ok) {
 					return {
-						content: [textPart(`Fetch failed: HTTP ${resp.status} ${resp.statusText}`)],
+						content: [
+							{ type: "text", text: `Fetch failed: HTTP ${resp.status} ${resp.statusText}` },
+						],
 						isError: true,
 					}
 				}
@@ -228,24 +211,23 @@ export function webFetchTool(): Tool {
 					body.trim().toLowerCase().startsWith("<html")
 
 				if (isHtml) {
-					const text = htmlToText(body)
-					return { content: [textPart(text)], isError: false }
+					return { content: [{ type: "text", text: htmlToText(body) }], isError: false }
 				}
 
 				// For plain text, JSON, etc. return as-is (truncated if needed)
 				const truncated =
 					body.length > MAX_CONTENT ? `${body.slice(0, MAX_CONTENT)}\n…truncated` : body
-				return { content: [textPart(truncated)], isError: false }
+				return { content: [{ type: "text", text: truncated }], isError: false }
 			} catch (e) {
 				const msg = (e as Error).message
 				if (msg.includes("abort")) {
-					return { content: [textPart("Fetch aborted.")], isError: true }
+					return { content: [{ type: "text", text: "Fetch aborted." }], isError: true }
 				}
 				return {
-					content: [textPart(`Fetch error: ${msg}`)],
+					content: [{ type: "text", text: `Fetch error: ${msg}` }],
 					isError: true,
 				}
 			}
 		},
-	}
-}
+		toModelOutput: ({ output }) => toToolResultOutput(output),
+	})

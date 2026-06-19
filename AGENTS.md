@@ -4,9 +4,9 @@ Project knowledge for coding agents working on this codebase.
 
 ## Project Overview
 
-Novacode is an open-source, multi-provider coding agent built with Node.js. It follows a ReAct agent loop pattern (Reason → Act → Observe).
+Novacode is an open-source, multi-provider coding agent built with Node.js and the Vercel AI SDK. The agent loop, streaming, and tool calling are handled by AI SDK primitives (`ToolLoopAgent`, `streamText`, `tool()`).
 
-**Stack:** Node.js (>= 24), TypeScript, `node:sqlite` (built-in) for session storage, `node:fs/promises` for file I/O, `node:child_process` for spawning processes, native `fetch` for HTTP and LLM streaming.
+**Stack:** Node.js (>= 24), TypeScript, Vercel AI SDK (`ai` + `@ai-sdk/openai|anthropic|google`) for LLM/streaming/tools, `zod` for tool input schemas, `node:sqlite` (built-in) for session storage, `node:fs/promises` for file I/O, `node:child_process` for spawning processes.
 
 **Config dir:** `~/.novacode/` (config.json, auth.json, state.db)
 
@@ -29,81 +29,78 @@ npm run check        # build + typecheck + lint + test (run this before committi
 ```
 src/
 ├── main.ts              # entry: CLI parse → onboarding → interactive mode
-├── types.ts             # ALL shared types (single source of truth)
-├── eventStream.ts       # EventStream<T,R> — generic push-based async event stream
+├── types.ts             # NovaCode-specific types only (config, session, policy, CLI plumbing).
+│                        # AI message/tool/usage types come from the `ai` package — do NOT redeclare them.
+├── providers.ts         # AI SDK provider factory + HIGH reasoning defaults (replaces former src/llm/)
 ├── bootstrap.ts         # startup resource loader (skills discovery + AGENTS.md)
-├── content.ts           # textPart content-part factory
+├── content.ts           # tool-result ↔ AI SDK ToolResultOutput converters + textPart helper
 ├── paths.ts             # path relativization helpers (getRelativeIfInside, makeRelative, shortenPath)
 ├── format.ts            # display formatters (formatToolArgs, formatRelativeTime)
-├── tokens.ts            # estimateTokens — rough token estimation
+├── tokens.ts            # estimateTokens — rough token estimation over ModelMessage[]
 ├── update.ts            # version check + self-update
 ├── config/
 │   ├── store.ts         # config.json (settings) + auth.json (API keys, 0600)
 │   └── catalog.ts       # static provider + model catalog (GLM, Gemini, DeepSeek, OpenAI, Anthropic)
-├── llm/
-│   ├── stream.ts        # provider registry (by id) + AgentEvent bridge + effort helpers
-│   ├── http.ts          # streaming HTTP client built on native fetch (SSE)
-│   ├── base/
-│   │   ├── openai.ts    # OpenAI Chat Completions stream engine (createStream)
-│   │   └── anthropic.ts # Anthropic Messages stream engine (createStream)
-│   ├── glm.ts           # plugin → base/openai (reasoning_effort max..low + thinking toggle)
-│   ├── deepseek.ts      # plugin → base/openai (effort clamped high/max)
-│   ├── openai.ts        # plugin → base/openai (reasoning_effort low..high)
-│   ├── gemini.ts        # plugin: standalone (thinkingLevel LOW/MEDIUM/HIGH)
-│   └── anthropic.ts     # plugin → base/anthropic (output_config.effort)
 ├── agent/
-│   ├── loop.ts          # pure ReAct loop function (run)
-│   ├── agent.ts         # stateful Agent class wrapping loop
+│   ├── agent.ts         # stateful Agent class wrapping an AI SDK ToolLoopAgent
+│   ├── approval.ts      # withApproval(tools, policy) — gates tool execute, separate from tool defs
 │   └── prompt.ts        # system prompt builder
 ├── tools/
-│   ├── index.ts         # tool factory exports
-│   ├── fs.ts            # read, write, edit tools
+│   ├── index.ts         # getAllTools(cwd) → AI SDK ToolSet
+│   ├── fs.ts            # read, write, edit tools (AI SDK tool() + zod inputSchema)
 │   ├── shell.ts         # bash tool
-│   ├── search.ts        # glob, grep, ls tools
-│   ├── git.ts           # git status, log, diff tools
+│   ├── search.ts        # glob, grep, ls, tree tools
+│   ├── git.ts           # git status, log, diff, add, commit tool
 │   └── web.ts           # web fetch/search tool
 ├── session/
 │   ├── db.ts           # node:sqlite wrapper: WAL mode, schema init, singleton
-│   ├── store.ts        # SessionStore class backed by SQLite (sessions + messages tables)
-│   └── compact.ts      # session splitting compaction (end + create continuation)
+│   ├── store.ts        # SessionStore class: stores/restores canonical ModelMessage[] as JSON
+│   └── compact.ts      # session splitting compaction (generateText summary → continuation)
+├── policy/
+│   └── engine.ts       # PolicyEngine — deterministic secret-block + risk classify + approver gate
 ├── onboarding/
 │   └── wizard.ts        # first-run setup using Ink standalone prompts
 ├── commands/            # slash command handlers (/models, /providers, /compact, etc)
 ├── skills/              # skill discovery + dedupe/grouping
 └── tui/
-    ├── app.tsx          # interactive TUI application using Ink (orchestrator)
+    ├── app.tsx          # interactive TUI application using Ink (consumes streamText fullStream)
     ├── prompts.tsx      # Ink-based select/password/confirm prompt components
-    ├── markdown.ts      # markdown terminal renderer
+    ├── markdown/        # markdown terminal renderer
     ├── hooks/
-    │   └── useStreamBuffer.ts # frame-rate-limited streaming text buffer hook
+    │   ├── useStreamBuffer.ts # frame-rate-limited streaming text buffer hook
+    │   └── useTip.ts
     └── components/
-        ├── message.tsx      # Message renderer + hasMeaningfulContent filter
+        ├── message.tsx      # ModelMessage renderer + hasMeaningfulContent filter
         ├── liveArea.tsx     # Spinner, Cursor, LiveArea (streaming/busy display)
         └── statusBar.tsx    # StatusBar (footer: hints, token usage, model id)
 ```
+
+**Stack:** Node.js (>= 24), TypeScript, the Vercel AI SDK (`ai` + `@ai-sdk/openai|anthropic|google`) for all LLM/streaming/tool-calling, `zod` for tool input schemas, `node:sqlite` (built-in) for session storage, `node:fs/promises` for file I/O, `node:child_process` for spawning processes.
+
 ## Agent Loop & API Flow
 
-Novacode follows a ReAct (Reason → Act → Observe) pattern:
+NovaCode is built on AI SDK primitives — there is no hand-rolled streaming, SSE parser, tool dispatcher, or agent loop:
 
-1. **Pure loop** – `src/agent/loop.ts` builds the prompt, streams the LLM via a provider, parses the reply, and returns an updated `AgentState` plus an `Action`.
-2. **Stateful wrapper** – `src/agent/agent.ts` holds the mutable state, repeatedly calls `loop.run`, executes any tool actions, and feeds the tool result back as the next observation.
-3. **LLM streaming** – `src/llm/stream.ts` is a provider-id registry of `ProviderStream` plugins (`glm.ts`, `gemini.ts`, `deepseek.ts`, `openai.ts`, `anthropic.ts`). Each plugin is thin config; the actual streaming lives in pluggable engines under `src/llm/base/` (`openai.ts`, `anthropic.ts`). GLM/DeepSeek/OpenAI share one engine parameterized by effort mapping + thinking toggle.
-4. **Tool execution** – the toolbox (`src/tools/`) runs the requested tool, returns a `ToolResult`, which becomes the next observation for the loop.
-5. The loop repeats until the LLM emits a final‑answer marker or an error aborts.
+1. **ToolLoopAgent** – `src/agent/agent.ts` builds a `ToolLoopAgent` per turn (`model`, `instructions`, `tools`, `stopWhen: stepCountIs(50)`, `providerOptions`). The SDK runs the multi-step tool loop itself via `agent.stream({ messages, abortSignal, onStepFinish })`.
+2. **Providers** – `src/providers.ts` maps a provider id to an AI SDK `LanguageModel` (`createOpenAI` for openai/glm/deepseek, `createAnthropic`, `createGoogleGenerativeAI`) and attaches a HIGH reasoning `providerOption` for reasoning-capable models. GLM/DeepSeek are OpenAI-compatible.
+3. **Tools** – `src/tools/` defines each tool with `tool({ description, inputSchema: z.object(...), execute, toModelOutput })`. Tools return a NovaCode `ToolResult`; `toModelOutput` (in `content.ts`) converts it to an AI SDK `ToolResultOutput`, preserving images and surfacing errors.
+4. **Approval** – `src/agent/approval.ts` `withApproval(tools, policy)` wraps each tool's `execute` so `PolicyEngine.check` runs first. A denial returns an error result the model sees — single-stream, no extra model round-trip. Policy is a separate concern from tool definitions.
+5. **Streaming UI** – `src/tui/app.tsx` consumes `result.fullStream` parts (`text-delta`, `reasoning-delta`, `tool-call`, `tool-result`, `error`) directly.
+6. **Persistence** – `ModelMessage[]` is the single canonical message format everywhere. `onStepFinish` appends each step's `response.messages` + usage to the store; on resume, stored `ModelMessage[]` flow straight back into `streamText({ messages })`. Tool calls, tool results, and reasoning round-trip losslessly.
 
-This succinct flow keeps side‑effects (tool calls, HTTP) out of the pure loop, satisfying the “pure functions first” rule.
 ## Design Rules
 
-1. **One type file** — `src/types.ts` is the single source of truth. No scattered interfaces. If you need a new type, add it there.
-2. **Pure functions first** — `loop.run()` is a function, not a method. Agent class wraps state. New logic goes in standalone functions unless it needs persistent state.
+1. **One type file** — `src/types.ts` is the single source of truth for NovaCode-specific types (config, session, policy, CLI plumbing). AI message/tool/usage types are NOT redeclared — import them from `ai` (`ModelMessage`, `ToolSet`, `LanguageModel`, etc.).
+2. **AI SDK primitives first** — Use `ToolLoopAgent`/`streamText`/`generateText` + `tool()` + zod schemas. Do not hand-roll streaming, SSE parsing, tool dispatch, or agent loops. The Agent class wraps state and delegates the loop to the SDK.
 3. **Node.js APIs** — `node:fs/promises` for file I/O, `node:child_process` for spawning processes.
-4. **Lazy providers** — SDKs are dynamically imported only when needed.
+4. **One canonical message format** — `ModelMessage[]` flows unchanged through agent → store → restore → UI. Never convert to/from a custom message type.
 5. **No comments unless "why"** — code explains "what", comments explain "why". Do not add JSDoc to every function. Only add JSDoc when the function's purpose is non-obvious or has subtle behavior.
-6. **Short names** — `Msg` not `AgentMessage`, `StreamFn` not `StreamFunction`.
+6. **Short names** — `ProviderDef` not `ProviderDefinition`.
 7. **Private fields** — `#field` not `private field`. True encapsulation.
 8. **Single rendering context** — All interactive UI (chat, prompts, menus) runs inside one Ink app. Never unmount/remount Ink to switch between modes. Use state-based mode switching instead.
 9. **Synchronous Session Store** — The `SessionStore` class is backed by SQLite (`~/.novacode/state.db`) via `node:sqlite` (synchronous `DatabaseSync`). Store methods are `async` for API compatibility but execute synchronously internally. All store methods must be awaited.
-10. **CLI vs Interactive Inputs** — Outside interactive TUI mode, use `--` flags exclusively (e.g. `nova --sessions ls`, `nova --sessions rm <id>`, `nova --resume`). Subcommand style (e.g., `nova sessions ls`) is not permitted. Inside interactive mode, use `/` commands exclusively (e.g. `/compact`, `/sessions`).
+10. **Approval is separate from tools** — Tool definitions know nothing about policy. `withApproval(tools, policy)` (`src/agent/approval.ts`) gates execution at wiring time. The `PolicyEngine` is the single approval authority.
+11. **CLI vs Interactive Inputs** — Outside interactive TUI mode, use `--` flags exclusively (e.g. `nova --sessions ls`, `nova --sessions rm <id>`, `nova --resume`). Subcommand style (e.g., `nova sessions ls`) is not permitted. Inside interactive mode, use `/` commands exclusively (e.g. `/compact`, `/sessions`).
 
 ## Coding Conventions
 
@@ -161,18 +158,19 @@ These rules prevent the most common mistakes AI agents make when editing this co
 - **Use `type` imports for types.** `import type { Foo }` not `import { Foo }` when only the type is needed. This is enforced by `verbatimModuleSyntax` in tsconfig.
 - **No `any` without justification.** Use `unknown` and narrow with type guards. If you must use `any`, add a `// biome-ignore` comment explaining why.
 - **Trust the type system.** Don't add runtime checks that duplicate what TypeScript already enforces. Don't add `!` non-null assertions — fix the type instead.
-- **Use discriminated unions.** Our `Msg`, `ContentPart`, and `AgentEvent` types use `type` discriminants. Pattern-match on them with `if (x.type === "...")` and TypeScript will narrow automatically.
+- **Use discriminated unions.** AI SDK message parts (`ModelMessage`, `ToolCallPart`, `ToolResultPart`) and our `PromptMode` use `type` discriminants. Pattern-match on them with `if (x.type === "...")` / `if (x.role === "...")` and TypeScript will narrow automatically.
 
 ### Module Boundaries
 
-- **`types.ts`** — types only. No runtime code, no imports from other src files.
+- **`types.ts`** — NovaCode-specific types only. No runtime code, no imports from other src files. AI message/tool/usage types are imported from `ai`, never redeclared here.
+- **`providers.ts`** — AI SDK provider/model construction + reasoning defaults. No agent logic, no tool definitions.
 - **`config/`** — reads/writes config files (`store.ts`) plus the static provider/model catalog (`catalog.ts`). No agent or streaming logic.
-- **`llm/`** — streaming and API logic only. No agent logic, no tool definitions.
-- **`tools/`** — tool definitions only. No agent loop logic. Tools receive `cwd` as a parameter, they don't read config.
-- **`agent/`** — orchestrates LLM streams and tools. No direct HTTP calls or file I/O (those live in tools and `llm/`).
+- **`tools/`** — AI SDK `tool()` definitions only. No agent loop logic, no policy. Tools receive `cwd` as a parameter, they don't read config.
+- **`agent/`** — `agent.ts` builds a `ToolLoopAgent` and delegates the loop to the SDK; `approval.ts` gates tool execution via `PolicyEngine`; `prompt.ts` builds the system prompt. No direct HTTP calls or file I/O (those live in tools).
+- **`policy/`** — the deterministic approval authority. No AI SDK dependency (operates on a local `PolicyCall` shape), no tool definitions.
 - **`commands/`** — slash command handlers. Receive a `Prompts` interface from the TUI for interactive menus. Never import Ink or render directly — use the injected `Prompts` object.
-- **`tui/`** — all rendering lives here. `app.tsx` owns the Ink app and exposes a `Prompts` implementation. `prompts.tsx` has reusable Ink prompt components plus standalone wrappers for onboarding (outside the main TUI).
-- **Cross-module imports go one direction:** `main → agent → llm`, `main → tools`, `main → config`, `main → tui`. Never `tools → agent` or `llm → agent` or `commands → tui`.
+- **`tui/`** — all rendering lives here. `app.tsx` owns the Ink app, consumes `streamText` `fullStream`, and exposes a `Prompts` implementation. `prompts.tsx` has reusable Ink prompt components plus standalone wrappers for onboarding (outside the main TUI).
+- **Cross-module imports go one direction:** `main → agent → providers`, `main → tools`, `main → config`, `main → tui`. Never `tools → agent` or `providers → agent` or `commands → tui`.
 
 ## Before Every Commit
 
@@ -185,7 +183,7 @@ These rules prevent the most common mistakes AI agents make when editing this co
 
 | Mistake | Correct approach |
 |---------|-----------------|
-| Adding a type to a tool file instead of `types.ts` | Put all shared types in `types.ts` |
+| Adding an AI message/tool type to `types.ts` | Import it from `ai` (`ModelMessage`, `ToolSet`, etc.) — never redeclare |
 | Using `private field` instead of `#field` | Use `#field` for true private encapsulation |
 | Using `fs.readFile` / `fs.writeFile` (callback style) | Use `node:fs/promises` (`readFile`, `writeFile`) |
 | Adding `import { Foo }` for a type | Use `import type { Foo }` |
@@ -196,5 +194,6 @@ These rules prevent the most common mistakes AI agents make when editing this co
 | Using callback-style `node:fs` | Use `node:fs/promises` for all file I/O. Prefer async APIs. |
 | Using JSONL files for session storage | All session data lives in SQLite (`state.db`). Use `SessionStore` methods. |
 | Mutating existing session/message rows in SQLite | Use session splitting: `endSession` + `createContinuation`. Never UPDATE old rows. |
-| Creating a new interface in a tool file | Add it to `types.ts` if shared, or keep it local with a clear `/** ... */` doc if it's file-scoped |
+| Coupling policy/approval into a tool definition | Keep tools policy-agnostic; gate via `withApproval(tools, policy)` at wiring time |
+| Hand-rolling streaming/SSE/tool dispatch | Use AI SDK primitives (`ToolLoopAgent`, `streamText`, `tool()`) |
 | Adding a new prompt/interactive library (e.g. clack, inquirer, prompts) | Use the existing Ink-based `Prompts` interface in `tui/prompts.tsx`. All interactive UI runs inside one Ink app. |

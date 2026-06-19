@@ -2,11 +2,13 @@ import { execSync } from "node:child_process"
 import { mkdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import type { Tool } from "ai"
 import { describe, expect, it } from "vitest"
 import { editTool, readTool, writeTool } from "../src/tools/fs.ts"
 import { gitTool } from "../src/tools/git.ts"
 import { globTool, grepTool, lsTool, treeTool } from "../src/tools/search.ts"
 import { bashTool } from "../src/tools/shell.ts"
+import type { ToolResult } from "../src/types.ts"
 
 const mkdtemp = async () => {
 	const dir = join(tmpdir(), `nova-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
@@ -14,13 +16,20 @@ const mkdtemp = async () => {
 	return dir
 }
 
+// Tools return Promise<ToolResult>; await and narrow away the AsyncIterable union.
+// biome-ignore lint/suspicious/noExplicitAny: tool input types vary across tools; the helper is generic
+async function run(tool: Tool<any, ToolResult>, input: unknown): Promise<ToolResult> {
+	const out = await tool.execute!(input as never, { toolCallId: "test", messages: [] })
+	return out as ToolResult
+}
+
 describe("read tool", () => {
 	it("returns file content", async () => {
 		const cwd = await mkdtemp()
 		const read = readTool(cwd)
 		const write = writeTool(cwd)
-		await write.execute({ path: "a.txt", content: "line1\nline2\nline3" })
-		const result = await read.execute({ path: "a.txt" })
+		await run(write, { path: "a.txt", content: "line1\nline2\nline3" })
+		const result = await run(read, { path: "a.txt" })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
 		expect(t.type).toBe("text")
@@ -36,8 +45,8 @@ describe("read tool", () => {
 		const cwd = await mkdtemp()
 		const read = readTool(cwd)
 		const write = writeTool(cwd)
-		await write.execute({ path: "b.txt", content: "a\nb\nc\nd\ne" })
-		const result = await read.execute({ path: "b.txt", offset: 2, limit: 2 })
+		await run(write, { path: "b.txt", content: "a\nb\nc\nd\ne" })
+		const result = await run(read, { path: "b.txt", offset: 2, limit: 2 })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
 		if (t.type === "text") {
@@ -53,8 +62,8 @@ describe("read tool", () => {
 		const read = readTool(cwd)
 		const write = writeTool(cwd)
 		const lines = Array.from({ length: 20 }, (_, i) => `line${i}`).join("\n")
-		await write.execute({ path: "c.txt", content: lines })
-		const result = await read.execute({ path: "c.txt", limit: 5 })
+		await run(write, { path: "c.txt", content: lines })
+		const result = await run(read, { path: "c.txt", limit: 5 })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
 		if (t.type === "text") {
@@ -66,7 +75,7 @@ describe("read tool", () => {
 	it("returns error for missing file", async () => {
 		const cwd = await mkdtemp()
 		const read = readTool(cwd)
-		const result = await read.execute({ path: "nonexistent.txt" })
+		const result = await run(read, { path: "nonexistent.txt" })
 		expect(result.isError).toBe(true)
 		await rm(cwd, { recursive: true })
 	})
@@ -77,16 +86,16 @@ describe("edit tool", () => {
 		const cwd = await mkdtemp()
 		const write = writeTool(cwd)
 		const edit = editTool(cwd)
-		await write.execute({ path: "edit.txt", content: "hello world" })
+		await run(write, { path: "edit.txt", content: "hello world" })
 
-		const result = await edit.execute({
+		const result = await run(edit, {
 			path: "edit.txt",
 			edits: [{ oldText: "hello", newText: "goodbye" }],
 		})
 		expect(result.isError).toBe(false)
 
 		const read = readTool(cwd)
-		const after = await read.execute({ path: "edit.txt" })
+		const after = await run(read, { path: "edit.txt" })
 		const t = after.content[0]!
 		if (t.type === "text") {
 			expect(t.text).toContain("goodbye world")
@@ -99,9 +108,9 @@ describe("edit tool", () => {
 		const cwd = await mkdtemp()
 		const write = writeTool(cwd)
 		const edit = editTool(cwd)
-		await write.execute({ path: "multi.txt", content: "foo bar baz" })
+		await run(write, { path: "multi.txt", content: "foo bar baz" })
 
-		const result = await edit.execute({
+		const result = await run(edit, {
 			path: "multi.txt",
 			edits: [
 				{ oldText: "foo", newText: "one" },
@@ -111,7 +120,7 @@ describe("edit tool", () => {
 		expect(result.isError).toBe(false)
 
 		const read = readTool(cwd)
-		const after = await read.execute({ path: "multi.txt" })
+		const after = await run(read, { path: "multi.txt" })
 		const t = after.content[0]!
 		if (t.type === "text") {
 			expect(t.text).toContain("one bar three")
@@ -123,9 +132,9 @@ describe("edit tool", () => {
 		const cwd = await mkdtemp()
 		const write = writeTool(cwd)
 		const edit = editTool(cwd)
-		await write.execute({ path: "ambig.txt", content: "aaa aaa bbb" })
+		await run(write, { path: "ambig.txt", content: "aaa aaa bbb" })
 
-		const result = await edit.execute({
+		const result = await run(edit, {
 			path: "ambig.txt",
 			edits: [{ oldText: "aaa", newText: "ccc" }],
 		})
@@ -137,9 +146,9 @@ describe("edit tool", () => {
 		const cwd = await mkdtemp()
 		const write = writeTool(cwd)
 		const edit = editTool(cwd)
-		await write.execute({ path: "nofind.txt", content: "hello" })
+		await run(write, { path: "nofind.txt", content: "hello" })
 
-		const result = await edit.execute({
+		const result = await run(edit, {
 			path: "nofind.txt",
 			edits: [{ oldText: "xyz", newText: "abc" }],
 		})
@@ -152,7 +161,7 @@ describe("bash tool", () => {
 	it("runs a command and returns output", async () => {
 		const cwd = await mkdtemp()
 		const bash = bashTool(cwd)
-		const result = await bash.execute({ command: "echo hello" })
+		const result = await run(bash, { command: "echo hello" })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
 		if (t.type === "text") {
@@ -165,7 +174,7 @@ describe("bash tool", () => {
 	it("captures stderr", async () => {
 		const cwd = await mkdtemp()
 		const bash = bashTool(cwd)
-		const result = await bash.execute({ command: "echo err >&2 && exit 1" })
+		const result = await run(bash, { command: "echo err >&2 && exit 1" })
 		expect(result.isError).toBe(true)
 		const t = result.content[0]!
 		if (t.type === "text") {
@@ -178,7 +187,7 @@ describe("bash tool", () => {
 	it("kills process on timeout", async () => {
 		const cwd = await mkdtemp()
 		const bash = bashTool(cwd)
-		const result = await bash.execute({ command: "sleep 10", timeout: 1 })
+		const result = await run(bash, { command: "sleep 10", timeout: 1 })
 		expect(result.isError).toBe(true)
 		const t = result.content[0]!
 		if (t.type === "text") {
@@ -192,12 +201,12 @@ describe("glob tool", () => {
 	it("finds files by pattern", async () => {
 		const cwd = await mkdtemp()
 		const write = writeTool(cwd)
-		await write.execute({ path: "a.ts", content: "" })
-		await write.execute({ path: "b.ts", content: "" })
-		await write.execute({ path: "c.js", content: "" })
+		await run(write, { path: "a.ts", content: "" })
+		await run(write, { path: "b.ts", content: "" })
+		await run(write, { path: "c.js", content: "" })
 
 		const glob = globTool(cwd)
-		const result = await glob.execute({ pattern: "**/*.ts" })
+		const result = await run(glob, { pattern: "**/*.ts" })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
 		if (t.type === "text") {
@@ -213,10 +222,10 @@ describe("grep tool", () => {
 	it("finds matching lines", async () => {
 		const cwd = await mkdtemp()
 		const write = writeTool(cwd)
-		await write.execute({ path: "search.txt", content: "hello world\nfoo bar\nhello again" })
+		await run(write, { path: "search.txt", content: "hello world\nfoo bar\nhello again" })
 
 		const grep = grepTool(cwd)
-		const result = await grep.execute({ pattern: "hello" })
+		const result = await run(grep, { pattern: "hello" })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
 		if (t.type === "text") {
@@ -230,12 +239,12 @@ describe("ls tool", () => {
 	it("lists directory contents", async () => {
 		const cwd = await mkdtemp()
 		const write = writeTool(cwd)
-		await write.execute({ path: "file1.txt", content: "" })
-		await write.execute({ path: "file2.txt", content: "" })
+		await run(write, { path: "file1.txt", content: "" })
+		await run(write, { path: "file2.txt", content: "" })
 		await mkdir(join(cwd, "subdir"), { recursive: true })
 
 		const ls = lsTool(cwd)
-		const result = await ls.execute({ path: "." })
+		const result = await run(ls, { path: "." })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
 		if (t.type === "text") {
@@ -251,16 +260,16 @@ describe("tree tool", () => {
 	it("renders visual directory tree", async () => {
 		const cwd = await mkdtemp()
 		const write = writeTool(cwd)
-		await write.execute({ path: "file.txt", content: "" })
+		await run(write, { path: "file.txt", content: "" })
 		await mkdir(join(cwd, "folder"), { recursive: true })
-		await write.execute({ path: "folder/subfile.txt", content: "" })
+		await run(write, { path: "folder/subfile.txt", content: "" })
 
 		// tree ignores node_modules and .git, let's verify it ignores node_modules
 		await mkdir(join(cwd, "node_modules"), { recursive: true })
-		await write.execute({ path: "node_modules/dep.js", content: "" })
+		await run(write, { path: "node_modules/dep.js", content: "" })
 
 		const tree = treeTool(cwd)
-		const result = await tree.execute({ path: "." })
+		const result = await run(tree, { path: "." })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
 		if (t.type === "text") {
@@ -282,7 +291,7 @@ describe("git tool", () => {
 		execSync("git init", { cwd, stdio: "ignore" })
 
 		const git = gitTool(cwd)
-		const result = await git.execute({ action: "status" })
+		const result = await run(git, { action: "status" })
 
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
@@ -295,7 +304,7 @@ describe("git tool", () => {
 	it("rejects disallowed commands", async () => {
 		const cwd = await mkdtemp()
 		const git = gitTool(cwd)
-		const result = await git.execute({ action: "push" }) // disallowed
+		const result = await run(git, { action: "push" }) // disallowed
 
 		expect(result.isError).toBe(true)
 		const t = result.content[0]!

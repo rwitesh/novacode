@@ -2,28 +2,24 @@
  * Tool for executing shell commands within the project root.
  * Supports timeouts and output truncation to protect the context window.
  */
-import { spawn } from "node:child_process"
-import { textPart } from "../content.ts"
-import type { Tool, ToolResult } from "../types.ts"
 
-export function bashTool(cwd: string): Tool {
-	return {
-		def: {
-			name: "bash",
-			description:
-				"Execute a shell command. Returns stdout and stderr. Timeout after N seconds (default 120).",
-			parameters: {
-				type: "object",
-				properties: {
-					command: { type: "string", description: "Shell command to run" },
-					timeout: { type: "number", description: "Timeout in seconds (default 120)" },
-				},
-				required: ["command"],
-			},
-		},
-		async execute(args, signal): Promise<ToolResult> {
-			const command = args.command as string
-			const timeoutMs = (Number(args.timeout) || 120) * 1000
+import { spawn } from "node:child_process"
+import { tool } from "ai"
+import { z } from "zod"
+import { toToolResultOutput } from "../content.ts"
+import type { ToolResult } from "../types.ts"
+
+export const bashTool = (cwd: string) =>
+	tool({
+		description:
+			"Execute a shell command. Returns stdout and stderr. Timeout after N seconds (default 120).",
+		inputSchema: z.object({
+			command: z.string().describe("Shell command to run"),
+			timeout: z.number().optional().describe("Timeout in seconds (default 120)"),
+		}),
+		execute: async (args, { abortSignal }): Promise<ToolResult> => {
+			const command = args.command
+			const timeoutMs = (args.timeout ?? 120) * 1000
 
 			try {
 				const proc = spawn("sh", ["-c", command], { cwd, stdio: ["ignore", "pipe", "pipe"] })
@@ -51,7 +47,7 @@ export function bashTool(cwd: string): Tool {
 					proc.stdout.destroy()
 					proc.stderr.destroy()
 				}
-				signal?.addEventListener("abort", onAbort, { once: true })
+				abortSignal?.addEventListener("abort", onAbort, { once: true })
 
 				let exitCode: number
 				try {
@@ -61,7 +57,7 @@ export function bashTool(cwd: string): Tool {
 					})
 				} finally {
 					clearTimeout(timer)
-					signal?.removeEventListener("abort", onAbort)
+					abortSignal?.removeEventListener("abort", onAbort)
 				}
 
 				// Prevent context-window blowout from noisy commands
@@ -77,13 +73,13 @@ export function bashTool(cwd: string): Tool {
 				if (killed) out += `\n[timeout after ${timeoutMs / 1000}s]`
 				out += `\n[exit ${exitCode}]`
 
-				return { content: [textPart(out)], isError: exitCode !== 0 || killed }
+				return { content: [{ type: "text", text: out }], isError: exitCode !== 0 || killed }
 			} catch (e) {
 				return {
-					content: [textPart(`Error: ${(e as Error).message}`)],
+					content: [{ type: "text", text: `Error: ${(e as Error).message}` }],
 					isError: true,
 				}
 			}
 		},
-	}
-}
+		toModelOutput: ({ output }) => toToolResultOutput(output),
+	})

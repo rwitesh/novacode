@@ -1,5 +1,7 @@
+import type { Tool } from "ai"
 import { describe, expect, it } from "vitest"
 import { webFetchTool, webSearchTool } from "../src/tools/web.ts"
+import type { ToolResult } from "../src/types.ts"
 
 const mockFetch = (responseFn: (input: unknown, init?: unknown) => Promise<Response>) => {
 	const originalFetch = globalThis.fetch
@@ -7,6 +9,12 @@ const mockFetch = (responseFn: (input: unknown, init?: unknown) => Promise<Respo
 	return () => {
 		globalThis.fetch = originalFetch
 	}
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: tool input types vary; helper is generic
+async function run(tool: Tool<any, ToolResult>, input: unknown): Promise<ToolResult> {
+	const out = await tool.execute!(input as never, { toolCallId: "test", messages: [] })
+	return out as ToolResult
 }
 
 describe("web_search tool", () => {
@@ -35,7 +43,7 @@ describe("web_search tool", () => {
 
 		try {
 			const search = webSearchTool()
-			const result = await search.execute({ query: "typescript" })
+			const result = await run(search, { query: "typescript" })
 			expect(result.isError).toBe(false)
 
 			const text = result.content[0]!
@@ -63,7 +71,7 @@ describe("web_search tool", () => {
 
 		try {
 			const search = webSearchTool()
-			const result = await search.execute({ query: "nonexistentstuff" })
+			const result = await run(search, { query: "nonexistentstuff" })
 			expect(result.isError).toBe(false)
 			const text = result.content[0]!
 			if (text.type === "text") {
@@ -76,7 +84,7 @@ describe("web_search tool", () => {
 
 	it("returns error for empty search query", async () => {
 		const search = webSearchTool()
-		const result = await search.execute({ query: "   " })
+		const result = await run(search, { query: "   " })
 		expect(result.isError).toBe(true)
 		const text = result.content[0]!
 		if (text.type === "text") {
@@ -91,7 +99,7 @@ describe("web_search tool", () => {
 
 		try {
 			const search = webSearchTool()
-			const result = await search.execute({ query: "typescript" })
+			const result = await run(search, { query: "typescript" })
 			expect(result.isError).toBe(true)
 			const text = result.content[0]!
 			if (text.type === "text") {
@@ -129,7 +137,7 @@ describe("web_fetch tool", () => {
 
 		try {
 			const fetchTool = webFetchTool()
-			const result = await fetchTool.execute({ url: "https://example.com/page" })
+			const result = await run(fetchTool, { url: "https://example.com/page" })
 			expect(result.isError).toBe(false)
 
 			const text = result.content[0]!
@@ -165,7 +173,7 @@ describe("web_fetch tool", () => {
 
 		try {
 			const fetchTool = webFetchTool()
-			const result = await fetchTool.execute({ url: "https://example.com/api" })
+			const result = await run(fetchTool, { url: "https://example.com/api" })
 			expect(result.isError).toBe(false)
 			const text = result.content[0]!
 			if (text.type === "text") {
@@ -187,7 +195,7 @@ describe("web_fetch tool", () => {
 
 		try {
 			const fetchTool = webFetchTool()
-			const result = await fetchTool.execute({ url: "https://example.com/missing-header" })
+			const result = await run(fetchTool, { url: "https://example.com/missing-header" })
 			expect(result.isError).toBe(false)
 			const text = result.content[0]!
 			if (text.type === "text") {
@@ -200,7 +208,7 @@ describe("web_fetch tool", () => {
 
 	it("returns error for invalid URL syntax", async () => {
 		const fetchTool = webFetchTool()
-		const result = await fetchTool.execute({ url: "not-a-valid-url" })
+		const result = await run(fetchTool, { url: "not-a-valid-url" })
 		expect(result.isError).toBe(true)
 		const text = result.content[0]!
 		if (text.type === "text") {
@@ -215,7 +223,7 @@ describe("web_fetch tool", () => {
 
 		try {
 			const fetchTool = webFetchTool()
-			const result = await fetchTool.execute({ url: "https://example.com/404" })
+			const result = await run(fetchTool, { url: "https://example.com/404" })
 			expect(result.isError).toBe(true)
 			const text = result.content[0]!
 			if (text.type === "text") {

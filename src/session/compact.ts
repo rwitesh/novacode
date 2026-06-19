@@ -1,33 +1,28 @@
+import { generateText, type ModelMessage } from "ai"
 import { getProvider } from "../config/catalog.ts"
-import { stream } from "../llm/stream.ts"
+import { summarizeToolOutput } from "../content.ts"
+import { createModel, reasoningOpts } from "../providers.ts"
 import { estimateTokens } from "../tokens.ts"
-import type { CompactResult, Model, Msg } from "../types.ts"
+import type { CompactResult, Model } from "../types.ts"
 import type { SessionStore } from "./store.ts"
 
-function extractText(msg: Msg): string {
+function extractText(msg: ModelMessage): string {
+	if (msg.role === "tool") {
+		return msg.content
+			.map((p) => (p.type === "tool-result" ? summarizeToolOutput(p.output).text : ""))
+			.join("\n")
+	}
 	if (typeof msg.content === "string") return msg.content
 	return msg.content
-		.filter((c) => c.type === "text")
-		.map((c) => (c.type === "text" ? c.text : ""))
+		.filter((p) => p.type === "text")
+		.map((p) => (p.type === "text" ? p.text : ""))
 		.join("")
-}
-
-function estimateMsgTokens(msg: Msg): number {
-	let chars = 0
-	if (typeof msg.content === "string") {
-		chars += msg.content.length
-	} else if (Array.isArray(msg.content)) {
-		for (const part of msg.content) {
-			if (part.type === "text") chars += part.text.length
-		}
-	}
-	return Math.ceil(chars / 4)
 }
 
 export async function compact(
 	store: SessionStore,
 	sessionId: string,
-	messages: Msg[],
+	messages: ModelMessage[],
 	model: Model,
 	apiKey: string,
 	baseUrl: string,
@@ -43,8 +38,7 @@ export async function compact(
 
 	// Walk backward from the end to dynamically select the tail messages based purely on token budget
 	for (let i = messages.length - 1; i >= 0; i--) {
-		const msg = messages[i]!
-		const msgTokens = estimateMsgTokens(msg)
+		const msgTokens = estimateTokens([messages[i]!])
 
 		if (accumulatedTokens + msgTokens <= tailTokenBudget) {
 			accumulatedTokens += msgTokens
@@ -65,8 +59,7 @@ export async function compact(
 		.map((m) => {
 			if (m.role === "user") return `User: ${extractText(m)}`
 			if (m.role === "assistant") return `Assistant: ${extractText(m)}`
-			if (m.role === "tool_result" && "tool" in m)
-				return `Tool(${m.tool}): ${extractText(m).slice(0, 200)}`
+			if (m.role === "tool") return `Tool: ${extractText(m).slice(0, 200)}`
 			return ""
 		})
 		.join("\n\n")
@@ -76,18 +69,17 @@ export async function compact(
 		return { compacted: false, tokensBefore, tokensAfter: tokensBefore }
 	}
 
-	const summaryMsg: Msg = {
+	const summaryMsg: ModelMessage = {
 		role: "user",
 		content: `[Prior context summary]\n${summary}`,
-		ts: Date.now(),
 	}
 
 	await store.endSession(sessionId, "compacted")
 	const newSession = await store.createContinuation(sessionId, cwd, model.id, model.provider)
 
-	const newMsgs = [summaryMsg, ...tail]
-	for (let i = 0; i < newMsgs.length; i++) {
-		await store.append(newSession.id, newMsgs[i]!)
+	const newMsgs: ModelMessage[] = [summaryMsg, ...tail]
+	for (const msg of newMsgs) {
+		await store.append(newSession.id, msg)
 	}
 
 	const tokensAfter = estimateTokens(newMsgs)
@@ -107,30 +99,19 @@ async function generateSummary(
 	const provider = getProvider(model.provider)
 	if (!provider) return null
 
-	const es = stream({
-		provider: provider.id,
-		effort: "low",
-		model,
-		apiKey,
-		baseUrl,
+	const { text } = await generateText({
+		model: createModel(provider.id, model.id, apiKey, baseUrl),
 		system:
 			"Summarize this coding session concisely. Cover: what was asked, files touched, what was done, key decisions. Keep it under 300 words.",
-		messages: [{ role: "user", content: convo, ts: Date.now() }],
-		tools: [],
+		prompt: convo,
+		providerOptions: model.reasoning ? reasoningOpts(provider.id) : undefined,
 	})
 
-	let summary = ""
-	for await (const ev of es) {
-		if (ev.type === "text_delta" && ev.text) {
-			summary += ev.text
-		}
-	}
-
-	return summary.trim() || null
+	return text.trim() || null
 }
 
 export async function generateSessionTitle(
-	messages: Msg[],
+	messages: ModelMessage[],
 	model: Model,
 	apiKey: string,
 	baseUrl: string,
@@ -147,24 +128,13 @@ export async function generateSessionTitle(
 		})
 		.join("\n")
 
-	const es = stream({
-		provider: provider.id,
-		effort: "low",
-		model,
-		apiKey,
-		baseUrl,
+	const { text } = await generateText({
+		model: createModel(provider.id, model.id, apiKey, baseUrl),
 		system:
 			"Generate a very short, descriptive, and concise title for this coding conversation. Do not use quotes or prefixes like 'Title:'. Max 6 words.",
-		messages: [{ role: "user", content: convo, ts: Date.now() }],
-		tools: [],
+		prompt: convo,
+		providerOptions: model.reasoning ? reasoningOpts(provider.id) : undefined,
 	})
 
-	let title = ""
-	for await (const ev of es) {
-		if (ev.type === "text_delta" && ev.text) {
-			title += ev.text
-		}
-	}
-
-	return title.trim().replace(/^["']|["']$/g, "") || null
+	return text.trim().replace(/^["']|["']$/g, "") || null
 }

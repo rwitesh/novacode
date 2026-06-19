@@ -1,41 +1,33 @@
 /**
  * Git tools for executing safe repository operations programmatically.
  */
+
 import { spawn } from "node:child_process"
-import { textPart } from "../content.ts"
-import type { Tool, ToolResult } from "../types.ts"
+import { tool } from "ai"
+import { z } from "zod"
+import { toToolResultOutput } from "../content.ts"
+import type { ToolResult } from "../types.ts"
 
-export function gitTool(cwd: string): Tool {
-	return {
-		def: {
-			name: "git",
-			description:
-				"Execute safe, non-interactive git commands (status, diff, log, add, commit) in the repository.",
-			parameters: {
-				type: "object",
-				properties: {
-					action: {
-						type: "string",
-						enum: ["status", "diff", "log", "add", "commit"],
-						description: "The git action to execute",
-					},
-					args: {
-						type: "array",
-						description: "Optional additional arguments or file paths for the git action",
-						items: { type: "string" },
-					},
-				},
-				required: ["action"],
-			},
-		},
-		async execute(args, signal): Promise<ToolResult> {
-			const action = args.action as string
-			const extraArgs = (args.args as string[]) || []
+export const gitTool = (cwd: string) =>
+	tool({
+		description:
+			"Execute safe, non-interactive git commands (status, diff, log, add, commit) in the repository.",
+		inputSchema: z.object({
+			action: z
+				.enum(["status", "diff", "log", "add", "commit"])
+				.describe("The git action to execute"),
+			args: z.array(z.string()).optional().describe("Optional additional arguments or file paths"),
+		}),
+		execute: async (args, { abortSignal }): Promise<ToolResult> => {
+			const action = args.action
+			const extraArgs = args.args ?? []
 
+			// Defense in depth: the enum constrains the model, but execute can be
+			// called directly — re-verify before spawning git.
 			const allowed = new Set(["status", "diff", "log", "add", "commit"])
 			if (!allowed.has(action)) {
 				return {
-					content: [textPart(`Error: Git action '${action}' is not supported.`)],
+					content: [{ type: "text", text: `Error: Git action '${action}' is not supported.` }],
 					isError: true,
 				}
 			}
@@ -62,7 +54,7 @@ export function gitTool(cwd: string): Tool {
 					proc.stdout.destroy()
 					proc.stderr.destroy()
 				}
-				signal?.addEventListener("abort", onAbort, { once: true })
+				abortSignal?.addEventListener("abort", onAbort, { once: true })
 
 				let exitCode: number
 				try {
@@ -71,7 +63,7 @@ export function gitTool(cwd: string): Tool {
 						proc.on("close", (code) => resolve(code ?? -1))
 					})
 				} finally {
-					signal?.removeEventListener("abort", onAbort)
+					abortSignal?.removeEventListener("abort", onAbort)
 				}
 
 				// Prevent context window blowout by truncating very large outputs
@@ -85,15 +77,15 @@ export function gitTool(cwd: string): Tool {
 				if (out.length >= MAX) out += "\n…truncated"
 
 				return {
-					content: [textPart(out || "(no output)")],
+					content: [{ type: "text", text: out || "(no output)" }],
 					isError: exitCode !== 0,
 				}
 			} catch (e) {
 				return {
-					content: [textPart(`Error running git: ${(e as Error).message}`)],
+					content: [{ type: "text", text: `Error running git: ${(e as Error).message}` }],
 					isError: true,
 				}
 			}
 		},
-	}
-}
+		toModelOutput: ({ output }) => toToolResultOutput(output),
+	})

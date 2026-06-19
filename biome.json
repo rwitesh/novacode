@@ -30,6 +30,6 @@
 		}
 	},
 	"files": {
-		"includes": ["**", "!**/node_modules", "!**/dist", "!**/*.jsonl"]
+		"includes": ["**", "!**/node_modules", "!**/dist", "!**/*.jsonl", "!.claude", "!.agents"]
 	}
 }

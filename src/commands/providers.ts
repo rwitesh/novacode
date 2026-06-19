@@ -2,7 +2,6 @@ import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
 import { getDefaultModel, getProvider, MODELS, PROVIDERS } from "../config/catalog.ts"
 import { loadAuth, loadConfig, saveAuth, saveConfig } from "../config/store.ts"
-import { resolveEffort } from "../llm/stream.ts"
 import type { Prompts } from "../types.ts"
 
 export async function handleProviders(agent: Agent, prompts?: Prompts): Promise<string> {
@@ -112,14 +111,12 @@ async function addProvider(agent: Agent, prompts: Prompts): Promise<string> {
 	if (makeDefault) {
 		config.provider = pDef.id
 		config.model = selectedModelId
-		config.effort = resolveEffort(pDef.id, agent.effort)
 		await saveConfig(config)
 		const modelDef = MODELS.find((m) => m.id === selectedModelId)
 		if (modelDef) {
 			agent.updateConfig({
 				provider: pDef.id,
 				model: modelDef,
-				effort: config.effort,
 				apiKey: key,
 				baseUrl: pDef.baseUrl,
 			})
@@ -161,7 +158,6 @@ async function updateKey(agent: Agent, prompts: Prompts): Promise<string> {
 			agent.updateConfig({
 				provider: pDef.id,
 				model: currentModel,
-				effort: resolveEffort(pDef.id, agent.effort),
 				apiKey: key,
 				baseUrl: pDef.baseUrl,
 			})
@@ -206,11 +202,9 @@ async function removeKey(agent: Agent, prompts: Prompts): Promise<string> {
 			if (pDef && mDef) {
 				config.provider = next
 				config.model = mDef.id
-				config.effort = resolveEffort(next, agent.effort)
 				agent.updateConfig({
 					provider: pDef.id,
 					model: mDef,
-					effort: config.effort,
 					apiKey: auth.apiKeys[next]!,
 					baseUrl: pDef.baseUrl,
 				})
@@ -247,13 +241,11 @@ async function setDefault(agent: Agent, prompts: Prompts): Promise<string> {
 
 	config.provider = pick
 	config.model = mDef.id
-	config.effort = resolveEffort(pick, agent.effort)
 	await saveConfig(config)
 
 	agent.updateConfig({
 		provider: pDef.id,
 		model: mDef,
-		effort: config.effort,
 		apiKey: auth.apiKeys[pick],
 		baseUrl: pDef.baseUrl,
 	})

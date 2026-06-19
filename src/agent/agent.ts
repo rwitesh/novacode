@@ -1,15 +1,29 @@
-import type { EventStream } from "../eventStream.ts"
+/**
+ * Stateful agent wrapper around an AI SDK ToolLoopAgent.
+ *
+ * Holds mutable conversation state (canonical `ModelMessage[]`), the active
+ * model/provider config, tools, and the policy engine. `prompt()` builds a
+ * ToolLoopAgent per turn (model/tools/providerOptions may change at runtime)
+ * and returns its streaming result for the TUI to consume.
+ */
+import type { ModelMessage, OnStepFinishEvent, ToolSet } from "ai"
+import { stepCountIs, ToolLoopAgent } from "ai"
 import type { PolicyEngine } from "../policy/engine.ts"
-import type { AgentEvent, Effort, LlmContext, LoopOpts, Model, Msg, Tool } from "../types.ts"
-import { run } from "./loop.ts"
+import { createModel, reasoningOpts } from "../providers.ts"
+import type { Model } from "../types.ts"
+import { withApproval } from "./approval.ts"
+
+// Safety cap so a misbehaving model can't loop forever
+const MAX_TURNS = 50
+
+export type StepFinishHandler = (event: OnStepFinishEvent<ToolSet>) => void | Promise<void>
 
 export class Agent {
 	#provider: string
 	#model: Model
-	#effort: Effort
 	#system: string
-	#messages: Msg[] = []
-	#tools: Tool[]
+	#messages: ModelMessage[] = []
+	#tools: ToolSet
 	#apiKey: string
 	#baseUrl: string
 	#policy: PolicyEngine | null
@@ -17,17 +31,15 @@ export class Agent {
 	constructor(opts: {
 		provider: string
 		model: Model
-		effort: Effort
 		apiKey: string
 		baseUrl: string
 		system: string
-		tools: Tool[]
-		messages?: Msg[]
+		tools: ToolSet
+		messages?: ModelMessage[]
 		policy?: PolicyEngine
 	}) {
 		this.#provider = opts.provider
 		this.#model = opts.model
-		this.#effort = opts.effort
 		this.#apiKey = opts.apiKey
 		this.#baseUrl = opts.baseUrl
 		this.#system = opts.system
@@ -40,15 +52,11 @@ export class Agent {
 		return this.#model
 	}
 
-	get effort(): Effort {
-		return this.#effort
-	}
-
-	get messages(): Msg[] {
+	get messages(): ModelMessage[] {
 		return this.#messages
 	}
 
-	get tools(): Tool[] {
+	get tools(): ToolSet {
 		return this.#tools
 	}
 
@@ -64,60 +72,41 @@ export class Agent {
 		return this.#policy
 	}
 
-	updateConfig(opts: {
-		provider: string
-		model: Model
-		effort: Effort
-		apiKey: string
-		baseUrl: string
-	}): void {
+	updateConfig(opts: { provider: string; model: Model; apiKey: string; baseUrl: string }): void {
 		this.#provider = opts.provider
 		this.#model = opts.model
-		this.#effort = opts.effort
 		this.#apiKey = opts.apiKey
 		this.#baseUrl = opts.baseUrl
 	}
 
-	setTools(tools: Tool[]): void {
+	setTools(tools: ToolSet): void {
 		this.#tools = tools
 	}
 
-	setMessages(msgs: Msg[]): void {
+	setMessages(msgs: ModelMessage[]): void {
 		this.#messages = msgs
+	}
+
+	appendMessages(msgs: ModelMessage[]): void {
+		this.#messages = [...this.#messages, ...msgs]
 	}
 
 	setModel(model: Model): void {
 		this.#model = model
 	}
 
-	setEffort(effort: Effort): void {
-		this.#effort = effort
-	}
+	async prompt(
+		signal?: AbortSignal,
+		onStepFinish?: StepFinishHandler,
+	): Promise<Awaited<ReturnType<ToolLoopAgent["stream"]>>> {
+		const agent = new ToolLoopAgent({
+			model: createModel(this.#provider, this.#model.id, this.#apiKey, this.#baseUrl),
+			instructions: this.#system,
+			tools: withApproval(this.#tools, this.#policy),
+			stopWhen: stepCountIs(MAX_TURNS),
+			providerOptions: this.#model.reasoning ? reasoningOpts(this.#provider) : undefined,
+		})
 
-	prompt(signal?: AbortSignal): EventStream<AgentEvent, Msg[]> {
-		const context: LlmContext = {
-			system: this.#system,
-			messages: this.#messages,
-			tools: this.#tools,
-		}
-
-		const policy = this.#policy
-		const opts: LoopOpts = {
-			provider: this.#provider,
-			model: this.#model,
-			effort: this.#effort,
-			apiKey: this.#apiKey,
-			baseUrl: this.#baseUrl,
-			beforeTool: policy
-				? async (call) => {
-						const decision = await policy.check(call)
-						return decision.allow
-							? undefined
-							: { block: true, reason: decision.reason ?? "Blocked by policy" }
-					}
-				: undefined,
-		}
-
-		return run(context, opts, signal)
+		return agent.stream({ messages: this.#messages, abortSignal: signal, onStepFinish })
 	}
 }

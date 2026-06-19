@@ -2,7 +2,6 @@ import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
 import { getProvider, MODELS } from "../config/catalog.ts"
 import { loadAuth, loadConfig, saveConfig } from "../config/store.ts"
-import { resolveEffort } from "../llm/stream.ts"
 import type { Prompts } from "../types.ts"
 
 export async function handleModels(args: string, agent: Agent, prompts?: Prompts): Promise<string> {
@@ -46,14 +45,11 @@ export async function handleModels(args: string, agent: Agent, prompts?: Prompts
 
 	config.provider = pk!
 	config.model = mid!
-	// Clamp the current effort to what the new provider supports and persist it.
-	config.effort = resolveEffort(selectedProvider.id, agent.effort)
 	await saveConfig(config)
 
 	agent.updateConfig({
 		provider: selectedProvider.id,
 		model: selectedModel,
-		effort: config.effort,
 		apiKey: auth.apiKeys[pk!] ?? "",
 		baseUrl: selectedProvider.baseUrl,
 	})
@@ -77,13 +73,11 @@ async function switchDirect(id: string, agent: Agent): Promise<string> {
 
 	config.provider = pk
 	config.model = id
-	config.effort = resolveEffort(selectedProvider.id, agent.effort)
 	await saveConfig(config)
 
 	agent.updateConfig({
 		provider: selectedProvider.id,
 		model: m,
-		effort: config.effort,
 		apiKey: auth.apiKeys[pk],
 		baseUrl: selectedProvider.baseUrl,
 	})

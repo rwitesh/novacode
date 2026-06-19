@@ -1,3 +1,4 @@
+import type { ModelMessage } from "ai"
 import chalk from "chalk"
 import { Box, render, Static, Text, useApp, useInput } from "ink"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -5,14 +6,12 @@ import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
 import { getProvider, MODELS } from "../config/catalog.ts"
 import { loadAuth } from "../config/store.ts"
-import { resolveEffort } from "../llm/stream.ts"
 import type { PolicyEngine } from "../policy/engine.ts"
 import { generateSessionTitle } from "../session/compact.ts"
 import type { SessionStore } from "../session/store.ts"
 import { groupSkills } from "../skills/index.ts"
 import type {
 	ApprovalRequest,
-	Msg,
 	PermissionMode,
 	PolicyApprover,
 	Prompts,
@@ -72,7 +71,7 @@ export async function interactive(
 		process.stdout.write(`${chalk.dim("  skills:")}  ${skillNames}\n`)
 	}
 
-	const initialHistory = await store.history(sessionId)
+	const initialHistory: ModelMessage[] = await store.history(sessionId)
 
 	try {
 		const { waitUntilExit } = render(
@@ -105,11 +104,11 @@ function App({
 	store: SessionStore
 	sessionId: string
 	skills: Skill[]
-	initialHistory: Msg[]
+	initialHistory: ModelMessage[]
 	policy: PolicyEngine
 }) {
 	const [currSessionId, setCurrSessionId] = useState(initialSessionId)
-	const [msgs, setMsgs] = useState<Msg[]>(initialHistory)
+	const [msgs, setMsgs] = useState<ModelMessage[]>(initialHistory)
 
 	const handleSwitchSession = useCallback(
 		async (newSessionId: string) => {
@@ -123,11 +122,9 @@ function App({
 			if (provider && model) {
 				const auth = await loadAuth()
 				const apiKey = auth.apiKeys[s.provider] || ""
-				const effort = resolveEffort(provider.id, agent.effort)
 				agent.updateConfig({
 					provider: provider.id,
 					model,
-					effort,
 					apiKey,
 					baseUrl: provider.baseUrl,
 				})
@@ -162,6 +159,8 @@ function App({
 	const history = useRef<string[]>([])
 	const hIdx = useRef(-1)
 	const abortCtrl = useRef<AbortController | null>(null)
+	const committed = useRef(0)
+	const usageAcc = useRef<Usage>({ in: 0, out: 0 })
 	const [updateInfo, setUpdateInfo] = useState<{
 		current: string
 		latest: string
@@ -242,12 +241,26 @@ function App({
 		fn?.(value)
 	}
 
-	function commitMsg(msg: Msg) {
+	function commitMsg(msg: ModelMessage) {
 		setMsgs((prev) => [...prev, msg])
-		agent.setMessages([...agent.messages, msg])
+		agent.appendMessages([msg])
 		store.append(currSessionId, msg).catch((err) => {
 			console.error("Error appending message to session store:", err)
 		})
+	}
+
+	async function commitDelta(messages: ModelMessage[]) {
+		// Each step's response.messages is the SDK's cumulative clone of every
+		// message generated so far (not just this step's new ones). Persist only
+		// the tail beyond what we've already committed, otherwise every step
+		// re-writes the whole history into the agent state, the UI list, and the
+		// store — duplicating messages and corrupting restoration.
+		const delta = messages.slice(committed.current)
+		if (delta.length === 0) return
+		committed.current = messages.length
+		setMsgs((prev) => [...prev, ...delta])
+		agent.appendMessages(delta)
+		for (const msg of delta) await store.append(currSessionId, msg)
 	}
 
 	async function handlePermissionSwitch() {
@@ -271,12 +284,7 @@ function App({
 		setPermissionMode(picked)
 		commitMsg({
 			role: "assistant",
-			content: [{ type: "text", text: chalk.green(`✓ Permission mode set to ${picked}.`) }],
-			model: "system",
-			provider: "system",
-			usage: { in: 0, out: 0 },
-			stop: "stop",
-			ts: Date.now(),
+			content: chalk.green(`✓ Permission mode set to ${picked}.`),
 		})
 	}
 
@@ -415,104 +423,107 @@ function App({
 				setBusy(false)
 				setStatus("")
 				if (r) {
-					commitMsg({
-						role: "assistant",
-						content: [{ type: "text", text: r }],
-						model: "system",
-						provider: "system",
-						usage: { in: 0, out: 0 },
-						stop: "stop",
-						ts: Date.now(),
-					})
+					commitMsg({ role: "assistant", content: r })
 				}
 			})
 			return
 		}
 
-		const userMsg: Msg = { role: "user", content: line, ts: Date.now() }
+		const userMsg: ModelMessage = { role: "user", content: line }
 		commitMsg(userMsg)
 
 		abortCtrl.current = new AbortController()
-		const eventStream = agent.prompt(abortCtrl.current.signal)
-
-		runEventLoop(eventStream)
+		void runTurn(abortCtrl.current.signal)
 	})
 
-	async function runEventLoop(eventStream: ReturnType<Agent["prompt"]>) {
+	async function runTurn(signal: AbortSignal) {
+		setBusy(true)
+		resetStream()
+		setThinking(false)
+		setStatus("")
+		committed.current = 0
+		const session = await store.get(currSessionId)
+		usageAcc.current = session
+			? { in: session.inputTokens, out: session.outputTokens }
+			: { in: 0, out: 0 }
+		setUsage(usageAcc.current)
+
+		// Persist each completed step's response messages + usage as they finish,
+		// so a crash mid-turn still leaves a restorable history. The model call
+		// itself runs in a single stream (approval is gated inside tool execute).
 		try {
-			for await (const ev of eventStream) {
-				switch (ev.type) {
-					case "start":
-						setBusy(true)
-						resetStream()
-						setThinking(false)
-						setStatus("")
-						break
-					case "text_delta":
-						if (ev.text) {
+			const result = await agent.prompt(signal, async (event) => {
+				const u = event.usage
+				if (u) {
+					// Per-step usage; summed across steps == totalUsage, so accumulate
+					// rather than adding totalUsage again at the end.
+					usageAcc.current = {
+						in: usageAcc.current.in + (u.inputTokens ?? 0),
+						out: usageAcc.current.out + (u.outputTokens ?? 0),
+					}
+					setUsage(usageAcc.current)
+					await store.addUsage(currSessionId, u.inputTokens ?? 0, u.outputTokens ?? 0)
+				}
+				if (event.response?.messages?.length) {
+					await commitDelta(event.response.messages)
+				}
+			})
+
+			for await (const part of result.fullStream) {
+				switch (part.type) {
+					case "text-delta":
+						if (part.text) {
 							setThinking(false)
 							setStatus("")
-							appendStream(ev.text)
+							appendStream(part.text)
 						}
 						break
-					case "thinking_delta":
+					case "reasoning-delta":
 						setThinking(true)
 						setStatus("")
 						break
-					case "retry": {
+					case "tool-call":
+						setStatus(chalk.dim(`⏳ ${part.toolName}…`))
+						break
+					case "tool-result": {
+						// part.output is our ToolResult (raw tool return), not the converted output
+						const out = part.output as { isError?: boolean } | undefined
 						setStatus(
-							chalk.yellow(`${ev.reason}. Retrying request ${ev.attempt}/${ev.maxAttempts}`),
+							out?.isError ? chalk.red(`✗ ${part.toolName}`) : chalk.green(`✓ ${part.toolName}`),
 						)
 						break
 					}
-					case "assistant_msg":
-						commitMsg(ev.msg)
-						resetStream()
-						setThinking(false)
+					case "error":
+						setStatus(chalk.red(`Error: ${part.error}`))
 						break
-					case "tool_call":
-						setStatus(chalk.dim(`⏳ ${ev.call.name}…`))
-						break
-					case "tool_result":
-						commitMsg(ev.result)
-						setStatus(
-							ev.result.isError
-								? chalk.red(`✗ ${ev.result.tool}`)
-								: chalk.green(`✓ ${ev.result.tool}`),
-						)
-						break
-					case "turn_end":
-						setStatus("")
-						store
-							.get(currSessionId)
-							.then((s) => {
-								if (s && !s.title && agent.messages.length >= 2) {
-									generateSessionTitle(agent.messages, agent.model, agent.apiKey, agent.baseUrl)
-										.then((title) => {
-											if (title) {
-												store.setTitle(currSessionId, title).catch(() => {})
-											}
-										})
-										.catch(() => {})
-								}
-							})
-							.catch(() => {})
-						break
-					case "usage":
-						if (ev.usage) setUsage(ev.usage)
 				}
 			}
+
+			// Safety net: if the final step's onStepFinish didn't fire (e.g. an
+			// aborted stream), commit whatever's still uncommitted. Delta-based, so
+			// it's a no-op when onStepFinish already covered it.
+			const resp = await result.response
+			await commitDelta(resp.messages)
+
+			setStatus("")
+			store
+				.get(currSessionId)
+				.then((s) => {
+					if (s && !s.title && agent.messages.length >= 2) {
+						generateSessionTitle(agent.messages, agent.model, agent.apiKey, agent.baseUrl)
+							.then((title) => {
+								if (title) store.setTitle(currSessionId, title).catch(() => {})
+							})
+							.catch(() => {})
+					}
+				})
+				.catch(() => {})
 		} catch (err) {
-			const errMsg: Msg = {
-				role: "assistant",
-				model: "system",
-				provider: "system",
-				content: [{ type: "text", text: chalk.red(`Error: ${(err as Error).message}`) }],
-				usage: { in: 0, out: 0 },
-				stop: "error",
-				ts: Date.now(),
+			if (signal.aborted) {
+				commitMsg({ role: "assistant", content: chalk.gray("(aborted)") })
+			} else {
+				commitMsg({ role: "assistant", content: chalk.red(`Error: ${(err as Error).message}`) })
 			}
-			commitMsg(errMsg)
 		} finally {
 			abortCtrl.current = null
 			setBusy(false)
@@ -549,9 +560,7 @@ function App({
 
 	return (
 		<Box flexDirection="column" paddingX={1} width="100%">
-			<Static items={visibleMsgs}>
-				{(m, i) => <Message key={`${m.ts}-${i}`} msg={m} isFirst={i === 0} />}
-			</Static>
+			<Static items={visibleMsgs}>{(m, i) => <Message key={i} msg={m} isFirst={i === 0} />}</Static>
 
 			<LiveArea stream={bufferedStream} thinking={thinking} busy={busy} status={status} />
 
@@ -606,7 +615,6 @@ function App({
 
 				<StatusBar
 					model={agent.model}
-					effort={agent.effort}
 					usage={usage}
 					busy={busy}
 					suggestions={suggestions}

@@ -1,13 +1,19 @@
 /**
  * Shared type definitions for the entire project.
- * Includes messaging, tools, providers, and agent loop events.
+ *
+ * AI message/tool/usage types are NOT redefined here — we use the AI SDK's
+ * canonical types (`ModelMessage`, `ToolSet`, `LanguageModel`) directly from
+ * `ai`, so there is a single message format across agent, persistence, and UI.
+ *
+ * What remains here is NovaCode-specific configuration, persistence, policy,
+ * and CLI/TUI plumbing that has no AI SDK equivalent.
  */
-/** Content Parts */
+
+/** Tool content (local shape used inside tool `execute` + converted to AI SDK parts) */
 
 export interface TextPart {
 	type: "text"
 	text: string
-	signature?: string
 }
 
 export interface ImagePart {
@@ -16,67 +22,21 @@ export interface ImagePart {
 	mime: string
 }
 
-export interface ThinkPart {
-	type: "thinking"
-	text: string
-	signature?: string
-}
+export type ContentPart = TextPart | ImagePart
 
-export interface ToolCallPart {
-	type: "tool_call"
-	id: string
-	name: string
-	args: Record<string, unknown>
-	signature?: string
-}
-
-export type ContentPart = TextPart | ImagePart | ThinkPart | ToolCallPart
-
-/** Messages */
-
-export interface UserMsg {
-	role: "user"
-	content: string | ContentPart[]
-	ts: number
-}
-
-export interface AssistantMsg {
-	role: "assistant"
-	content: ContentPart[]
-	model: string
-	provider: string
-	usage: Usage
-	stop: StopReason
-	error?: string
-	ts: number
-}
-
-export interface ToolResultMsg {
-	role: "tool_result"
-	callId: string
-	tool: string
-	args?: Record<string, unknown>
+export interface ToolResult {
 	content: ContentPart[]
 	isError: boolean
-	ts: number
 }
 
-export type Msg = UserMsg | AssistantMsg | ToolResultMsg
-export type StopReason = "stop" | "length" | "tool_use" | "error" | "aborted" | "refusal"
-
-/** Usage */
+/** Token usage (mapped from AI SDK `LanguageModelUsage` for display) */
 
 export interface Usage {
 	in: number
 	out: number
 }
 
-/** Provider */
-
-// Canonical reasoning effort. Each provider maps these onto its own API
-// param (reasoning_effort / thinkingLevel / output_config.effort) and clamps
-// unsupported levels. See src/llm/<provider>.ts for the per-provider mapping.
-export type Effort = "low" | "medium" | "high" | "xhigh" | "max"
+/** Provider & model catalog */
 
 export interface ProviderDef {
 	id: string
@@ -91,91 +51,25 @@ export interface Model {
 	provider: string
 	contextWindow: number
 	maxOutput: number
-	// Whether the model accepts effort/thinking control. When false, no
-	// reasoning params are sent and /effort is a no-op for this model.
-	supportsThinking: boolean
+	// Whether the model accepts reasoning-effort control. When true, a HIGH
+	// reasoning providerOption is sent (see src/providers.ts). Effort selection
+	// is gone — every reasoning-capable model runs at HIGH.
+	reasoning: boolean
 	default?: boolean
 }
 
-// A provider's streaming plugin, registered by provider id in src/llm/stream.ts.
-export interface ProviderStream {
-	id: string
-	efforts: EffortConfig
-	stream: StreamFn
-}
-
-// Effort control offered by a provider. `options` is the full set surfaced via
-// /effort; `default` is used when the user has not chosen one.
-export interface EffortConfig {
-	options: Effort[]
-	default: Effort
-}
-
-/** Tools */
-
-export interface ToolDef {
-	name: string
-	description: string
-	parameters: ToolParamDef
-}
-
-export interface ToolParamDef {
-	type: "object"
-	properties: Record<string, ToolPropDef>
-	required?: string[]
-}
-
-export interface ToolPropDef {
-	type: string
-	description?: string
-	enum?: string[]
-	items?: ToolPropDef
-	properties?: Record<string, ToolPropDef>
-	required?: string[]
-}
-
-export interface ToolResult {
-	content: ContentPart[]
-	isError: boolean
-}
-
-export type ToolExecuteFn = (
-	args: Record<string, unknown>,
-	signal?: AbortSignal,
-) => Promise<ToolResult>
-
-export interface Tool {
-	def: ToolDef
-	execute: ToolExecuteFn
-}
-
-/** Agent Events */
-
-export type AgentEvent =
-	| { type: "start" }
-	| { type: "turn" }
-	| { type: "text_delta"; text: string }
-	| { type: "thinking_delta"; text: string }
-	| { type: "retry"; attempt: number; maxAttempts: number; delayMs: number; reason: string }
-	| { type: "tool_call"; call: ToolCallPart }
-	| { type: "assistant_msg"; msg: AssistantMsg }
-	| { type: "tool_result"; callId: string; result: ToolResultMsg; args?: Record<string, unknown> }
-	| { type: "turn_end"; msg: AssistantMsg; results: ToolResultMsg[] }
-	| { type: "usage"; usage: Usage }
-
-/** Config */
+/** Config (settings.json + auth.json) */
 
 export interface NovaConfig {
 	provider: string
 	model: string
-	effort?: Effort
 }
 
 export interface NovaAuth {
 	apiKeys: Record<string, string> // provider -> key
 }
 
-/** Session */
+/** Session persistence */
 
 export interface Session {
 	id: string
@@ -209,10 +103,17 @@ export interface CompactResult {
 	newSessionId?: string
 }
 
-/** Policy & Permissions */
+/** Policy & permissions (approval is a separate concern from tool definitions) */
 
 export type PermissionMode = "restricted" | "unrestricted"
 export type ToolRisk = "safe" | "write" | "network" | "execution"
+
+// Minimal contract a tool call exposes to the policy engine. Kept separate
+// from AI SDK's ToolCallPart so the policy layer has no AI SDK dependency.
+export interface PolicyCall {
+	name: string
+	args: Record<string, unknown>
+}
 
 export interface ApprovalRequest {
 	tool: string
@@ -223,64 +124,6 @@ export interface ApprovalRequest {
 
 export interface PolicyApprover {
 	request(req: ApprovalRequest): Promise<boolean>
-}
-
-/** Loop & Provider Types */
-
-export interface LlmContext {
-	system: string
-	messages: Msg[]
-	tools: Tool[]
-}
-
-export interface LoopOpts {
-	provider: string
-	model: Model
-	effort: Effort
-	apiKey: string
-	baseUrl: string
-	maxTurns?: number
-	// Intercept tool calls before they execute
-	beforeTool?: (
-		call: ToolCallPart,
-		args: Record<string, unknown>,
-		ctx: LlmContext,
-	) => Promise<{ block?: boolean; reason?: string } | undefined>
-	// Run logic after a tool completes
-	afterTool?: (call: ToolCallPart, result: ToolResultMsg, ctx: LlmContext) => Promise<void>
-}
-
-export interface StreamOpts {
-	provider: string
-	model: Model
-	effort: Effort
-	apiKey: string
-	baseUrl: string
-	system: string
-	messages: Msg[]
-	tools: ToolDef[]
-	signal?: AbortSignal
-}
-
-export interface IEventStream<T, R> {
-	[Symbol.asyncIterator](): AsyncGenerator<T>
-	result: R | undefined
-	isDone: boolean
-}
-
-export type StreamFn = (opts: StreamOpts) => IEventStream<StreamEvent, AssistantResult>
-
-export type StreamEvent =
-	| { type: "text_delta"; text: string }
-	| { type: "thinking_delta"; text: string }
-	| { type: "retry"; attempt: number; maxAttempts: number; delayMs: number; reason: string }
-	| { type: "tool_call"; call: ToolCallPart }
-	| { type: "usage"; usage: Usage }
-
-export interface AssistantResult {
-	content: ContentPart[]
-	usage: Usage
-	stop: StopReason
 }
 
 /** Prompts — used by interactive commands within the TUI */

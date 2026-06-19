@@ -18,9 +18,7 @@ async function createTempStore() {
 		);
 		CREATE TABLE IF NOT EXISTS messages (
 			id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-			seq INTEGER NOT NULL, role TEXT NOT NULL, content TEXT, tool_call_id TEXT, tool_name TEXT,
-			tool_args TEXT, model TEXT, provider TEXT, usage_input INTEGER DEFAULT 0, usage_output INTEGER DEFAULT 0,
-			stop_reason TEXT, is_error INTEGER DEFAULT 0, ts INTEGER NOT NULL
+			seq INTEGER NOT NULL, message TEXT NOT NULL, ts INTEGER NOT NULL
 		);
 		CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated DESC);
 		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, seq);
@@ -37,7 +35,7 @@ async function run() {
 
 		for (let i = 0; i < numSessions; i++) {
 			const s = await store.create("/test/dir", "test-model", "test-provider")
-			await store.append(s.id, { role: "user", content: `msg ${i}`, ts: Date.now() })
+			await store.append(s.id, { role: "user", content: `msg ${i}` })
 		}
 		console.log(`Successfully generated ${numSessions} sessions. Running benchmarks...`)
 

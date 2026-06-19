@@ -2,11 +2,14 @@
  * Filesystem tools for reading, writing, and editing files.
  * Includes safety checks to prevent path traversal.
  */
+
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, extname, resolve } from "node:path"
-import { textPart } from "../content.ts"
+import { tool } from "ai"
+import { z } from "zod"
+import { toToolResultOutput } from "../content.ts"
 import { getRelativeIfInside } from "../paths.ts"
-import type { Tool, ToolResult } from "../types.ts"
+import type { ToolResult } from "../types.ts"
 
 // Extensions we return as base64 images instead of text
 const IMAGES = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"])
@@ -19,25 +22,18 @@ function safePath(cwd: string, p: string): string {
 	return abs
 }
 
-export function readTool(cwd: string): Tool {
-	return {
-		def: {
-			name: "read",
-			description:
-				"Read file contents. Supports text and images (jpg, png, gif, webp). Text output is truncated to 2000 lines.",
-			parameters: {
-				type: "object",
-				properties: {
-					path: { type: "string", description: "Path to file (relative or absolute)" },
-					offset: { type: "number", description: "Start line (1-based, default 1)" },
-					limit: { type: "number", description: "Max lines to read (default 2000)" },
-				},
-				required: ["path"],
-			},
-		},
-		async execute(args): Promise<ToolResult> {
+export const readTool = (cwd: string) =>
+	tool({
+		description:
+			"Read file contents. Supports text and images (jpg, png, gif, webp). Text output is truncated to 2000 lines.",
+		inputSchema: z.object({
+			path: z.string().describe("Path to file (relative or absolute)"),
+			offset: z.number().optional().describe("Start line (1-based, default 1)"),
+			limit: z.number().optional().describe("Max lines to read (default 2000)"),
+		}),
+		execute: async (args): Promise<ToolResult> => {
 			try {
-				const filePath = safePath(cwd, args.path as string)
+				const filePath = safePath(cwd, args.path)
 				// Return images as base64 so the LLM can process them visually
 				const ext = extname(filePath).toLowerCase()
 				if (IMAGES.has(ext)) {
@@ -49,105 +45,92 @@ export function readTool(cwd: string): Tool {
 
 				const content = await readFile(filePath, "utf-8")
 				const lines = content.split("\n")
-				const offset = Math.max(0, (Number(args.offset ?? 1) || 1) - 1)
-				const limit = Number(args.limit ?? 2000) || 2000
+				const offset = Math.max(0, (args.offset ?? 1) - 1)
+				const limit = args.limit ?? 2000
 				const slice = lines.slice(offset, offset + limit)
 				const truncated = offset + limit < lines.length
 
 				const out = slice.join("\n")
 				const suffix = truncated ? `\n…${lines.length - offset - limit} more lines` : ""
 
-				return { content: [textPart(out + suffix)], isError: false }
+				return { content: [{ type: "text", text: out + suffix }], isError: false }
 			} catch (e) {
 				return {
-					content: [textPart(`Error reading file: ${(e as Error).message}`)],
+					content: [{ type: "text", text: `Error reading file: ${(e as Error).message}` }],
 					isError: true,
 				}
 			}
 		},
-	}
-}
+		toModelOutput: ({ output }) => toToolResultOutput(output),
+	})
 
-export function writeTool(cwd: string): Tool {
-	return {
-		def: {
-			name: "write",
-			description: "Write content to a file. Creates the file and parent directories if needed.",
-			parameters: {
-				type: "object",
-				properties: {
-					path: { type: "string", description: "Path to file" },
-					content: { type: "string", description: "Content to write" },
-				},
-				required: ["path", "content"],
-			},
-		},
-		async execute(args): Promise<ToolResult> {
+export const writeTool = (cwd: string) =>
+	tool({
+		description: "Write content to a file. Creates the file and parent directories if needed.",
+		inputSchema: z.object({
+			path: z.string().describe("Path to file"),
+			content: z.string().describe("Content to write"),
+		}),
+		execute: async (args): Promise<ToolResult> => {
 			try {
-				const filePath = safePath(cwd, args.path as string)
-				const content = args.content as string
+				const filePath = safePath(cwd, args.path)
 				await mkdir(dirname(filePath), { recursive: true })
-				await writeFile(filePath, content)
+				await writeFile(filePath, args.content)
 				const relPath = getRelativeIfInside(cwd, filePath)
 				return {
-					content: [textPart(`Wrote ${content.length} bytes → ${relPath}`)],
+					content: [{ type: "text", text: `Wrote ${args.content.length} bytes → ${relPath}` }],
 					isError: false,
 				}
 			} catch (e) {
 				return {
-					content: [textPart(`Error writing file: ${(e as Error).message}`)],
+					content: [{ type: "text", text: `Error writing file: ${(e as Error).message}` }],
 					isError: true,
 				}
 			}
 		},
-	}
-}
+		toModelOutput: ({ output }) => toToolResultOutput(output),
+	})
 
 // Requires oldText to be unique to avoid ambiguous replacements.
-export function editTool(cwd: string): Tool {
-	return {
-		def: {
-			name: "edit",
-			description:
-				"Edit a file using exact text replacement. Each edit's oldText must be unique in the file.",
-			parameters: {
-				type: "object",
-				properties: {
-					path: { type: "string", description: "Path to file" },
-					edits: {
-						type: "array",
-						description:
-							"Array of {oldText, newText} replacements. oldText must be unique. Non-overlapping.",
-						items: {
-							type: "object",
-							properties: {
-								oldText: { type: "string", description: "Exact text to find (must be unique)" },
-								newText: { type: "string", description: "Replacement text" },
-							},
-							required: ["oldText", "newText"],
-						},
-					},
-				},
-				required: ["path", "edits"],
-			},
-		},
-		async execute(args): Promise<ToolResult> {
+export const editTool = (cwd: string) =>
+	tool({
+		description:
+			"Edit a file using exact text replacement. Each edit's oldText must be unique in the file.",
+		inputSchema: z.object({
+			path: z.string().describe("Path to file"),
+			edits: z
+				.array(
+					z.object({
+						oldText: z.string().describe("Exact text to find (must be unique)"),
+						newText: z.string().describe("Replacement text"),
+					}),
+				)
+				.describe(
+					"Array of {oldText, newText} replacements. oldText must be unique. Non-overlapping.",
+				),
+		}),
+		execute: async (args): Promise<ToolResult> => {
 			try {
-				const filePath = safePath(cwd, args.path as string)
+				const filePath = safePath(cwd, args.path)
 				let content: string
 				try {
 					content = await readFile(filePath, "utf-8")
 				} catch {
-					return { content: [textPart(`File not found: ${args.path}`)], isError: true }
+					return {
+						content: [{ type: "text", text: `File not found: ${args.path}` }],
+						isError: true,
+					}
 				}
-				const edits = args.edits as Array<{ oldText: string; newText: string }>
+				const edits = args.edits
 
 				// Validate all edits before applying any — avoids partial writes on bad input
 				for (const edit of edits) {
 					const count = content.split(edit.oldText).length - 1
 					if (count === 0) {
 						return {
-							content: [textPart(`oldText not found: "${edit.oldText.slice(0, 80)}…"`)],
+							content: [
+								{ type: "text", text: `oldText not found: "${edit.oldText.slice(0, 80)}…"` },
+							],
 							isError: true,
 						}
 					}
@@ -155,9 +138,10 @@ export function editTool(cwd: string): Tool {
 					if (count > 1) {
 						return {
 							content: [
-								textPart(
-									`oldText found ${count} times — add surrounding context to make it unique: "${edit.oldText.slice(0, 60)}…"`,
-								),
+								{
+									type: "text",
+									text: `oldText found ${count} times — add surrounding context to make it unique: "${edit.oldText.slice(0, 60)}…"`,
+								},
 							],
 							isError: true,
 						}
@@ -173,18 +157,19 @@ export function editTool(cwd: string): Tool {
 				const relPath = getRelativeIfInside(cwd, filePath)
 				return {
 					content: [
-						textPart(
-							`Edited ${relPath} (${edits.length} replacement${edits.length > 1 ? "s" : ""})`,
-						),
+						{
+							type: "text",
+							text: `Edited ${relPath} (${edits.length} replacement${edits.length > 1 ? "s" : ""})`,
+						},
 					],
 					isError: false,
 				}
 			} catch (e) {
 				return {
-					content: [textPart(`Error editing file: ${(e as Error).message}`)],
+					content: [{ type: "text", text: `Error editing file: ${(e as Error).message}` }],
 					isError: true,
 				}
 			}
 		},
-	}
-}
+		toModelOutput: ({ output }) => toToolResultOutput(output),
+	})

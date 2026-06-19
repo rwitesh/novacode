@@ -1,15 +1,13 @@
 import { describe, expect, it } from "vitest"
 import { buildSystemPrompt } from "../src/agent/prompt.ts"
-import { EventStream } from "../src/eventStream.ts"
 import { formatToolArgs } from "../src/format.ts"
 import { getRelativeIfInside, makeRelative } from "../src/paths.ts"
-import { getAllTools, getDefaultTools } from "../src/tools/index.ts"
+import { getAllTools } from "../src/tools/index.ts"
 
 describe("tool registration", () => {
 	it("getAllTools returns 11 tools", () => {
 		const tools = getAllTools("/tmp")
-		expect(tools).toHaveLength(11)
-		expect(tools.map((t) => t.def.name)).toEqual([
+		expect(Object.keys(tools)).toEqual([
 			"read",
 			"write",
 			"edit",
@@ -22,11 +20,7 @@ describe("tool registration", () => {
 			"web_search",
 			"web_fetch",
 		])
-	})
-
-	it("getDefaultTools returns 6 core tools", () => {
-		const tools = getDefaultTools("/tmp")
-		expect(tools).toHaveLength(6)
+		expect(Object.keys(tools)).toHaveLength(11)
 	})
 })
 
@@ -42,27 +36,10 @@ describe("system prompt", () => {
 	})
 
 	it("includes current date", () => {
-		const tools = getDefaultTools("/tmp")
+		const tools = getAllTools("/tmp")
 		const prompt = buildSystemPrompt("/tmp", tools)
 		const today = new Date().toISOString().split("T")[0] ?? ""
 		expect(prompt).toContain(today)
-	})
-})
-
-describe("EventStream", () => {
-	it("pushes and iterates", async () => {
-		const es = new EventStream<string, number>()
-		es.push("a")
-		es.push("b")
-		es.finish(42)
-
-		const items: string[] = []
-		for await (const item of es) {
-			items.push(item)
-		}
-
-		expect(items).toEqual(["a", "b"])
-		expect(es.result).toBe(42)
 	})
 })
 

@@ -3,15 +3,18 @@
  */
 
 import os from "node:os"
-import type { Skill, Tool } from "../types.ts"
+import type { ToolSet } from "ai"
+import type { Skill } from "../types.ts"
 
 export function buildSystemPrompt(
 	cwd: string,
-	tools: Tool[],
+	tools: ToolSet,
 	skills: Skill[] = [],
 	agentsMd?: string,
 ): string {
-	const toolList = tools.map((t) => `- ${t.def.name}: ${t.def.description}`).join("\n")
+	const toolList = Object.entries(tools)
+		.map(([name, t]) => `- ${name}: ${t.description}`)
+		.join("\n")
 	const platform = os.platform()
 	const arch = os.arch()
 	const release = os.release()

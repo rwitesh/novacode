@@ -27,6 +27,5 @@ coverage
 .idea
 
 # skills
-.agents
 skills-lock.json
 docs

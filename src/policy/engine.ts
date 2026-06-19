@@ -11,7 +11,7 @@ import type {
 	ApprovalRequest,
 	PermissionMode,
 	PolicyApprover,
-	ToolCallPart,
+	PolicyCall,
 	ToolRisk,
 } from "../types.ts"
 
@@ -53,7 +53,7 @@ export function isSecretFile(absPath: string): boolean {
 	return parts.some((p) => SECRET_DIR_SEGMENTS.has(p))
 }
 
-export function classifyRisk(call: ToolCallPart): ToolRisk {
+export function classifyRisk(call: PolicyCall): ToolRisk {
 	switch (call.name) {
 		case "read":
 		case "ls":
@@ -78,7 +78,7 @@ export function classifyRisk(call: ToolCallPart): ToolRisk {
 	}
 }
 
-export function summarizeCall(call: ToolCallPart): string {
+export function summarizeCall(call: PolicyCall): string {
 	const a = call.args
 	switch (call.name) {
 		case "bash":
@@ -148,7 +148,7 @@ export class PolicyEngine {
 		this.#approver = approver
 	}
 
-	async check(call: ToolCallPart): Promise<{ allow: boolean; reason?: string }> {
+	async check(call: PolicyCall): Promise<{ allow: boolean; reason?: string }> {
 		// Unrestricted mode: trust everything. Best-practice guidance still lives
 		// in the system prompt, but there is no deterministic gate here.
 		if (this.#mode === "unrestricted") return { allow: true }
@@ -186,7 +186,7 @@ export class PolicyEngine {
 			: { allow: false, reason: `Denied: ${call.name} was not approved by the user.` }
 	}
 
-	#detectSecretAccess(call: ToolCallPart): string | null {
+	#detectSecretAccess(call: PolicyCall): string | null {
 		// read targets a single file directly; grep with an explicit file path too.
 		if (call.name !== "read" && call.name !== "grep") return null
 		const p = call.args.path

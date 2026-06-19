@@ -2,6 +2,9 @@ import { mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
+// Messages store one canonical AI SDK `ModelMessage` per row as JSON. All of
+// role / tool-call / tool-result / reasoning / usage are derivable from that
+// single canonical type — no specialized columns, no bespoke serialization.
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
@@ -22,17 +25,7 @@ CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     seq INTEGER NOT NULL,
-    role TEXT NOT NULL,
-    content TEXT,
-    tool_call_id TEXT,
-    tool_name TEXT,
-    tool_args TEXT,
-    model TEXT,
-    provider TEXT,
-    usage_input INTEGER DEFAULT 0,
-    usage_output INTEGER DEFAULT 0,
-    stop_reason TEXT,
-    is_error INTEGER DEFAULT 0,
+    message TEXT NOT NULL,
     ts INTEGER NOT NULL
 );
 

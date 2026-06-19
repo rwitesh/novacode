@@ -10,8 +10,8 @@ export const PROVIDER = {
 	anthropic: "anthropic",
 } as const
 
-// Static provider data. Streaming + effort handling lives in src/llm/<id>.ts.
-// Adding a provider = one entry here + one streaming plugin.
+// Static provider data. Provider/model construction + reasoning defaults live
+// in src/providers.ts. Adding a provider = one entry here + a createModel case.
 export const PROVIDERS: ProviderDef[] = [
 	{
 		id: PROVIDER.glm,
@@ -45,18 +45,18 @@ export const PROVIDERS: ProviderDef[] = [
 	},
 ]
 
-// Model catalog. Each entry carries only what genuinely varies per model;
-// effort/thinking/streaming is provider-level (src/llm/<id>.ts). `supportsThinking`
-// gates effort control; when false, no reasoning params are sent.
+// Model catalog. Each entry carries only what genuinely varies per model.
+// Provider construction + HIGH reasoning defaults live in src/providers.ts.
+// `reasoning` gates whether a reasoning providerOption is sent.
 export const MODELS: Model[] = [
-	// GLM — reasoning_effort is GLM-5.2+ only
+	// GLM
 	{
 		id: "glm-5.2",
 		name: "GLM-5.2",
 		provider: PROVIDER.glm,
 		contextWindow: 1_000_000,
 		maxOutput: 128_000,
-		supportsThinking: true,
+		reasoning: true,
 		default: true,
 	},
 	{
@@ -65,7 +65,7 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.glm,
 		contextWindow: 128_000,
 		maxOutput: 4096,
-		supportsThinking: false,
+		reasoning: false,
 	},
 	{
 		id: "glm-5-turbo",
@@ -73,7 +73,7 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.glm,
 		contextWindow: 128_000,
 		maxOutput: 4096,
-		supportsThinking: false,
+		reasoning: false,
 	},
 	// Gemini
 	{
@@ -82,7 +82,7 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.gemini,
 		contextWindow: 1_000_000,
 		maxOutput: 65_536,
-		supportsThinking: true,
+		reasoning: true,
 		default: true,
 	},
 	{
@@ -91,7 +91,7 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.gemini,
 		contextWindow: 2_000_000,
 		maxOutput: 65_536,
-		supportsThinking: true,
+		reasoning: true,
 	},
 	{
 		id: "gemini-3.1-pro-preview-customtools",
@@ -99,7 +99,7 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.gemini,
 		contextWindow: 2_000_000,
 		maxOutput: 65_536,
-		supportsThinking: true,
+		reasoning: true,
 	},
 	{
 		id: "gemini-3.1-flash-lite",
@@ -107,16 +107,16 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.gemini,
 		contextWindow: 1_000_000,
 		maxOutput: 65_536,
-		supportsThinking: true,
+		reasoning: true,
 	},
-	// DeepSeek — reasoning_effort high/max only
+	// DeepSeek
 	{
 		id: "deepseek-v4-flash",
 		name: "DeepSeek V4 Flash",
 		provider: PROVIDER.deepseek,
 		contextWindow: 1_000_000,
 		maxOutput: 16_384,
-		supportsThinking: true,
+		reasoning: true,
 		default: true,
 	},
 	{
@@ -125,16 +125,16 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.deepseek,
 		contextWindow: 1_000_000,
 		maxOutput: 16_384,
-		supportsThinking: true,
+		reasoning: true,
 	},
-	// OpenAI — reasoning_effort low/medium/high
+	// OpenAI
 	{
 		id: "gpt-5.5",
 		name: "GPT-5.5",
 		provider: PROVIDER.openai,
 		contextWindow: 1_000_000,
 		maxOutput: 128_000,
-		supportsThinking: true,
+		reasoning: true,
 		default: true,
 	},
 	{
@@ -143,7 +143,7 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.openai,
 		contextWindow: 1_000_000,
 		maxOutput: 128_000,
-		supportsThinking: true,
+		reasoning: true,
 	},
 	{
 		id: "gpt-5.4",
@@ -151,7 +151,7 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.openai,
 		contextWindow: 1_000_000,
 		maxOutput: 128_000,
-		supportsThinking: true,
+		reasoning: true,
 	},
 	{
 		id: "gpt-5.4-pro",
@@ -159,7 +159,7 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.openai,
 		contextWindow: 1_000_000,
 		maxOutput: 128_000,
-		supportsThinking: true,
+		reasoning: true,
 	},
 	{
 		id: "gpt-5.4-mini",
@@ -167,7 +167,7 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.openai,
 		contextWindow: 400_000,
 		maxOutput: 128_000,
-		supportsThinking: true,
+		reasoning: true,
 	},
 	{
 		id: "gpt-5.4-nano",
@@ -175,16 +175,16 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.openai,
 		contextWindow: 400_000,
 		maxOutput: 128_000,
-		supportsThinking: true,
+		reasoning: true,
 	},
-	// Anthropic — output_config.effort low/medium/high/xhigh/max
+	// Anthropic
 	{
 		id: "claude-fable-5",
 		name: "Claude Fable 5",
 		provider: PROVIDER.anthropic,
 		contextWindow: 1_000_000,
 		maxOutput: 128_000,
-		supportsThinking: true,
+		reasoning: true,
 	},
 	{
 		id: "claude-opus-4-8",
@@ -192,7 +192,7 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.anthropic,
 		contextWindow: 200_000,
 		maxOutput: 64_000,
-		supportsThinking: true,
+		reasoning: true,
 		default: true,
 	},
 	{
@@ -201,7 +201,7 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.anthropic,
 		contextWindow: 200_000,
 		maxOutput: 64_000,
-		supportsThinking: true,
+		reasoning: true,
 	},
 	{
 		id: "claude-opus-4-6",
@@ -209,7 +209,7 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.anthropic,
 		contextWindow: 200_000,
 		maxOutput: 32_000,
-		supportsThinking: true,
+		reasoning: true,
 	},
 	{
 		id: "claude-opus-4-5",
@@ -217,7 +217,7 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.anthropic,
 		contextWindow: 200_000,
 		maxOutput: 32_000,
-		supportsThinking: true,
+		reasoning: true,
 	},
 	{
 		id: "claude-sonnet-4-6",
@@ -225,7 +225,7 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.anthropic,
 		contextWindow: 200_000,
 		maxOutput: 32_000,
-		supportsThinking: true,
+		reasoning: true,
 	},
 	{
 		id: "claude-sonnet-4-5",
@@ -233,7 +233,7 @@ export const MODELS: Model[] = [
 		provider: PROVIDER.anthropic,
 		contextWindow: 200_000,
 		maxOutput: 32_000,
-		supportsThinking: true,
+		reasoning: true,
 	},
 ]
 
