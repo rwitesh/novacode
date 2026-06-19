@@ -255,12 +255,30 @@ async function resolvePermissionMode(flags: {
 	return picked
 }
 
-process.on("unhandledRejection", (reason) => {
-	console.error("Unhandled rejection:", reason)
+function reportFatal(label: string, reason: unknown): never {
+	console.error(chalk.red(`\n✗ ${label}:`), reason)
+	console.error(
+		chalk.yellow(
+			"\nNova hit an unexpected error and must exit.\n" +
+				"  • Try starting " +
+				chalk.bold.cyan("nova") +
+				" again.\n" +
+				"  • If it keeps failing, run " +
+				chalk.bold.cyan("nova reset") +
+				" — local data may be corrupted or out of date.\n",
+		),
+	)
 	process.exit(1)
+}
+
+process.on("unhandledRejection", (reason) => {
+	reportFatal("Unhandled rejection", reason)
+})
+
+process.on("uncaughtException", (err) => {
+	reportFatal("Uncaught exception", err)
 })
 
 main().catch((e) => {
-	console.error("Fatal:", e)
-	process.exit(1)
+	reportFatal("Fatal error", e)
 })
