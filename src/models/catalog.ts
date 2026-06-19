@@ -16,11 +16,14 @@ export const PROVIDER = {
 // live in src/providers.ts.
 //
 // Each provider marks one model `default: true`.
+//
+// `reasoning: false` marks models that are active but reject the SDK's HIGH
+// reasoning option (Anthropic `effort`, Google `thinkingLevel`). They stay
+// usable — NovaCode sends no reasoning providerOption for them.
 export const PROVIDERS: ProviderDef[] = [
 	{
 		id: PROVIDER.glm,
 		name: "GLM (Z.AI)",
-		baseUrl: "https://api.z.ai/api/coding/paas/v4",
 		envKey: "GLM_API_KEY",
 		models: [
 			{ id: "glm-5.2", contextWindow: 1_000_000, reasoning: true, default: true },
@@ -34,22 +37,19 @@ export const PROVIDERS: ProviderDef[] = [
 	{
 		id: PROVIDER.gemini,
 		name: "Gemini (Google)",
-		baseUrl: "https://generativelanguage.googleapis.com",
 		envKey: "GEMINI_API_KEY",
 		models: [
 			{ id: "gemini-3.5-flash", contextWindow: 1_000_000, reasoning: true, default: true },
 			{ id: "gemini-3.1-pro-preview", contextWindow: 1_000_000, reasoning: true },
 			{ id: "gemini-3.1-flash-lite", contextWindow: 1_000_000, reasoning: true },
-			{ id: "gemini-3-flash", contextWindow: 1_000_000, reasoning: true },
-			{ id: "gemini-2.5-pro", contextWindow: 1_000_000, reasoning: true },
-			{ id: "gemini-2.5-flash", contextWindow: 1_000_000, reasoning: true },
-			{ id: "gemini-2.5-flash-lite", contextWindow: 1_000_000, reasoning: true },
+			{ id: "gemini-2.5-pro", contextWindow: 1_000_000, reasoning: false },
+			{ id: "gemini-2.5-flash", contextWindow: 1_000_000, reasoning: false },
+			{ id: "gemini-2.5-flash-lite", contextWindow: 1_000_000, reasoning: false },
 		],
 	},
 	{
 		id: PROVIDER.deepseek,
 		name: "DeepSeek",
-		baseUrl: "https://api.deepseek.com",
 		envKey: "DEEPSEEK_API_KEY",
 		models: [
 			{ id: "deepseek-v4-flash", contextWindow: 1_000_000, reasoning: true, default: true },
@@ -59,7 +59,6 @@ export const PROVIDERS: ProviderDef[] = [
 	{
 		id: PROVIDER.openai,
 		name: "OpenAI",
-		baseUrl: "https://api.openai.com/v1",
 		envKey: "OPENAI_API_KEY",
 		models: [
 			{ id: "gpt-5.5", contextWindow: 1_000_000, reasoning: true, default: true },
@@ -84,7 +83,6 @@ export const PROVIDERS: ProviderDef[] = [
 	{
 		id: PROVIDER.anthropic,
 		name: "Anthropic",
-		baseUrl: "https://api.anthropic.com",
 		envKey: "ANTHROPIC_API_KEY",
 		models: [
 			{ id: "claude-fable-5", contextWindow: 1_000_000, reasoning: true },
@@ -92,12 +90,10 @@ export const PROVIDERS: ProviderDef[] = [
 			{ id: "claude-opus-4-7", contextWindow: 1_000_000, reasoning: true },
 			{ id: "claude-sonnet-4-6", contextWindow: 1_000_000, reasoning: true },
 			{ id: "claude-opus-4-6", contextWindow: 1_000_000, reasoning: true },
-			{ id: "claude-haiku-4-5", contextWindow: 200_000, reasoning: true },
-			{ id: "claude-sonnet-4-5", contextWindow: 1_000_000, reasoning: true },
+			{ id: "claude-haiku-4-5", contextWindow: 200_000, reasoning: false },
+			{ id: "claude-sonnet-4-5", contextWindow: 1_000_000, reasoning: false },
 			{ id: "claude-opus-4-5", contextWindow: 200_000, reasoning: true },
-			{ id: "claude-opus-4-1", contextWindow: 200_000, reasoning: true },
-			{ id: "claude-sonnet-4", contextWindow: 1_000_000, reasoning: true },
-			{ id: "claude-opus-4", contextWindow: 200_000, reasoning: true },
+			{ id: "claude-opus-4-1", contextWindow: 200_000, reasoning: false },
 		],
 	},
 ]

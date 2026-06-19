@@ -9,11 +9,10 @@ import {
 } from "../src/models/lookup.ts"
 
 describe("catalog: providers", () => {
-	it("every provider has an id, name, baseUrl, envKey, and models", () => {
+	it("every provider has an id, name, envKey, and models", () => {
 		for (const p of PROVIDERS) {
 			expect(p.id).toBeTruthy()
 			expect(p.name).toBeTruthy()
-			expect(p.baseUrl).toBeTruthy()
 			expect(p.envKey).toBeTruthy()
 			expect(p.models.length).toBeGreaterThan(0)
 		}
@@ -38,7 +37,7 @@ describe("catalog: defaults", () => {
 })
 
 describe("catalog: anthropic ordering", () => {
-	it("lists claude-fable-5 first but defaults to claude-opus-4-8", () => {
+	it("lists claude-fable-5 first and defaults to claude-opus-4-8", () => {
 		const models = getModelsForProvider("anthropic")
 		expect(models[0]?.id).toBe("claude-fable-5")
 		expect(getDefaultModel("anthropic")?.id).toBe("claude-opus-4-8")
@@ -46,11 +45,11 @@ describe("catalog: anthropic ordering", () => {
 })
 
 describe("catalog: model entries", () => {
-	it("every model has a positive context window and is reasoning-capable", () => {
+	it("every model has a positive context window and a reasoning flag", () => {
 		for (const p of PROVIDERS) {
 			for (const m of p.models) {
 				expect(m.contextWindow, `${p.id}/${m.id}`).toBeGreaterThan(0)
-				expect(m.reasoning, `${p.id}/${m.id}`).toBe(true)
+				expect(typeof m.reasoning, `${p.id}/${m.id}`).toBe("boolean")
 			}
 		}
 	})

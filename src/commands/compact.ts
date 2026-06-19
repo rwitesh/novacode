@@ -14,7 +14,6 @@ export async function handleCompact(
 		agent.messages,
 		agent.model,
 		agent.apiKey,
-		agent.baseUrl,
 		process.cwd(),
 	)
 

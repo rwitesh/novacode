@@ -119,7 +119,6 @@ async function addProvider(agent: Agent, prompts: Prompts): Promise<string> {
 				provider: pDef.id,
 				model: modelDef,
 				apiKey: key,
-				baseUrl: pDef.baseUrl,
 			})
 		}
 	}
@@ -160,7 +159,6 @@ async function updateKey(agent: Agent, prompts: Prompts): Promise<string> {
 				provider: pDef.id,
 				model: currentModel,
 				apiKey: key,
-				baseUrl: pDef.baseUrl,
 			})
 		}
 	}
@@ -207,7 +205,6 @@ async function removeKey(agent: Agent, prompts: Prompts): Promise<string> {
 					provider: pDef.id,
 					model: mDef,
 					apiKey: auth.apiKeys[next]!,
-					baseUrl: pDef.baseUrl,
 				})
 			}
 		}
@@ -248,7 +245,6 @@ async function setDefault(agent: Agent, prompts: Prompts): Promise<string> {
 		provider: pDef.id,
 		model: mDef,
 		apiKey: auth.apiKeys[pick],
-		baseUrl: pDef.baseUrl,
 	})
 
 	return chalk.green(`✓ Default set to ${pDef.name} (${mDef.id})`)

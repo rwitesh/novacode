@@ -54,7 +54,6 @@ export interface ModelDef {
 export interface ProviderDef {
 	id: string
 	name: string
-	baseUrl: string
 	envKey: string // env var name for API key
 	models: ModelDef[]
 }

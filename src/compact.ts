@@ -25,7 +25,6 @@ export async function compact(
 	messages: ModelMessage[],
 	model: Model,
 	apiKey: string,
-	baseUrl: string,
 	cwd: string,
 ): Promise<CompactResult> {
 	const tokensBefore = estimateTokens(messages)
@@ -64,7 +63,7 @@ export async function compact(
 		})
 		.join("\n\n")
 
-	const summary = await generateSummary(convo, model, apiKey, baseUrl)
+	const summary = await generateSummary(convo, model, apiKey)
 	if (!summary) {
 		return { compacted: false, tokensBefore, tokensAfter: tokensBefore }
 	}
@@ -94,13 +93,12 @@ async function generateSummary(
 	convo: string,
 	model: Model,
 	apiKey: string,
-	baseUrl: string,
 ): Promise<string | null> {
 	const provider = getProvider(model.provider)
 	if (!provider) return null
 
 	const { text } = await generateText({
-		model: createModel(provider.id, model.id, apiKey, baseUrl),
+		model: createModel(provider.id, model.id, apiKey),
 		system:
 			"Summarize this coding session concisely. Cover: what was asked, files touched, what was done, key decisions. Keep it under 300 words.",
 		prompt: convo,
@@ -114,7 +112,6 @@ export async function generateSessionTitle(
 	messages: ModelMessage[],
 	model: Model,
 	apiKey: string,
-	baseUrl: string,
 ): Promise<string | null> {
 	const provider = getProvider(model.provider)
 	if (!provider) return null
@@ -129,7 +126,7 @@ export async function generateSessionTitle(
 		.join("\n")
 
 	const { text } = await generateText({
-		model: createModel(provider.id, model.id, apiKey, baseUrl),
+		model: createModel(provider.id, model.id, apiKey),
 		system:
 			"Generate a very short, descriptive, and concise title for this coding conversation. Do not use quotes or prefixes like 'Title:'. Max 6 words.",
 		prompt: convo,

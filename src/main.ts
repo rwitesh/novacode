@@ -211,7 +211,6 @@ Options:
 		provider: provider.id,
 		model,
 		apiKey,
-		baseUrl: provider.baseUrl,
 		system,
 		tools,
 		messages: existingMessages,

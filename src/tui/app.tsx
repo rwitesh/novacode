@@ -137,7 +137,6 @@ function App({
 					provider: provider.id,
 					model,
 					apiKey,
-					baseUrl: provider.baseUrl,
 				})
 			}
 
@@ -529,7 +528,7 @@ function App({
 				.get(currSessionId)
 				.then((s) => {
 					if (s && !s.title && agent.messages.length >= 2) {
-						generateSessionTitle(agent.messages, agent.model, agent.apiKey, agent.baseUrl)
+						generateSessionTitle(agent.messages, agent.model, agent.apiKey)
 							.then((title) => {
 								if (title) store.setTitle(currSessionId, title).catch(() => {})
 							})

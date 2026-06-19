@@ -25,14 +25,12 @@ export class Agent {
 	#messages: ModelMessage[] = []
 	#tools: ToolSet
 	#apiKey: string
-	#baseUrl: string
 	#policy: PolicyEngine | null
 
 	constructor(opts: {
 		provider: string
 		model: Model
 		apiKey: string
-		baseUrl: string
 		system: string
 		tools: ToolSet
 		messages?: ModelMessage[]
@@ -41,7 +39,6 @@ export class Agent {
 		this.#provider = opts.provider
 		this.#model = opts.model
 		this.#apiKey = opts.apiKey
-		this.#baseUrl = opts.baseUrl
 		this.#system = opts.system
 		this.#tools = opts.tools
 		this.#messages = opts.messages ?? []
@@ -64,19 +61,14 @@ export class Agent {
 		return this.#apiKey
 	}
 
-	get baseUrl(): string {
-		return this.#baseUrl
-	}
-
 	get policy(): PolicyEngine | null {
 		return this.#policy
 	}
 
-	updateConfig(opts: { provider: string; model: Model; apiKey: string; baseUrl: string }): void {
+	updateConfig(opts: { provider: string; model: Model; apiKey: string }): void {
 		this.#provider = opts.provider
 		this.#model = opts.model
 		this.#apiKey = opts.apiKey
-		this.#baseUrl = opts.baseUrl
 	}
 
 	setTools(tools: ToolSet): void {
@@ -100,7 +92,7 @@ export class Agent {
 		onStepFinish?: StepFinishHandler,
 	): Promise<Awaited<ReturnType<ToolLoopAgent["stream"]>>> {
 		const agent = new ToolLoopAgent({
-			model: createModel(this.#provider, this.#model.id, this.#apiKey, this.#baseUrl),
+			model: createModel(this.#provider, this.#model.id, this.#apiKey),
 			instructions: this.#system,
 			tools: withApproval(this.#tools, this.#policy),
 			stopWhen: stepCountIs(MAX_TURNS),

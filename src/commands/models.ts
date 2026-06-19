@@ -51,7 +51,6 @@ export async function handleModels(args: string, agent: Agent, prompts?: Prompts
 		provider: selectedProvider.id,
 		model: selectedModel,
 		apiKey: auth.apiKeys[pk!] ?? "",
-		baseUrl: selectedProvider.baseUrl,
 	})
 	return chalk.green(`✓ Switched to ${mid}`)
 }
@@ -79,7 +78,6 @@ async function switchDirect(id: string, agent: Agent): Promise<string> {
 		provider: selectedProvider.id,
 		model: m,
 		apiKey: auth.apiKeys[pk],
-		baseUrl: selectedProvider.baseUrl,
 	})
 
 	return chalk.green(`✓ Switched to ${id}`)
