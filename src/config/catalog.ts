@@ -21,14 +21,12 @@ export const PROVIDERS: ProviderDef[] = [
 		baseUrl: "https://api.z.ai/api/coding/paas/v4",
 		envKey: "GLM_API_KEY",
 		models: [
-			{ id: "glm-5.2", contextWindow: 1_040_000, reasoning: true, default: true },
+			{ id: "glm-5.2", contextWindow: 1_000_000, reasoning: true, default: true },
 			{ id: "glm-5.1", contextWindow: 204_800, reasoning: true },
 			{ id: "glm-5-turbo", contextWindow: 202_800, reasoning: true },
 			{ id: "glm-5", contextWindow: 202_800, reasoning: true },
 			{ id: "glm-4.7", contextWindow: 204_800, reasoning: true },
 			{ id: "glm-4.6", contextWindow: 204_800, reasoning: true },
-			{ id: "glm-4.5", contextWindow: 131_072, reasoning: true },
-			{ id: "glm-4.5-air", contextWindow: 128_000, reasoning: true },
 		],
 	},
 	{
@@ -41,9 +39,9 @@ export const PROVIDERS: ProviderDef[] = [
 			{ id: "gemini-3.1-pro-preview", contextWindow: 1_000_000, reasoning: true },
 			{ id: "gemini-3.1-flash-lite", contextWindow: 1_000_000, reasoning: true },
 			{ id: "gemini-3-flash", contextWindow: 1_000_000, reasoning: true },
-			{ id: "gemini-2.5-pro", contextWindow: 1_048_576, reasoning: true },
+			{ id: "gemini-2.5-pro", contextWindow: 1_000_000, reasoning: true },
 			{ id: "gemini-2.5-flash", contextWindow: 1_000_000, reasoning: true },
-			{ id: "gemini-2.5-flash-lite", contextWindow: 1_048_576, reasoning: true },
+			{ id: "gemini-2.5-flash-lite", contextWindow: 1_000_000, reasoning: true },
 		],
 	},
 	{
@@ -52,12 +50,8 @@ export const PROVIDERS: ProviderDef[] = [
 		baseUrl: "https://api.deepseek.com",
 		envKey: "DEEPSEEK_API_KEY",
 		models: [
-			{ id: "deepseek-v4-flash", contextWindow: 1_048_576, reasoning: true, default: true },
-			{ id: "deepseek-v4-pro", contextWindow: 1_048_600, reasoning: true },
-			{ id: "deepseek-v3.2", contextWindow: 163_842, reasoning: true },
-			{ id: "deepseek-v3.2-thinking", contextWindow: 163_842, reasoning: true },
-			{ id: "deepseek-v3.1", contextWindow: 163_840, reasoning: true },
-			{ id: "deepseek-v3.1-terminus", contextWindow: 131_072, reasoning: true },
+			{ id: "deepseek-v4-flash", contextWindow: 1_000_000, reasoning: true, default: true },
+			{ id: "deepseek-v4-pro", contextWindow: 1_000_000, reasoning: true },
 		],
 	},
 	{
@@ -68,8 +62,8 @@ export const PROVIDERS: ProviderDef[] = [
 		models: [
 			{ id: "gpt-5.5", contextWindow: 1_000_000, reasoning: true, default: true },
 			{ id: "gpt-5.5-pro", contextWindow: 1_000_000, reasoning: true },
-			{ id: "gpt-5.4", contextWindow: 1_050_000, reasoning: true },
-			{ id: "gpt-5.4-pro", contextWindow: 1_050_000, reasoning: true },
+			{ id: "gpt-5.4", contextWindow: 1_000_000, reasoning: true },
+			{ id: "gpt-5.4-pro", contextWindow: 1_000_000, reasoning: true },
 			{ id: "gpt-5.4-mini", contextWindow: 400_000, reasoning: true },
 			{ id: "gpt-5.4-nano", contextWindow: 400_000, reasoning: true },
 			{ id: "gpt-5.3-codex", contextWindow: 400_000, reasoning: true },
@@ -83,8 +77,6 @@ export const PROVIDERS: ProviderDef[] = [
 			{ id: "gpt-5", contextWindow: 400_000, reasoning: true },
 			{ id: "gpt-5-mini", contextWindow: 400_000, reasoning: true },
 			{ id: "gpt-5-nano", contextWindow: 400_000, reasoning: true },
-			{ id: "gpt-oss-120b", contextWindow: 131_072, reasoning: true },
-			{ id: "gpt-oss-20b", contextWindow: 131_072, reasoning: true },
 		],
 	},
 	{
