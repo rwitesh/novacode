@@ -1,6 +1,5 @@
 /**
  * Filesystem tools for reading, writing, and editing files.
- * Includes safety checks to prevent path traversal.
  */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises"
@@ -14,14 +13,6 @@ import type { ToolResult } from "../types.ts"
 // Extensions we return as base64 images instead of text
 const IMAGES = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"])
 
-function safePath(cwd: string, p: string): string {
-	const abs = resolve(cwd, p)
-	if (abs !== cwd && !abs.startsWith(`${cwd}/`)) {
-		throw new Error(`Path outside project: ${p}`)
-	}
-	return abs
-}
-
 export const readTool = (cwd: string) =>
 	tool({
 		description:
@@ -33,7 +24,7 @@ export const readTool = (cwd: string) =>
 		}),
 		execute: async (args): Promise<ToolResult> => {
 			try {
-				const filePath = safePath(cwd, args.path)
+				const filePath = resolve(cwd, args.path)
 				// Return images as base64 so the LLM can process them visually
 				const ext = extname(filePath).toLowerCase()
 				if (IMAGES.has(ext)) {
@@ -73,7 +64,7 @@ export const writeTool = (cwd: string) =>
 		}),
 		execute: async (args): Promise<ToolResult> => {
 			try {
-				const filePath = safePath(cwd, args.path)
+				const filePath = resolve(cwd, args.path)
 				await mkdir(dirname(filePath), { recursive: true })
 				await writeFile(filePath, args.content)
 				const relPath = getRelativeIfInside(cwd, filePath)
@@ -111,7 +102,7 @@ export const editTool = (cwd: string) =>
 		}),
 		execute: async (args): Promise<ToolResult> => {
 			try {
-				const filePath = safePath(cwd, args.path)
+				const filePath = resolve(cwd, args.path)
 				let content: string
 				try {
 					content = await readFile(filePath, "utf-8")

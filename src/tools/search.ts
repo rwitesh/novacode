@@ -12,14 +12,6 @@ import { z } from "zod"
 import { toToolResultOutput } from "../content.ts"
 import type { ToolResult } from "../types.ts"
 
-function ensureInside(cwd: string, rawPath: string): string {
-	const dir = resolve(cwd, rawPath || ".")
-	if (dir !== cwd && !dir.startsWith(`${cwd}/`)) {
-		throw new Error(`Path outside project: ${rawPath}`)
-	}
-	return dir
-}
-
 export const globTool = (cwd: string) =>
 	tool({
 		description: "Find files by glob pattern (e.g. **/*.ts, src/**/*.test.ts).",
@@ -30,7 +22,7 @@ export const globTool = (cwd: string) =>
 		}),
 		execute: async (args): Promise<ToolResult> => {
 			try {
-				const dir = ensureInside(cwd, args.path ?? ".")
+				const dir = resolve(cwd, args.path ?? ".")
 				const files = await glob(args.pattern, { cwd: dir, nocase: args.nocase ?? false })
 				const sliced = files.slice(0, 500)
 				const relSearchPath = relative(cwd, dir)
@@ -59,7 +51,7 @@ export const grepTool = (cwd: string) =>
 		}),
 		execute: async (args, { abortSignal }): Promise<ToolResult> => {
 			try {
-				const dir = ensureInside(cwd, args.path ?? ".")
+				const dir = resolve(cwd, args.path ?? ".")
 				const globFilter = args.glob
 				const relSearchPath = relative(cwd, dir) || "."
 
