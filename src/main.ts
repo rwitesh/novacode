@@ -9,17 +9,12 @@ import { Agent } from "./agent/agent.ts"
 import { buildSystemPrompt } from "./agent/prompt.ts"
 import { loadResources } from "./bootstrap.ts"
 import { handleSessionCommand } from "./commands/session.ts"
-import {
-	getModel,
-	getModelById,
-	getModelsForProvider,
-	getProvider,
-	PROVIDERS,
-} from "./config/catalog.ts"
 import { configExists, loadAuth, loadConfig } from "./config/store.ts"
+import { getSessionStore } from "./db/sessionStore.ts"
+import { PROVIDERS } from "./models/catalog.ts"
+import { getModel, getModelById, getModelsForProvider, getProvider } from "./models/lookup.ts"
 import { runOnboarding } from "./onboarding/wizard.ts"
 import { PolicyEngine } from "./policy/engine.ts"
-import { getSessionStore } from "./session/store.ts"
 import { dedupeSkills } from "./skills/index.ts"
 import { getAllTools } from "./tools/index.ts"
 import { standaloneSelect } from "./tui/prompts.tsx"

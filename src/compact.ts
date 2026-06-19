@@ -1,10 +1,10 @@
 import { generateText, type ModelMessage } from "ai"
-import { getProvider } from "../config/catalog.ts"
-import { summarizeToolOutput } from "../content.ts"
-import { createModel, reasoningOpts } from "../providers.ts"
-import { estimateTokens } from "../tokens.ts"
-import type { CompactResult, Model } from "../types.ts"
-import type { SessionStore } from "./store.ts"
+import { summarizeToolOutput } from "./content.ts"
+import type { SessionStore } from "./db/sessionStore.ts"
+import { getProvider } from "./models/lookup.ts"
+import { createModel, reasoningOpts } from "./providers.ts"
+import { estimateTokens } from "./tokens.ts"
+import type { CompactResult, Model } from "./types.ts"
 
 function extractText(msg: ModelMessage): string {
 	if (msg.role === "tool") {

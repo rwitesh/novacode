@@ -1,4 +1,4 @@
-import type { Model, ProviderDef } from "../types.ts"
+import type { ProviderDef } from "../types.ts"
 
 // Provider id constants — single source of truth for provider identifiers.
 export const PROVIDER = {
@@ -10,8 +10,10 @@ export const PROVIDER = {
 } as const
 
 // Providers and their coding-capable models, grouped per provider. Context
-// windows are sourced from the Vercel AI Gateway model catalog. Provider/model
-// construction + reasoning defaults live in src/providers.ts.
+// windows are sourced from the Vercel AI Gateway model catalog. This file is
+// the static catalog of provider/model data only — lookups live in
+// src/models/lookup.ts, and provider/model construction + reasoning defaults
+// live in src/providers.ts.
 //
 // Each provider marks one model `default: true`.
 export const PROVIDERS: ProviderDef[] = [
@@ -99,35 +101,3 @@ export const PROVIDERS: ProviderDef[] = [
 		],
 	},
 ]
-
-export function getProvider(id: string): ProviderDef | undefined {
-	return PROVIDERS.find((p) => p.id === id)
-}
-
-// Resolves a provider's nested models into the runtime Model shape (provider
-// id attached).
-export function getModelsForProvider(providerId: string): Model[] {
-	const provider = getProvider(providerId)
-	if (!provider) return []
-	return provider.models.map((m) => ({ ...m, provider: provider.id }))
-}
-
-export function getModel(providerId: string, modelId: string): Model | undefined {
-	return getModelsForProvider(providerId).find((m) => m.id === modelId)
-}
-
-// First match across all providers — used when only a model id is known.
-export function getModelById(modelId: string): Model | undefined {
-	for (const provider of PROVIDERS) {
-		const model = getModel(provider.id, modelId)
-		if (model) return model
-	}
-	return undefined
-}
-
-// A provider's default model (the entry flagged default: true), falling back to
-// the first listed model.
-export function getDefaultModel(providerId: string): Model | undefined {
-	const models = getModelsForProvider(providerId)
-	return models.find((m) => m.default) ?? models[0]
-}

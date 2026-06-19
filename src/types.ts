@@ -40,7 +40,7 @@ export interface Usage {
 
 // Per-provider model entry, nested under ProviderDef. The provider id is
 // implied by the parent, so it is not repeated on each entry. Only fields
-// NovaCode actually consumes are stored (see src/config/catalog.ts):
+// NovaCode actually consumes are stored (see src/models/catalog.ts):
 //   contextWindow — compaction tail budget (compact.ts) + status display
 //   reasoning     — gates the HIGH reasoning providerOption (providers.ts)
 //   default       — marks the provider's default model

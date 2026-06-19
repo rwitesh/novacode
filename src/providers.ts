@@ -13,7 +13,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAI } from "@ai-sdk/openai"
 import type { ProviderOptions } from "@ai-sdk/provider-utils"
 import type { LanguageModel } from "ai"
-import { PROVIDER } from "./config/catalog.ts"
+import { PROVIDER } from "./models/catalog.ts"
 
 export function createModel(
 	providerId: string,

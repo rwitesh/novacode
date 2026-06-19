@@ -1,5 +1,5 @@
+import type { SessionStore } from "../db/sessionStore.ts"
 import { formatRelativeTime } from "../format.ts"
-import type { SessionStore } from "../session/store.ts"
 
 function formatTokens(n: number): string {
 	if (n === 0) return "-"

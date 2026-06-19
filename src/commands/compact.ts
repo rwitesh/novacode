@@ -1,7 +1,7 @@
 import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
-import { compact as runCompact } from "../session/compact.ts"
-import type { SessionStore } from "../session/store.ts"
+import { compact as runCompact } from "../compact.ts"
+import type { SessionStore } from "../db/sessionStore.ts"
 
 export async function handleCompact(
 	agent: Agent,

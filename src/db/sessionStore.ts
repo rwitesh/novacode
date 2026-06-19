@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite"
 import type { ModelMessage } from "ai"
 import type { PendingSession, Session } from "../types.ts"
-import { closeDb, getDb } from "./db.ts"
+import { closeDb, getDb } from "./client.ts"
 
 function generateId(): string {
 	return `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`

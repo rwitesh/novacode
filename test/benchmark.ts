@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
-import { SessionStore } from "../src/session/store.ts"
+import { SessionStore } from "../src/db/sessionStore.ts"
 
 async function createTempStore() {
 	const dir = await mkdtemp(join(tmpdir(), "novacode-benchmark-"))

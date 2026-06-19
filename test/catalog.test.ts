@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest"
+import { PROVIDERS } from "../src/models/catalog.ts"
 import {
 	getDefaultModel,
 	getModel,
 	getModelById,
 	getModelsForProvider,
 	getProvider,
-	PROVIDERS,
-} from "../src/config/catalog.ts"
+} from "../src/models/lookup.ts"
 
 describe("catalog: providers", () => {
 	it("every provider has an id, name, baseUrl, envKey, and models", () => {

@@ -4,7 +4,7 @@ import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 import type { ModelMessage } from "ai"
 import { describe, expect, it } from "vitest"
-import { SessionStore } from "../src/session/store.ts"
+import { SessionStore } from "../src/db/sessionStore.ts"
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (

@@ -2,7 +2,7 @@ import { rm, stat } from "node:fs/promises"
 import { createInterface } from "node:readline"
 import chalk from "chalk"
 import { getNovaDir } from "../config/store.ts"
-import { closeDb, resetDb } from "../session/db.ts"
+import { closeDb, resetDb } from "../db/client.ts"
 import type { Prompts } from "../types.ts"
 
 export async function handleCliReset(): Promise<void> {

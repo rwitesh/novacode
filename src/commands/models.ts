@@ -1,13 +1,8 @@
 import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
-import {
-	getModel,
-	getModelById,
-	getModelsForProvider,
-	getProvider,
-	PROVIDERS,
-} from "../config/catalog.ts"
 import { loadAuth, loadConfig, saveConfig } from "../config/store.ts"
+import { PROVIDERS } from "../models/catalog.ts"
+import { getModel, getModelById, getModelsForProvider, getProvider } from "../models/lookup.ts"
 import type { Prompts } from "../types.ts"
 
 export async function handleModels(args: string, agent: Agent, prompts?: Prompts): Promise<string> {

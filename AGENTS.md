@@ -38,9 +38,12 @@ src/
 ├── format.ts            # display formatters (formatToolArgs, formatRelativeTime)
 ├── tokens.ts            # estimateTokens — rough token estimation over ModelMessage[]
 ├── update.ts            # version check + self-update
+├── compact.ts           # session splitting compaction (generateText summary → continuation) + title gen
+├── models/
+│   ├── catalog.ts      # static provider + model catalog DATA (PROVIDER ids, PROVIDERS list)
+│   └── lookup.ts       # catalog accessors (getProvider, getModel, getModelsForProvider, ...)
 ├── config/
-│   ├── store.ts         # config.json (settings) + auth.json (API keys, 0600)
-│   └── catalog.ts       # static provider + model catalog (GLM, Gemini, DeepSeek, OpenAI, Anthropic)
+│   └── store.ts         # config.json (settings) + auth.json (API keys, 0600)
 ├── agent/
 │   ├── agent.ts         # stateful Agent class wrapping an AI SDK ToolLoopAgent
 │   ├── approval.ts      # withApproval(tools, policy) — gates tool execute, separate from tool defs
@@ -52,10 +55,9 @@ src/
 │   ├── search.ts        # glob, grep, ls, tree tools
 │   ├── git.ts           # git status, log, diff, add, commit tool
 │   └── web.ts           # web fetch/search tool
-├── session/
-│   ├── db.ts           # node:sqlite wrapper: WAL mode, schema init, singleton
-│   ├── store.ts        # SessionStore class: stores/restores canonical ModelMessage[] as JSON
-│   └── compact.ts      # session splitting compaction (generateText summary → continuation)
+├── db/
+│   ├── client.ts        # node:sqlite wrapper: WAL mode, schema init, singleton
+│   └── sessionStore.ts  # SessionStore class: stores/restores canonical ModelMessage[] as JSON
 ├── policy/
 │   └── engine.ts       # PolicyEngine — deterministic secret-block + risk classify + approver gate
 ├── onboarding/
@@ -164,13 +166,16 @@ These rules prevent the most common mistakes AI agents make when editing this co
 
 - **`types.ts`** — NovaCode-specific types only. No runtime code, no imports from other src files. AI message/tool/usage types are imported from `ai`, never redeclared here.
 - **`providers.ts`** — AI SDK provider/model construction + reasoning defaults. No agent logic, no tool definitions.
-- **`config/`** — reads/writes config files (`store.ts`) plus the static provider/model catalog (`catalog.ts`). No agent or streaming logic.
+- **`models/`** — static provider/model catalog only. `catalog.ts` holds the `PROVIDER` ids + `PROVIDERS` list (data); `lookup.ts` holds accessors (getProvider, getModel, ...). No I/O, no agent logic. (Runtime provider/model construction lives in top-level `providers.ts`.)
+- **`config/`** — reads/writes config files (`config.json`, `auth.json`). No agent or streaming logic, no model data.
+- **`db/`** — all SQLite access. `client.ts` is the connection wrapper; `sessionStore.ts` is the `SessionStore`. No agent or streaming logic.
+- **`compact.ts`** — session compaction + title generation. Composes `db/` + `providers.ts` + `models/lookup.ts`; not a DB or config concern itself.
 - **`tools/`** — AI SDK `tool()` definitions only. No agent loop logic, no policy. Tools receive `cwd` as a parameter, they don't read config.
 - **`agent/`** — `agent.ts` builds a `ToolLoopAgent` and delegates the loop to the SDK; `approval.ts` gates tool execution via `PolicyEngine`; `prompt.ts` builds the system prompt. No direct HTTP calls or file I/O (those live in tools).
 - **`policy/`** — the deterministic approval authority. No AI SDK dependency (operates on a local `PolicyCall` shape), no tool definitions.
 - **`commands/`** — slash command handlers. Receive a `Prompts` interface from the TUI for interactive menus. Never import Ink or render directly — use the injected `Prompts` object.
 - **`tui/`** — all rendering lives here. `app.tsx` owns the Ink app, consumes `streamText` `fullStream`, and exposes a `Prompts` implementation. `prompts.tsx` has reusable Ink prompt components plus standalone wrappers for onboarding (outside the main TUI).
-- **Cross-module imports go one direction:** `main → agent → providers`, `main → tools`, `main → config`, `main → tui`. Never `tools → agent` or `providers → agent` or `commands → tui`.
+- **Cross-module imports go one direction:** `main → agent → providers`, `main → tools`, `main → config`, `main → db`, `main → models`, `main → tui`, `compact → providers | db | models`. Never `tools → agent` or `providers → agent` or `commands → tui`.
 
 ## Before Every Commit
 
