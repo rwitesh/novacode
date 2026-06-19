@@ -4,7 +4,7 @@ import { Box, render, Static, Text, useApp, useInput } from "ink"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
-import { getProvider, MODELS } from "../config/catalog.ts"
+import { getModel, getProvider } from "../config/catalog.ts"
 import { loadAuth } from "../config/store.ts"
 import type { PolicyEngine } from "../policy/engine.ts"
 import { generateSessionTitle } from "../session/compact.ts"
@@ -24,12 +24,25 @@ import { hasMeaningfulContent, Message } from "./components/message.tsx"
 import { StatusBar } from "./components/statusBar.tsx"
 import { useStreamBuffer } from "./hooks/useStreamBuffer.ts"
 import { useTip } from "./hooks/useTip.ts"
-import { ApprovalPrompt, ConfirmPrompt, PasswordPrompt, SelectPrompt } from "./prompts.tsx"
+import {
+	ApprovalPrompt,
+	ConfirmPrompt,
+	PasswordPrompt,
+	SearchSelectPrompt,
+	SelectPrompt,
+} from "./prompts.tsx"
 
 type PromptMode =
 	| { type: "chat" }
 	| {
 			type: "select"
+			message: string
+			options: Array<{ value: string; label: string; hint?: string }>
+			header?: string
+			footer?: string
+	  }
+	| {
+			type: "searchSelect"
 			message: string
 			options: Array<{ value: string; label: string; hint?: string }>
 			header?: string
@@ -116,9 +129,7 @@ function App({
 			if (!s) return
 
 			const provider = getProvider(s.provider)
-			const model =
-				MODELS.find((m) => m.id === s.model && m.provider === s.provider) ||
-				MODELS.find((m) => m.id === s.model)
+			const model = getModel(s.provider, s.model)
 			if (provider && model) {
 				const auth = await loadAuth()
 				const apiKey = auth.apiKeys[s.provider] || ""
@@ -197,6 +208,14 @@ function App({
 				new Promise((resolve) => {
 					resolveRef.current = resolve as (v: unknown) => void
 					setMode({ type: "select", ...config })
+				}),
+			[],
+		),
+		searchSelect: useCallback(
+			(config) =>
+				new Promise((resolve) => {
+					resolveRef.current = resolve as (v: unknown) => void
+					setMode({ type: "searchSelect", ...config })
 				}),
 			[],
 		),
@@ -538,6 +557,17 @@ function App({
 	if (mode.type === "select") {
 		return (
 			<SelectPrompt
+				message={mode.message}
+				options={mode.options}
+				header={mode.header}
+				footer={mode.footer}
+				onSelect={resolvePrompt}
+			/>
+		)
+	}
+	if (mode.type === "searchSelect") {
+		return (
+			<SearchSelectPrompt
 				message={mode.message}
 				options={mode.options}
 				header={mode.header}

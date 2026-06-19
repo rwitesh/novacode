@@ -9,7 +9,13 @@ import { Agent } from "./agent/agent.ts"
 import { buildSystemPrompt } from "./agent/prompt.ts"
 import { loadResources } from "./bootstrap.ts"
 import { handleSessionCommand } from "./commands/session.ts"
-import { getProvider, MODELS } from "./config/catalog.ts"
+import {
+	getModel,
+	getModelById,
+	getModelsForProvider,
+	getProvider,
+	PROVIDERS,
+} from "./config/catalog.ts"
 import { configExists, loadAuth, loadConfig } from "./config/store.ts"
 import { runOnboarding } from "./onboarding/wizard.ts"
 import { PolicyEngine } from "./policy/engine.ts"
@@ -42,10 +48,8 @@ function parseCli() {
 }
 
 function findModel(modelId: string, providerId?: string) {
-	return MODELS.find((m) => {
-		if (providerId) return m.provider === providerId && m.id === modelId
-		return m.id === modelId
-	})
+	if (!providerId) return getModelById(modelId)
+	return getModel(providerId, modelId)
 }
 
 const NODE_MIN = 24
@@ -169,9 +173,7 @@ Options:
 	const provider = getProvider(providerId)
 	if (!provider) {
 		console.error(`Unknown provider: ${providerId}`)
-		console.error(
-			`Available: ${getProvider("glm") ? "glm, " : ""}gemini, deepseek, openai, anthropic`,
-		)
+		console.error(`Available: ${PROVIDERS.map((p) => p.id).join(", ")}`)
 		process.exit(1)
 	}
 
@@ -186,8 +188,8 @@ Options:
 	if (!model) {
 		console.error(`Unknown model: ${modelId}`)
 		console.error("Available models:")
-		for (const m of MODELS.filter((m) => m.provider === providerId)) {
-			console.error(`  ${m.id} — ${m.name}`)
+		for (const m of getModelsForProvider(providerId)) {
+			console.error(`  ${m.id}`)
 		}
 		process.exit(1)
 	}

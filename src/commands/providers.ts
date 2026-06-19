@@ -1,6 +1,12 @@
 import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
-import { getDefaultModel, getProvider, MODELS, PROVIDERS } from "../config/catalog.ts"
+import {
+	getDefaultModel,
+	getModel,
+	getModelsForProvider,
+	getProvider,
+	PROVIDERS,
+} from "../config/catalog.ts"
 import { loadAuth, loadConfig, saveAuth, saveConfig } from "../config/store.ts"
 import type { Prompts } from "../types.ts"
 
@@ -74,7 +80,7 @@ async function addProvider(agent: Agent, prompts: Prompts): Promise<string> {
 	auth.apiKeys[pDef.id] = key
 	await saveAuth(auth)
 
-	const providerModels = MODELS.filter((m) => m.provider === pDef.id)
+	const providerModels = getModelsForProvider(pDef.id)
 	const defaultModel = getDefaultModel(pDef.id)
 	let selectedModelId = defaultModel?.id ?? ""
 
@@ -90,7 +96,7 @@ async function addProvider(agent: Agent, prompts: Prompts): Promise<string> {
 		if (choice === "choose") {
 			const pickedModel = await prompts.select({
 				message: "Select Model ID",
-				options: providerModels.map((m) => ({ value: m.id, label: m.name })),
+				options: providerModels.map((m) => ({ value: m.id, label: m.id })),
 			})
 			if (pickedModel) {
 				selectedModelId = pickedModel
@@ -112,7 +118,7 @@ async function addProvider(agent: Agent, prompts: Prompts): Promise<string> {
 		config.provider = pDef.id
 		config.model = selectedModelId
 		await saveConfig(config)
-		const modelDef = MODELS.find((m) => m.id === selectedModelId)
+		const modelDef = getModel(pDef.id, selectedModelId)
 		if (modelDef) {
 			agent.updateConfig({
 				provider: pDef.id,
@@ -153,7 +159,7 @@ async function updateKey(agent: Agent, prompts: Prompts): Promise<string> {
 
 	const config = await loadConfig()
 	if (config.provider === pDef.id) {
-		const currentModel = MODELS.find((m) => m.id === config.model && m.provider === config.provider)
+		const currentModel = getModel(config.provider, config.model)
 		if (currentModel) {
 			agent.updateConfig({
 				provider: pDef.id,

@@ -1,6 +1,12 @@
 import chalk from "chalk"
 import type { Agent } from "../agent/agent.ts"
-import { getProvider, MODELS } from "../config/catalog.ts"
+import {
+	getModel,
+	getModelById,
+	getModelsForProvider,
+	getProvider,
+	PROVIDERS,
+} from "../config/catalog.ts"
 import { loadAuth, loadConfig, saveConfig } from "../config/store.ts"
 import type { Prompts } from "../types.ts"
 
@@ -12,10 +18,9 @@ export async function handleModels(args: string, agent: Agent, prompts?: Prompts
 
 	if (!prompts) return chalk.red("Prompts not available in this context")
 
-	const activeModels = MODELS.filter((m) => {
-		const pDef = getProvider(m.provider)
-		return pDef && !!auth.apiKeys[m.provider]
-	})
+	const activeModels = PROVIDERS.filter((p) => auth.apiKeys[p.id]).flatMap((p) =>
+		getModelsForProvider(p.id),
+	)
 
 	if (!activeModels.length)
 		return chalk.yellow("No models available. Use /providers to add a provider API key.")
@@ -34,11 +39,11 @@ export async function handleModels(args: string, agent: Agent, prompts?: Prompts
 		})
 	}
 
-	const pick = await prompts.select({ message: "Model", options })
+	const pick = await prompts.searchSelect({ message: "Model (type to filter)", options })
 	if (!pick) return ""
 
 	const [pk, mid] = pick.split(":")
-	const selectedModel = MODELS.find((m) => m.provider === pk && m.id === mid)
+	const selectedModel = getModel(pk!, mid!)
 	const selectedProvider = getProvider(pk!)
 
 	if (!selectedModel || !selectedProvider) return chalk.red("Error: Model or provider not found")
@@ -60,7 +65,7 @@ async function switchDirect(id: string, agent: Agent): Promise<string> {
 	const config = await loadConfig()
 	const auth = await loadAuth()
 
-	const m = MODELS.find((m) => m.id === id)
+	const m = getModelById(id)
 	if (!m) return chalk.yellow(`"${id}" not found. Use /models`)
 
 	const pk = m.provider

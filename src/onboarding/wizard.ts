@@ -34,7 +34,7 @@ export async function runOnboarding(): Promise<NovaConfig> {
 		"Pick a default model",
 		models.map((m) => ({
 			value: m.id,
-			label: `${m.name} (${(m.contextWindow / 1000).toFixed(0)}k ctx)`,
+			label: `${m.id} (${(m.contextWindow / 1000).toFixed(0)}k ctx)`,
 		})),
 	)
 	if (!modelId) {

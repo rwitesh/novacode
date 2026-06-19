@@ -38,24 +38,30 @@ export interface Usage {
 
 /** Provider & model catalog */
 
+// Per-provider model entry, nested under ProviderDef. The provider id is
+// implied by the parent, so it is not repeated on each entry. Only fields
+// NovaCode actually consumes are stored (see src/config/catalog.ts):
+//   contextWindow — compaction tail budget (compact.ts) + status display
+//   reasoning     — gates the HIGH reasoning providerOption (providers.ts)
+//   default       — marks the provider's default model
+export interface ModelDef {
+	id: string
+	contextWindow: number
+	reasoning: boolean
+	default?: boolean
+}
+
 export interface ProviderDef {
 	id: string
 	name: string
 	baseUrl: string
 	envKey: string // env var name for API key
+	models: ModelDef[]
 }
 
-export interface Model {
-	id: string
-	name: string
+// Resolved model with its provider id — runtime shape used across the app.
+export interface Model extends ModelDef {
 	provider: string
-	contextWindow: number
-	maxOutput: number
-	// Whether the model accepts reasoning-effort control. When true, a HIGH
-	// reasoning providerOption is sent (see src/providers.ts). Effort selection
-	// is gone — every reasoning-capable model runs at HIGH.
-	reasoning: boolean
-	default?: boolean
 }
 
 /** Config (settings.json + auth.json) */
@@ -130,6 +136,12 @@ export interface PolicyApprover {
 
 export interface Prompts {
 	select(config: {
+		message: string
+		header?: string
+		footer?: string
+		options: Array<{ value: string; label: string; hint?: string }>
+	}): Promise<string | null>
+	searchSelect(config: {
 		message: string
 		header?: string
 		footer?: string
