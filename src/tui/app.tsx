@@ -141,7 +141,7 @@ function App({
 				const maxInputTokens = model.contextWindow - systemTokens - 4096
 				const trimmed = trimMessages(activeMsgs, maxInputTokens)
 				setUsage({
-					in: systemTokens + estimateTokens(trimmed),
+					in: estimateTokens(trimmed),
 					out: s.outputTokens,
 				})
 			}
@@ -156,9 +156,8 @@ function App({
 		setMsgs([])
 		setCurrSessionId(session.id)
 
-		const systemTokens = Math.ceil(agent.system.length / 4)
 		setUsage({
-			in: systemTokens,
+			in: 0,
 			out: 0,
 		})
 	}, [store, agent])
@@ -170,7 +169,7 @@ function App({
 				const maxInputTokens = agent.model.contextWindow - systemTokens - 4096
 				const trimmed = trimMessages(initialHistory, maxInputTokens)
 				setUsage({
-					in: systemTokens + estimateTokens(trimmed),
+					in: estimateTokens(trimmed),
 					out: s.outputTokens,
 				})
 			}
@@ -285,7 +284,7 @@ function App({
 			const trimmed = trimMessages(agent.messages, maxInputTokens)
 			setUsage((prev) => ({
 				...prev,
-				in: systemTokens + estimateTokens(trimmed),
+				in: estimateTokens(trimmed),
 			}))
 		}
 	}
@@ -308,7 +307,7 @@ function App({
 			const trimmed = trimMessages(agent.messages, maxInputTokens)
 			setUsage((prev) => ({
 				...prev,
-				in: systemTokens + estimateTokens(trimmed),
+				in: estimateTokens(trimmed),
 			}))
 		}
 
@@ -540,7 +539,7 @@ function App({
 
 		const session = await store.get(currSessionId)
 		usageAcc.current = {
-			in: systemTokens + estimateTokens(trimmedMessages),
+			in: estimateTokens(trimmedMessages),
 			out: session ? session.outputTokens : 0,
 		}
 		setUsage(usageAcc.current)
@@ -733,7 +732,7 @@ function App({
 
 	return (
 		<Box flexDirection="column" paddingX={1} width="100%">
-			<Static items={completedEvents}>
+			<Static key={currSessionId} items={completedEvents}>
 				{(e, i) => <EventRenderer key={e.id} event={e} isFirst={i === 0} />}
 			</Static>
 
