@@ -1,6 +1,6 @@
 {
 	"name": "novacode",
-	"version": "0.11.0",
+	"version": "0.11.1",
 	"description": "Open-source multi-provider coding agent.",
 	"type": "module",
 	"main": "./dist/main.mjs",
@@ -21,7 +21,8 @@
 		"format": "biome format --write .",
 		"typecheck": "tsc --noEmit",
 		"check": "npm run build && npm run typecheck && npm run lint && npm test",
-		"benchmark": "node --import tsx/esm test/benchmark.ts"
+		"benchmark": "node --import tsx/esm test/benchmark.ts",
+		"sandbox": "./scripts/sandbox/install.sh"
 	},
 	"keywords": [
 		"coding-agent",
