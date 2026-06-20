@@ -3,7 +3,7 @@
  */
 
 import os from "node:os"
-import type { ToolSet } from "ai"
+import type { ModelMessage, ToolSet } from "ai"
 import type { Skill } from "../types.ts"
 
 export function buildSystemPrompt(
@@ -69,4 +69,23 @@ ${skills.length > 0 ? skills.map((s) => `- ${s.name}: ${s.description} (path: ${
 **IMPORTANT:** Before responding to a task that matches any skill above, you MUST first read the skill's SKILL.md file using the read tool with the full absolute path, then follow its instructions exactly. Do not skip this step.
 
 ${agentsMd ? `\n<project_context>\nProject-specific instructions and guidelines:\n\n<project_instructions path="AGENTS.md">\n${agentsMd}\n</project_instructions>\n</project_context>` : ""}`
+}
+
+export function preparePrompt(
+	system: string,
+	messages: ModelMessage[],
+): { instructions: string; messages: ModelMessage[] } {
+	const firstMsg = messages[0]
+	if (
+		firstMsg &&
+		firstMsg.role === "user" &&
+		typeof firstMsg.content === "string" &&
+		firstMsg.content.startsWith("[Prior context summary]")
+	) {
+		return {
+			instructions: `${system}\n\n${firstMsg.content}`,
+			messages: messages.slice(1),
+		}
+	}
+	return { instructions: system, messages }
 }

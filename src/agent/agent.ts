@@ -12,6 +12,8 @@ import type { PolicyEngine } from "../policy/engine.ts"
 import { createModel, reasoningOpts } from "../providers.ts"
 import type { Model } from "../types.ts"
 import { withApproval } from "./approval.ts"
+import { preparePrompt } from "./prompt.ts"
+import { trimMessages } from "./trim.ts"
 
 // Safety cap so a misbehaving model can't loop forever
 const MAX_TURNS = 50
@@ -95,14 +97,20 @@ export class Agent {
 		signal?: AbortSignal,
 		onStepFinish?: StepFinishHandler,
 	): Promise<Awaited<ReturnType<ToolLoopAgent["stream"]>>> {
+		const systemTokens = Math.ceil(this.#system.length / 4)
+		const maxInputTokens = this.#model.contextWindow - systemTokens - 4096
+		const trimmed = trimMessages(this.#messages, maxInputTokens)
+
+		const { instructions, messages: messagesToStream } = preparePrompt(this.#system, trimmed)
+
 		const agent = new ToolLoopAgent({
 			model: createModel(this.#provider, this.#model.id, this.#apiKey),
-			instructions: this.#system,
+			instructions,
 			tools: withApproval(this.#tools, this.#policy),
 			stopWhen: stepCountIs(MAX_TURNS),
 			providerOptions: this.#model.reasoning ? reasoningOpts(this.#provider) : undefined,
 		})
 
-		return agent.stream({ messages: this.#messages, abortSignal: signal, onStepFinish })
+		return agent.stream({ messages: messagesToStream, abortSignal: signal, onStepFinish })
 	}
 }

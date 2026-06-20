@@ -531,12 +531,6 @@ function App({
 		const currentMessages = agent.messages
 		const trimmedMessages = trimMessages(currentMessages, maxInputTokens)
 
-		if (trimmedMessages.length < currentMessages.length) {
-			agent.setMessages(trimmedMessages)
-			setMsgs(trimmedMessages)
-			await store.replaceMessages(currSessionId, trimmedMessages)
-		}
-
 		const session = await store.get(currSessionId)
 		usageAcc.current = {
 			in: estimateTokens(trimmedMessages),

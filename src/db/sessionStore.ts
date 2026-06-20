@@ -199,23 +199,6 @@ export class SessionStore {
 			.run(title, Date.now(), sessionId)
 	}
 
-	async replaceMessages(sessionId: string, msgs: ModelMessage[]): Promise<void> {
-		if (msgs.length > 0) {
-			this.#ensurePersisted(sessionId)
-		}
-		this.#db.prepare("DELETE FROM messages WHERE session_id = ?").run(sessionId)
-
-		const now = Date.now()
-		let seq = 0
-		for (const msg of msgs) {
-			seq++
-			this.#insert(sessionId, seq, msg, now)
-		}
-		this.#db
-			.prepare("UPDATE sessions SET message_count = ?, updated = ? WHERE id = ?")
-			.run(seq, now, sessionId)
-	}
-
 	async endSession(id: string, reason: string): Promise<void> {
 		this.#ensurePersisted(id)
 		this.#db

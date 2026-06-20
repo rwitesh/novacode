@@ -213,20 +213,4 @@ describe("SessionStore", () => {
 			await rm(dir, { recursive: true, force: true })
 		}
 	})
-
-	it("replaceMessages overwrites the message history", async () => {
-		const { dir, store, db } = await createTempStore()
-		try {
-			const session = await store.create("/test/dir", "test-model", "test-provider")
-			await store.append(session.id, userMsg("original"))
-			await store.replaceMessages(session.id, [userMsg("replaced")])
-
-			const activeMsgs = await store.messages(session.id)
-			expect(activeMsgs).toHaveLength(1)
-			expect((activeMsgs[0] as { content: string }).content).toBe("replaced")
-		} finally {
-			db.close()
-			await rm(dir, { recursive: true, force: true })
-		}
-	})
 })
