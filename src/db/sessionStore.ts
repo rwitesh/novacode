@@ -267,11 +267,26 @@ export class SessionStore {
 			const row = this.#db
 				.prepare("SELECT parent_session_id FROM sessions WHERE id = ?")
 				.get(current) as Record<string, unknown> | undefined
+
+			let parentId: string | null = null
 			if (row) {
-				current = (row.parent_session_id as string | null) ?? ""
+				parentId = row.parent_session_id as string | null
 			} else {
 				const pending = this.#pendingSessions.get(current)
-				current = pending?.parentSessionId ?? ""
+				parentId = pending?.parentSessionId ?? null
+			}
+
+			if (parentId) {
+				const parentRow = this.#db
+					.prepare("SELECT end_reason FROM sessions WHERE id = ?")
+					.get(parentId) as Record<string, unknown> | undefined
+				if (parentRow && parentRow.end_reason === "compacted") {
+					current = ""
+				} else {
+					current = parentId
+				}
+			} else {
+				current = ""
 			}
 		}
 

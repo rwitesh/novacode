@@ -168,7 +168,7 @@ describe("SessionStore", () => {
 			await store.append(child.id, userMsg("msg 4"))
 
 			expect(await store.messages(child.id)).toHaveLength(2)
-			expect(await store.history(child.id)).toHaveLength(7) // 5 parent + 2 child
+			expect(await store.history(child.id)).toHaveLength(2) // Parent is compacted, lineage boundary stops traversal
 
 			const sessions = await store.list(10)
 			expect(sessions).toHaveLength(1)
@@ -192,9 +192,8 @@ describe("SessionStore", () => {
 			await store.append(s3.id, userMsg("msg3"))
 
 			const fullHistory = await store.history(s3.id)
-			expect(fullHistory).toHaveLength(3)
-			expect((fullHistory[0] as { content: string }).content).toBe("msg1")
-			expect((fullHistory[2] as { content: string }).content).toBe("msg3")
+			expect(fullHistory).toHaveLength(1) // Compaction boundaries prevent parent leakage
+			expect((fullHistory[0] as { content: string }).content).toBe("msg3")
 		} finally {
 			db.close()
 			await rm(dir, { recursive: true, force: true })

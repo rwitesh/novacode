@@ -65,6 +65,10 @@ export class Agent {
 		return this.#policy
 	}
 
+	get system(): string {
+		return this.#system
+	}
+
 	updateConfig(opts: { provider: string; model: Model; apiKey: string }): void {
 		this.#provider = opts.provider
 		this.#model = opts.model
