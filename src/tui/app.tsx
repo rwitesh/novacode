@@ -94,6 +94,22 @@ function estimateActiveInputTokens(agent: Agent, messages: ModelMessage[]): numb
 	return estimateTokens(trimmed)
 }
 
+function errorMessage(err: unknown): string {
+	if (err instanceof Error) {
+		const last = "lastError" in err ? (err as { lastError: unknown }).lastError : null
+		if (last instanceof Error) return errorMessage(last)
+		const body = (err as { responseBody?: string }).responseBody
+		if (body) {
+			try {
+				const parsed = JSON.parse(body) as { error?: { message?: string }; message?: string }
+				return parsed.error?.message ?? parsed.message ?? err.message
+			} catch {}
+		}
+		return err.message
+	}
+	return String(err)
+}
+
 function App({
 	agent,
 	store,
@@ -505,6 +521,7 @@ function App({
 		setStatus("")
 		setActiveTools([])
 		committed.current = 0
+		let streamError: unknown
 
 		try {
 			const result = await agent.prompt(signal, async (event) => {
@@ -582,7 +599,8 @@ function App({
 						break
 					}
 					case "error":
-						setStatus(chalk.red(`Error: ${part.error}`))
+						streamError = part.error
+						setStatus(chalk.red("Error"))
 						break
 				}
 			}
@@ -607,7 +625,10 @@ function App({
 			if (signal.aborted) {
 				commitMsg({ role: "assistant", content: chalk.gray("(aborted)") })
 			} else {
-				commitMsg({ role: "assistant", content: chalk.red(`Error: ${(err as Error).message}`) })
+				commitMsg({
+					role: "assistant",
+					content: chalk.red(`Error: ${errorMessage(streamError ?? err)}`),
+				})
 			}
 		} finally {
 			abortCtrl.current = null

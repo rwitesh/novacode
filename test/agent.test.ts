@@ -7,24 +7,11 @@ vi.mock("ai", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("ai")>()
 	return {
 		...actual,
-		ToolLoopAgent: class {
-			public options: unknown
-			constructor(options: unknown) {
-				this.options = options
-			}
-			stream(args: {
-				messages: ModelMessage[]
-				abortSignal?: AbortSignal
-				onStepFinish?: unknown
-			}) {
-				return {
-					...args,
-					fullStream: [],
-					response: Promise.resolve({ messages: [] }),
-					instructions: (this.options as { instructions: string }).instructions,
-				}
-			}
-		},
+		streamText: vi.fn((args: { messages: ModelMessage[] }) => ({
+			fullStream: [],
+			messages: args.messages,
+			response: Promise.resolve({ messages: args.messages }),
+		})),
 	}
 })
 

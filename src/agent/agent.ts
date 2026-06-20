@@ -1,13 +1,13 @@
 /**
- * Stateful agent wrapper around an AI SDK ToolLoopAgent.
+ * Stateful agent wrapper around AI SDK streamText.
  *
  * Holds mutable conversation state (canonical `ModelMessage[]`), the active
- * model/provider config, tools, and the policy engine. `prompt()` builds a
- * ToolLoopAgent per turn (model/tools/providerOptions may change at runtime)
- * and returns its streaming result for the TUI to consume.
+ * model/provider config, tools, and the policy engine. `prompt()` calls
+ * streamText directly with a no-op onError to suppress the default console.error
+ * that dumps full RetryError/APICallError objects to stderr.
  */
 import type { ModelMessage, OnStepFinishEvent, ToolSet } from "ai"
-import { stepCountIs, ToolLoopAgent } from "ai"
+import { stepCountIs, streamText } from "ai"
 import type { PolicyEngine } from "../policy/engine.ts"
 import { createModel, reasoningOpts } from "../providers.ts"
 import { estimateTokens } from "../tokens.ts"
@@ -94,24 +94,23 @@ export class Agent {
 		this.#model = model
 	}
 
-	async prompt(
-		signal?: AbortSignal,
-		onStepFinish?: StepFinishHandler,
-	): Promise<Awaited<ReturnType<ToolLoopAgent["stream"]>>> {
+	async prompt(signal?: AbortSignal, onStepFinish?: StepFinishHandler) {
 		const systemTokens = estimateTokens(this.#system)
 		const maxInputTokens = this.#model.contextWindow - systemTokens - 4096
 		const trimmed = trimMessages(this.#messages, maxInputTokens)
 
 		const { instructions, messages: messagesToStream } = preparePrompt(this.#system, trimmed)
 
-		const agent = new ToolLoopAgent({
+		return streamText({
 			model: createModel(this.#provider, this.#model.id, this.#apiKey),
-			instructions,
+			system: instructions,
 			tools: withApproval(this.#tools, this.#policy),
 			stopWhen: stepCountIs(MAX_TURNS),
 			providerOptions: this.#model.reasoning ? reasoningOpts(this.#provider) : undefined,
+			messages: messagesToStream,
+			abortSignal: signal,
+			onStepFinish,
+			onError: () => undefined,
 		})
-
-		return agent.stream({ messages: messagesToStream, abortSignal: signal, onStepFinish })
 	}
 }
