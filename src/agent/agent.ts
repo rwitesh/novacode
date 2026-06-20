@@ -10,6 +10,7 @@ import type { ModelMessage, OnStepFinishEvent, ToolSet } from "ai"
 import { stepCountIs, ToolLoopAgent } from "ai"
 import type { PolicyEngine } from "../policy/engine.ts"
 import { createModel, reasoningOpts } from "../providers.ts"
+import { estimateTokens } from "../tokens.ts"
 import type { Model } from "../types.ts"
 import { withApproval } from "./approval.ts"
 import { preparePrompt } from "./prompt.ts"
@@ -97,7 +98,7 @@ export class Agent {
 		signal?: AbortSignal,
 		onStepFinish?: StepFinishHandler,
 	): Promise<Awaited<ReturnType<ToolLoopAgent["stream"]>>> {
-		const systemTokens = Math.ceil(this.#system.length / 4)
+		const systemTokens = estimateTokens(this.#system)
 		const maxInputTokens = this.#model.contextWindow - systemTokens - 4096
 		const trimmed = trimMessages(this.#messages, maxInputTokens)
 

@@ -1,9 +1,13 @@
 import type { ModelMessage } from "ai"
 
 // ~4 chars per token for English/code. Close enough for capacity warnings.
-export function estimateTokens(messages: ModelMessage[]): number {
+export function estimateTokens(input: ModelMessage[] | string): number {
+	if (typeof input === "string") {
+		return Math.ceil(input.length / 4)
+	}
+
 	let chars = 0
-	for (const msg of messages) {
+	for (const msg of input) {
 		const content = msg.content
 		if (typeof content === "string") {
 			chars += content.length

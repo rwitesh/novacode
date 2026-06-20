@@ -87,6 +87,13 @@ export async function interactive(
 	}
 }
 
+function estimateActiveInputTokens(agent: Agent, messages: ModelMessage[]): number {
+	const systemTokens = estimateTokens(agent.system)
+	const maxInputTokens = agent.model.contextWindow - systemTokens - 4096
+	const trimmed = trimMessages(messages, maxInputTokens)
+	return estimateTokens(trimmed)
+}
+
 function App({
 	agent,
 	store,
@@ -111,7 +118,15 @@ function App({
 	const [status, setStatus] = useState("")
 
 	const [activeTools, setActiveTools] = useState<ActiveTool[]>([])
-	const [usage, setUsage] = useState<Usage>({ in: 0, out: 0 })
+	const [outputTokens, setOutputTokens] = useState(0)
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reactively run on msgs change to sync with agent.messages changes
+	const usage = useMemo<Usage>(() => {
+		return {
+			in: estimateActiveInputTokens(agent, agent.messages),
+			out: outputTokens,
+		}
+	}, [agent, msgs, outputTokens])
 
 	const handleSwitchSession = useCallback(
 		async (newSessionId: string) => {
@@ -137,13 +152,7 @@ function App({
 			setCurrSessionId(newSessionId)
 
 			if (model) {
-				const systemTokens = Math.ceil(agent.system.length / 4)
-				const maxInputTokens = model.contextWindow - systemTokens - 4096
-				const trimmed = trimMessages(activeMsgs, maxInputTokens)
-				setUsage({
-					in: estimateTokens(trimmed),
-					out: s.outputTokens,
-				})
+				setOutputTokens(s.outputTokens)
 			}
 		},
 		[store, agent],
@@ -156,25 +165,16 @@ function App({
 		setMsgs([])
 		setCurrSessionId(session.id)
 
-		setUsage({
-			in: 0,
-			out: 0,
-		})
+		setOutputTokens(0)
 	}, [store, agent])
 
 	useEffect(() => {
 		store.get(initialSessionId).then((s) => {
 			if (s) {
-				const systemTokens = Math.ceil(agent.system.length / 4)
-				const maxInputTokens = agent.model.contextWindow - systemTokens - 4096
-				const trimmed = trimMessages(initialHistory, maxInputTokens)
-				setUsage({
-					in: estimateTokens(trimmed),
-					out: s.outputTokens,
-				})
+				setOutputTokens(s.outputTokens)
 			}
 		})
-	}, [store, initialSessionId, agent, initialHistory])
+	}, [store, initialSessionId])
 	const [selCmdIdx, setSelCmdIdx] = useState(0)
 	const [mode, setMode] = useState<PromptMode>({ type: "chat" })
 	const [permissionMode, setPermissionMode] = useState<PermissionMode>(policy.mode)
@@ -183,7 +183,6 @@ function App({
 	const hIdx = useRef(-1)
 	const abortCtrl = useRef<AbortController | null>(null)
 	const committed = useRef(0)
-	const usageAcc = useRef<Usage>({ in: 0, out: 0 })
 	const [updateInfo, setUpdateInfo] = useState<{
 		current: string
 		latest: string
@@ -278,15 +277,6 @@ function App({
 		store.append(currSessionId, msg).catch((err) => {
 			console.error("Error appending message to session store:", err)
 		})
-		if (!busy) {
-			const systemTokens = Math.ceil(agent.system.length / 4)
-			const maxInputTokens = agent.model.contextWindow - systemTokens - 4096
-			const trimmed = trimMessages(agent.messages, maxInputTokens)
-			setUsage((prev) => ({
-				...prev,
-				in: estimateTokens(trimmed),
-			}))
-		}
 	}
 
 	async function commitDelta(messages: ModelMessage[]) {
@@ -300,16 +290,6 @@ function App({
 
 		setMsgs((prev) => [...prev, ...delta])
 		agent.appendMessages(delta)
-
-		if (!busy) {
-			const systemTokens = Math.ceil(agent.system.length / 4)
-			const maxInputTokens = agent.model.contextWindow - systemTokens - 4096
-			const trimmed = trimMessages(agent.messages, maxInputTokens)
-			setUsage((prev) => ({
-				...prev,
-				in: estimateTokens(trimmed),
-			}))
-		}
 
 		const committedToolCallIds = new Set<string>()
 		for (const msg of delta) {
@@ -526,27 +506,11 @@ function App({
 		setActiveTools([])
 		committed.current = 0
 
-		const systemTokens = Math.ceil(agent.system.length / 4)
-		const maxInputTokens = agent.model.contextWindow - systemTokens - 4096
-		const currentMessages = agent.messages
-		const trimmedMessages = trimMessages(currentMessages, maxInputTokens)
-
-		const session = await store.get(currSessionId)
-		usageAcc.current = {
-			in: estimateTokens(trimmedMessages),
-			out: session ? session.outputTokens : 0,
-		}
-		setUsage(usageAcc.current)
-
 		try {
 			const result = await agent.prompt(signal, async (event) => {
 				const u = event.usage
 				if (u) {
-					usageAcc.current = {
-						in: u.inputTokens ?? usageAcc.current.in,
-						out: usageAcc.current.out + (u.outputTokens ?? 0),
-					}
-					setUsage(usageAcc.current)
+					setOutputTokens((prev) => prev + (u.outputTokens ?? 0))
 					await store.addUsage(currSessionId, u.inputTokens ?? 0, u.outputTokens ?? 0)
 				}
 				if (event.response?.messages?.length) {

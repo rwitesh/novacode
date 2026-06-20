@@ -1,6 +1,7 @@
 import type { ModelMessage } from "ai"
 import { describe, expect, it, vi } from "vitest"
 import { Agent } from "../src/agent/agent.ts"
+import { estimateTokens } from "../src/tokens.ts"
 
 vi.mock("ai", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("ai")>()
@@ -70,5 +71,21 @@ describe("Agent message trimming", () => {
 		// Verify the agent's internal messages list remains fully intact.
 		expect(agent.messages).toHaveLength(3)
 		expect(agent.messages[0]?.content).toContain("Very long query")
+	})
+})
+
+describe("estimateTokens consolidation", () => {
+	it("should estimate tokens for a string correctly (chars / 4)", () => {
+		expect(estimateTokens("abcd")).toBe(1)
+		expect(estimateTokens("abcde")).toBe(2)
+		expect(estimateTokens("")).toBe(0)
+	})
+
+	it("should estimate tokens for ModelMessage[] correctly", () => {
+		const messages: ModelMessage[] = [
+			{ role: "user", content: "abcd" },
+			{ role: "assistant", content: "efgh" },
+		]
+		expect(estimateTokens(messages)).toBe(2)
 	})
 })
