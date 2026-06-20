@@ -1,5 +1,4 @@
-import chalk from "chalk"
-import { Box, Text } from "ink"
+import { Text } from "ink"
 import { useEffect, useState } from "react"
 import { SPINNER_FRAMES } from "../constants.ts"
 
@@ -23,50 +22,4 @@ export function Cursor() {
 		return () => clearInterval(timer)
 	}, [])
 	return <Text color="white">{visible ? "█" : " "}</Text>
-}
-
-export function LiveArea({
-	stream,
-	thinking,
-	busy,
-	status,
-}: {
-	stream: string
-	thinking: boolean
-	busy: boolean
-	status: string
-}) {
-	const isActive = !!(stream || thinking || busy)
-	if (!isActive) return null
-
-	return (
-		<Box flexDirection="column" marginTop={0}>
-			{stream && (
-				<Box flexDirection="row">
-					<Box flexGrow={1} flexShrink={1}>
-						<Text>
-							{stream}
-							<Cursor />
-						</Text>
-					</Box>
-				</Box>
-			)}
-			{busy && !stream && !thinking && (
-				<Box flexDirection="row">
-					<Box marginRight={1}>
-						<Spinner />
-					</Box>
-					<Text dimColor>{status ? status.replace("⏳ ", "") : chalk.yellow("working…")}</Text>
-				</Box>
-			)}
-			{thinking && !stream && (
-				<Box flexDirection="row">
-					<Box marginRight={1}>
-						<Spinner />
-					</Box>
-					<Text dimColor>{chalk.yellow("Thinking…")}</Text>
-				</Box>
-			)}
-		</Box>
-	)
 }

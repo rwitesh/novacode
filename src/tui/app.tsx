@@ -1,3 +1,4 @@
+import type { ToolResultOutput } from "@ai-sdk/provider-utils"
 import type { ModelMessage } from "ai"
 import chalk from "chalk"
 import { Box, render, Static, Text, useApp, useInput } from "ink"
@@ -6,7 +7,9 @@ import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
 import { generateSessionTitle } from "../compact.ts"
 import { loadAuth } from "../config/store.ts"
+import { summarizeToolOutput } from "../content.ts"
 import type { SessionStore } from "../db/sessionStore.ts"
+import { formatToolArgs } from "../format.ts"
 import { getModel, getProvider } from "../models/lookup.ts"
 import type { PolicyEngine } from "../policy/engine.ts"
 import { groupSkills } from "../skills/index.ts"
@@ -19,8 +22,8 @@ import type {
 	Usage,
 } from "../types.ts"
 import { checkForUpdate, getCurrentVersion } from "../update.ts"
-import { Cursor, LiveArea } from "./components/liveArea.tsx"
-import { hasMeaningfulContent, Message } from "./components/message.tsx"
+import { Cursor } from "./components/liveArea.tsx"
+import { deriveEventsFromMessages, EventRenderer } from "./components/message.tsx"
 import { StatusBar } from "./components/statusBar.tsx"
 import { useStreamBuffer } from "./hooks/useStreamBuffer.ts"
 import { useTip } from "./hooks/useTip.ts"
@@ -31,30 +34,7 @@ import {
 	SearchSelectPrompt,
 	SelectPrompt,
 } from "./prompts.tsx"
-
-type PromptMode =
-	| { type: "chat" }
-	| {
-			type: "select"
-			message: string
-			options: Array<{ value: string; label: string; hint?: string }>
-			header?: string
-			footer?: string
-	  }
-	| {
-			type: "searchSelect"
-			message: string
-			options: Array<{ value: string; label: string; hint?: string }>
-			header?: string
-			footer?: string
-	  }
-	| {
-			type: "password"
-			message: string
-			validate?: (v: string) => string | undefined
-	  }
-	| { type: "confirm"; message: string }
-	| { type: "approval"; req: ApprovalRequest }
+import type { ActiveTool, PromptMode, TimelineEvent } from "./types.ts"
 
 export async function interactive(
 	agent: Agent,
@@ -161,6 +141,8 @@ function App({
 	const [busy, setBusy] = useState(false)
 	const [input, setInput] = useState("")
 	const [status, setStatus] = useState("")
+
+	const [activeTools, setActiveTools] = useState<ActiveTool[]>([])
 	const [usage, setUsage] = useState<Usage>({ in: 0, out: 0 })
 	const [selCmdIdx, setSelCmdIdx] = useState(0)
 	const [mode, setMode] = useState<PromptMode>({ type: "chat" })
@@ -268,17 +250,49 @@ function App({
 	}
 
 	async function commitDelta(messages: ModelMessage[]) {
-		// Each step's response.messages is the SDK's cumulative clone of every
-		// message generated so far (not just this step's new ones). Persist only
-		// the tail beyond what we've already committed, otherwise every step
-		// re-writes the whole history into the agent state, the UI list, and the
-		// store — duplicating messages and corrupting restoration.
 		const delta = messages.slice(committed.current)
 		if (delta.length === 0) return
 		committed.current = messages.length
+
+		for (const msg of delta) {
+			await store.append(currSessionId, msg)
+		}
+
 		setMsgs((prev) => [...prev, ...delta])
 		agent.appendMessages(delta)
-		for (const msg of delta) await store.append(currSessionId, msg)
+
+		const committedToolCallIds = new Set<string>()
+		for (const msg of delta) {
+			if (msg.role === "assistant" && Array.isArray(msg.content)) {
+				for (const part of msg.content) {
+					if (part.type === "tool-call") {
+						committedToolCallIds.add(part.toolCallId)
+					}
+				}
+			}
+			if (msg.role === "tool" && Array.isArray(msg.content)) {
+				for (const part of msg.content) {
+					if (part.type === "tool-result") {
+						committedToolCallIds.add(part.toolCallId)
+					}
+				}
+			}
+		}
+
+		if (committedToolCallIds.size > 0) {
+			setActiveTools((prev) => prev.filter((t) => !committedToolCallIds.has(t.id)))
+		}
+
+		const committedText = delta.some(
+			(msg) =>
+				msg.role === "assistant" &&
+				(typeof msg.content === "string"
+					? msg.content.trim().length > 0
+					: msg.content.some((part) => part.type === "text" && part.text.trim().length > 0)),
+		)
+		if (committedText) {
+			resetStream()
+		}
 	}
 
 	async function handlePermissionSwitch() {
@@ -459,6 +473,7 @@ function App({
 		resetStream()
 		setThinking(false)
 		setStatus("")
+		setActiveTools([])
 		committed.current = 0
 		const session = await store.get(currSessionId)
 		usageAcc.current = session
@@ -466,15 +481,10 @@ function App({
 			: { in: 0, out: 0 }
 		setUsage(usageAcc.current)
 
-		// Persist each completed step's response messages + usage as they finish,
-		// so a crash mid-turn still leaves a restorable history. The model call
-		// itself runs in a single stream (approval is gated inside tool execute).
 		try {
 			const result = await agent.prompt(signal, async (event) => {
 				const u = event.usage
 				if (u) {
-					// Per-step usage; summed across steps == totalUsage, so accumulate
-					// rather than adding totalUsage again at the end.
 					usageAcc.current = {
 						in: usageAcc.current.in + (u.inputTokens ?? 0),
 						out: usageAcc.current.out + (u.outputTokens ?? 0),
@@ -500,14 +510,53 @@ function App({
 						setThinking(true)
 						setStatus("")
 						break
-					case "tool-call":
-						setStatus(chalk.dim(`⏳ ${part.toolName}…`))
+					case "tool-call": {
+						setThinking(false)
+						setStatus("")
+						const formattedArgs = formatToolArgs(part.input as Record<string, unknown>, true)
+						setActiveTools((prev) => {
+							if (prev.some((t) => t.id === part.toolCallId)) return prev
+							return [
+								...prev,
+								{
+									id: part.toolCallId,
+									name: part.toolName,
+									args: formattedArgs,
+									status: "running" as const,
+								},
+							]
+						})
 						break
+					}
 					case "tool-result": {
-						// part.output is our ToolResult (raw tool return), not the converted output
-						const out = part.output as { isError?: boolean } | undefined
-						setStatus(
-							out?.isError ? chalk.red(`✗ ${part.toolName}`) : chalk.green(`✓ ${part.toolName}`),
+						const { text, isError } = summarizeToolOutput(part.output as ToolResultOutput)
+						setActiveTools((prev) =>
+							prev.map((t) => {
+								if (t.id === part.toolCallId) {
+									if (isError) {
+										return {
+											...t,
+											status: "failure" as const,
+											error: text,
+										}
+									} else {
+										let lineCount: number | undefined
+										let matchCount: number | undefined
+										if (t.name === "read") {
+											lineCount = text.split("\n").length
+										} else if (t.name === "grep") {
+											matchCount = text.split("\n").filter(Boolean).length
+										}
+										return {
+											...t,
+											status: "success" as const,
+											lineCount,
+											matchCount,
+										}
+									}
+								}
+								return t
+							}),
 						)
 						break
 					}
@@ -517,9 +566,6 @@ function App({
 				}
 			}
 
-			// Safety net: if the final step's onStepFinish didn't fire (e.g. an
-			// aborted stream), commit whatever's still uncommitted. Delta-based, so
-			// it's a no-op when onStepFinish already covered it.
 			const resp = await result.response
 			await commitDelta(resp.messages)
 
@@ -548,111 +594,192 @@ function App({
 			resetStream()
 			setThinking(false)
 			setStatus("")
+			setActiveTools([])
 		}
 	}
 
-	const visibleMsgs = useMemo(() => msgs.filter(hasMeaningfulContent), [msgs])
+	const completedEvents = useMemo(() => deriveEventsFromMessages(msgs), [msgs])
 
-	if (mode.type === "select") {
-		return (
-			<SelectPrompt
-				message={mode.message}
-				options={mode.options}
-				header={mode.header}
-				footer={mode.footer}
-				onSelect={resolvePrompt}
-			/>
-		)
-	}
-	if (mode.type === "searchSelect") {
-		return (
-			<SearchSelectPrompt
-				message={mode.message}
-				options={mode.options}
-				header={mode.header}
-				footer={mode.footer}
-				onSelect={resolvePrompt}
-			/>
-		)
-	}
-	if (mode.type === "password") {
-		return (
-			<PasswordPrompt message={mode.message} validate={mode.validate} onSubmit={resolvePrompt} />
-		)
-	}
-	if (mode.type === "confirm") {
-		return <ConfirmPrompt message={mode.message} onConfirm={resolvePrompt} />
-	}
-	if (mode.type === "approval") {
-		return <ApprovalPrompt req={mode.req} onResolve={resolvePrompt} />
-	}
+	const activeEvents = useMemo(() => {
+		const events: TimelineEvent[] = []
+
+		if (thinking) {
+			events.push({
+				id: "active-thinking",
+				type: "Thinking",
+			})
+		}
+
+		if (bufferedStream) {
+			events.push({
+				id: "active-text",
+				type: "AssistantMessage",
+				content: bufferedStream,
+			})
+		}
+
+		for (const t of activeTools) {
+			if (t.status === "running") {
+				events.push({
+					id: t.id,
+					type: "ToolStarted",
+					toolCallId: t.id,
+					toolName: t.name,
+					args: t.args,
+				})
+			} else if (t.status === "success") {
+				events.push({
+					id: t.id,
+					type: "ToolCompleted",
+					toolCallId: t.id,
+					toolName: t.name,
+					args: t.args,
+					resultLineCount: t.lineCount,
+					resultMatchCount: t.matchCount,
+				})
+			} else if (t.status === "failure") {
+				events.push({
+					id: t.id,
+					type: "ToolFailed",
+					toolCallId: t.id,
+					toolName: t.name,
+					args: t.args,
+					error: t.error ?? "Unknown error",
+				})
+			}
+		}
+
+		if (status) {
+			events.push({
+				id: "active-status",
+				type: "SystemMessage",
+				content: status,
+			})
+		}
+
+		if (busy && !thinking && mode.type === "chat") {
+			events.push({
+				id: "active-working",
+				type: "Thinking",
+			})
+		}
+
+		return events
+	}, [thinking, busy, bufferedStream, activeTools, status, mode.type])
 
 	return (
 		<Box flexDirection="column" paddingX={1} width="100%">
-			<Static items={visibleMsgs}>{(m, i) => <Message key={i} msg={m} isFirst={i === 0} />}</Static>
+			<Static items={completedEvents}>
+				{(e, i) => <EventRenderer key={e.id} event={e} isFirst={i === 0} />}
+			</Static>
 
-			<LiveArea stream={bufferedStream} thinking={thinking} busy={busy} status={status} />
+			{activeEvents.map((e) => (
+				<EventRenderer key={e.id} event={e} />
+			))}
 
-			<Box
-				flexDirection="column"
-				marginTop={visibleMsgs.length > 0 || bufferedStream || thinking || busy ? 1 : 0}
-			>
-				{updateInfo && (
-					<Box
-						borderStyle="round"
-						borderColor="yellow"
-						paddingX={1}
-						marginBottom={1}
-						flexDirection="column"
-					>
-						<Text color="yellow" bold>
-							⬆ Update Available (v{updateInfo.current} → v{updateInfo.latest})
-						</Text>
-						<Text dimColor>
-							Run <Text color="cyan">/update</Text> or <Text color="cyan">nova update</Text> to
-							upgrade.
-						</Text>
-					</Box>
-				)}
-
+			{(mode.type === "select" ||
+				mode.type === "searchSelect" ||
+				mode.type === "password" ||
+				mode.type === "confirm" ||
+				mode.type === "approval") && (
 				<Box
 					flexDirection="column"
-					borderStyle="single"
-					borderTop
-					borderBottom
-					borderColor="green"
-					borderLeft={false}
-					borderRight={false}
-					paddingTop={0}
-					paddingBottom={0}
-					marginBottom={0}
+					marginTop={completedEvents.length > 0 || activeEvents.length > 0 ? 1 : 0}
 				>
-					<Box flexDirection="row">
-						<Box flexShrink={0} marginRight={1}>
-							<Text bold color="greenBright">
-								{"❯"}
+					{mode.type === "select" && (
+						<SelectPrompt
+							message={mode.message}
+							options={mode.options}
+							header={mode.header}
+							footer={mode.footer}
+							onSelect={resolvePrompt}
+						/>
+					)}
+					{mode.type === "searchSelect" && (
+						<SearchSelectPrompt
+							message={mode.message}
+							options={mode.options}
+							header={mode.header}
+							footer={mode.footer}
+							onSelect={resolvePrompt}
+						/>
+					)}
+					{mode.type === "password" && (
+						<PasswordPrompt
+							message={mode.message}
+							validate={mode.validate}
+							onSubmit={resolvePrompt}
+						/>
+					)}
+					{mode.type === "confirm" && (
+						<ConfirmPrompt message={mode.message} onConfirm={resolvePrompt} />
+					)}
+					{mode.type === "approval" && <ApprovalPrompt req={mode.req} onResolve={resolvePrompt} />}
+				</Box>
+			)}
+
+			{mode.type === "chat" && (
+				<Box
+					flexDirection="column"
+					marginTop={completedEvents.length > 0 || activeEvents.length > 0 ? 1 : 0}
+				>
+					{updateInfo && (
+						<Box
+							borderStyle="round"
+							borderColor="yellow"
+							paddingX={1}
+							marginBottom={1}
+							flexDirection="column"
+						>
+							<Text color="yellow" bold>
+								⬆ Update Available (v{updateInfo.current} → v{updateInfo.latest})
+							</Text>
+							<Text dimColor>
+								Run <Text color="cyan">/update</Text> or <Text color="cyan">nova update</Text> to
+								upgrade.
 							</Text>
 						</Box>
-						<Box flexGrow={1} flexShrink={1}>
-							<Text>
-								{input}
-								<Cursor />
-							</Text>
+					)}
+
+					<Box
+						flexDirection="column"
+						borderStyle="single"
+						borderTop
+						borderBottom
+						borderColor="green"
+						borderLeft={false}
+						borderRight={false}
+						paddingTop={0}
+						paddingBottom={0}
+						marginBottom={0}
+					>
+						<Box flexDirection="row">
+							<Box flexShrink={0} marginRight={1}>
+								<Text bold color="greenBright">
+									{"❯"}
+								</Text>
+							</Box>
+							<Box flexGrow={1} flexShrink={1}>
+								<Text>
+									{input}
+									<Cursor />
+								</Text>
+							</Box>
 						</Box>
 					</Box>
-				</Box>
 
-				<StatusBar
-					model={agent.model}
-					usage={usage}
-					busy={busy}
-					suggestions={suggestions}
-					selCmdIdx={selCmdIdx}
-					exitConfirmKey={exitConfirmKey}
-					tip={tip}
-					permissionMode={permissionMode}
-				/>
-			</Box>
+					<StatusBar
+						model={agent.model}
+						usage={usage}
+						busy={busy}
+						suggestions={suggestions}
+						selCmdIdx={selCmdIdx}
+						exitConfirmKey={exitConfirmKey}
+						tip={tip}
+						permissionMode={permissionMode}
+					/>
+				</Box>
+			)}
 		</Box>
 	)
 }

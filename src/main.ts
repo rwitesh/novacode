@@ -244,12 +244,10 @@ async function resolvePermissionMode(flags: {
 			},
 		],
 		undefined,
-		chalk.dim(
-			"Use /permission to switch later, or --restricted/--unrestricted to skip this prompt.",
-		),
+		"Use /permission to switch later, or --restricted/--unrestricted to skip this prompt.",
 	)
 	if (picked !== "restricted" && picked !== "unrestricted") {
-		console.log(chalk.dim("Cancelled"))
+		console.log("Cancelled")
 		return null
 	}
 	return picked

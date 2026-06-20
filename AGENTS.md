@@ -92,14 +92,14 @@ NovaCode is built on AI SDK primitives — there is no hand-rolled streaming, SS
 
 ## Design Rules
 
-1. **One type file** — `src/types.ts` is the single source of truth for NovaCode-specific types (config, session, policy, CLI plumbing). AI message/tool/usage types are NOT redeclared — import them from `ai` (`ModelMessage`, `ToolSet`, `LanguageModel`, etc.).
+1. **One type file** — `src/types.ts` is the single source of truth for NovaCode-specific types (config, session, policy, CLI plumbing). AI message/tool/usage types are NOT redeclared — import them from `ai` (`ModelMessage`, `ToolSet`, `LanguageModel`, etc.). UI-specific rendering types (e.g., `TimelineEvent`, `ActiveTool`) must reside locally inside the `src/tui/` folder for proper encapsulation.
 2. **AI SDK primitives first** — Use `ToolLoopAgent`/`streamText`/`generateText` + `tool()` + zod schemas. Do not hand-roll streaming, SSE parsing, tool dispatch, or agent loops. The Agent class wraps state and delegates the loop to the SDK.
 3. **Node.js APIs** — `node:fs/promises` for file I/O, `node:child_process` for spawning processes.
 4. **One canonical message format** — `ModelMessage[]` flows unchanged through agent → store → restore → UI. Never convert to/from a custom message type.
 5. **No comments unless "why"** — code explains "what", comments explain "why". Do not add JSDoc to every function. Only add JSDoc when the function's purpose is non-obvious or has subtle behavior.
 6. **Short names** — `ProviderDef` not `ProviderDefinition`.
 7. **Private fields** — `#field` not `private field`. True encapsulation.
-8. **Single rendering context** — All interactive UI (chat, prompts, menus) runs inside one Ink app. Never unmount/remount Ink to switch between modes. Use state-based mode switching instead.
+8. **Single rendering context** — All interactive UI (chat, prompts, menus) runs inside one Ink app. Never unmount/remount Ink to switch between modes. Use state-based mode switching instead. Prompts (approval, select, confirm, password) must be rendered inline under the timeline instead of replacing the entire layout, ensuring the timeline history is preserved and stable. A persistent `working...` status indicator (or spinner with `active-working` event) must be shown at the bottom of the timeline while the turn loop is executing (`busy` state).
 9. **Synchronous Session Store** — The `SessionStore` class is backed by SQLite (`~/.novacode/state.db`) via `node:sqlite` (synchronous `DatabaseSync`). Store methods are `async` for API compatibility but execute synchronously internally. All store methods must be awaited.
 10. **Approval is separate from tools** — Tool definitions know nothing about policy. `withApproval(tools, policy)` (`src/agent/approval.ts`) gates execution at wiring time. The `PolicyEngine` is the single approval authority.
 11. **CLI vs Interactive Inputs** — Outside interactive TUI mode, use `--` flags exclusively (e.g. `nova --sessions ls`, `nova --sessions rm <id>`, `nova --resume`). Subcommand style (e.g., `nova sessions ls`) is not permitted. Inside interactive mode, use `/` commands exclusively (e.g. `/compact`, `/sessions`).

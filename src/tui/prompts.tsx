@@ -1,6 +1,6 @@
 import { Box, render, Text, useInput } from "ink"
 import { useMemo, useState } from "react"
-import type { ApprovalRequest, ToolRisk } from "../types.ts"
+import type { ApprovalRequest } from "../types.ts"
 
 interface SelectOption {
 	value: string
@@ -49,11 +49,13 @@ export function SelectPrompt({
 				</Box>
 			)}
 			<Box marginBottom={1}>
-				<Text bold>{message}</Text>
+				<Text bold color="cyan">
+					{message}
+				</Text>
 			</Box>
 			{options.map((opt, i) => (
 				<Box key={opt.value}>
-					<Text color={i === idx ? "green" : undefined}>
+					<Text bold={i === idx} color={i === idx ? "cyan" : undefined}>
 						{i === idx ? "❯ " : "  "}
 						{opt.label}
 					</Text>
@@ -61,7 +63,7 @@ export function SelectPrompt({
 				</Box>
 			))}
 			<Box marginTop={1}>
-				<Text dimColor>↑↓ navigate · Enter select · Esc cancel</Text>
+				<Text>↑↓ navigate · Enter select · Esc cancel</Text>
 			</Box>
 			{footer && (
 				<Box marginTop={1}>
@@ -132,11 +134,13 @@ export function SearchSelectPrompt({
 				</Box>
 			)}
 			<Box marginBottom={1}>
-				<Text bold>{message}</Text>
+				<Text bold color="cyan">
+					{message}
+				</Text>
 			</Box>
 			<Box marginBottom={1}>
 				<Text color="cyan">❯ </Text>
-				<Text>{query}</Text>
+				<Text bold>{query}</Text>
 				<Text color="cyan">▏</Text>
 			</Box>
 			{filtered.length === 0 ? (
@@ -146,7 +150,7 @@ export function SearchSelectPrompt({
 			) : (
 				filtered.map((opt, i) => (
 					<Box key={opt.value}>
-						<Text color={i === sel ? "green" : undefined}>
+						<Text bold={i === sel} color={i === sel ? "cyan" : undefined}>
 							{i === sel ? "❯ " : "  "}
 							{opt.label}
 						</Text>
@@ -155,7 +159,7 @@ export function SearchSelectPrompt({
 				))
 			)}
 			<Box marginTop={1}>
-				<Text dimColor>type to filter · ↑↓ navigate · Enter select · Esc cancel</Text>
+				<Text>type to filter · ↑↓ navigate · Enter select · Esc cancel</Text>
 			</Box>
 			{footer && (
 				<Box marginTop={1}>
@@ -206,20 +210,24 @@ export function PasswordPrompt({
 	return (
 		<Box flexDirection="column" paddingX={1}>
 			<Box marginBottom={1}>
-				<Text bold>{message}</Text>
+				<Text bold color="cyan">
+					{message}
+				</Text>
 			</Box>
 			<Box>
 				<Text color="green">│ </Text>
-				<Text dimColor>{"*".repeat(value.length)}</Text>
+				<Text bold>{"*".repeat(value.length)}</Text>
 				<Text color="green">│</Text>
 			</Box>
 			{error && (
-				<Box>
-					<Text color="red">{error}</Text>
+				<Box marginTop={1}>
+					<Text bold color="red">
+						✗ {error}
+					</Text>
 				</Box>
 			)}
 			<Box marginTop={1}>
-				<Text dimColor>Enter submit · Esc cancel</Text>
+				<Text>Enter submit · Esc cancel</Text>
 			</Box>
 		</Box>
 	)
@@ -251,26 +259,25 @@ export function ConfirmPrompt({
 	return (
 		<Box flexDirection="column" paddingX={1}>
 			<Box marginBottom={1}>
-				<Text bold>{message}</Text>
+				<Text bold color="cyan">
+					{message}
+				</Text>
 			</Box>
 			<Box>
-				<Text color={yes ? "green" : undefined}>{yes ? "❯ " : "  "}Yes</Text>
+				<Text bold={yes} color={yes ? "cyan" : undefined}>
+					{yes ? "❯ Yes" : "  Yes"}
+				</Text>
 			</Box>
 			<Box>
-				<Text color={!yes ? "red" : undefined}>{!yes ? "❯ " : "  "}No</Text>
+				<Text bold={!yes} color={!yes ? "cyan" : undefined}>
+					{!yes ? "❯ No" : "  No"}
+				</Text>
 			</Box>
 			<Box marginTop={1}>
-				<Text dimColor>←→ toggle · Enter confirm · Esc cancel</Text>
+				<Text>←→ toggle · Enter confirm · Esc cancel</Text>
 			</Box>
 		</Box>
 	)
-}
-
-const RISK_COLOR: Record<ToolRisk, string> = {
-	safe: "cyan",
-	write: "magenta",
-	network: "yellow",
-	execution: "red",
 }
 
 export function ApprovalPrompt({
@@ -281,7 +288,6 @@ export function ApprovalPrompt({
 	onResolve: (allow: boolean | null) => void
 }) {
 	const [allow, setAllow] = useState(true)
-	const color = RISK_COLOR[req.risk]
 
 	useInput((_, key) => {
 		if (key.escape) {
@@ -299,38 +305,24 @@ export function ApprovalPrompt({
 
 	return (
 		<Box flexDirection="column" paddingX={1}>
-			<Box marginBottom={1}>
-				<Text bold color="yellow">
-					⚠ Approve tool call?
-				</Text>
-			</Box>
-			<Box marginBottom={1}>
-				<Text bold color={color}>
-					{req.tool}
-				</Text>
-				<Text dimColor>
-					{" · "}
-					{req.risk}
-				</Text>
-			</Box>
-			{req.summary && (
-				<Box marginBottom={1} borderStyle="round" borderColor="gray" paddingX={1}>
-					<Text wrap="truncate-end">{req.summary}</Text>
-				</Box>
-			)}
 			{req.warning && (
 				<Box marginBottom={1}>
-					<Text color="red">{req.warning}</Text>
+					<Text bold color="red">
+						{req.warning}
+					</Text>
 				</Box>
 			)}
-			<Box>
-				<Text color={allow ? "green" : undefined}>{allow ? "❯ " : "  "}Allow once</Text>
-			</Box>
-			<Box>
-				<Text color={!allow ? "red" : undefined}>{!allow ? "❯ " : "  "}Deny</Text>
-			</Box>
-			<Box marginTop={1}>
-				<Text dimColor>↑↓ toggle · Enter confirm · Esc deny</Text>
+			<Box flexDirection="row">
+				<Text bold color="yellow">
+					Approve?{" "}
+				</Text>
+				<Text bold={allow} color={allow ? "cyan" : undefined}>
+					{allow ? "❯ Allow once  " : "  Allow once  "}
+				</Text>
+				<Text bold={!allow} color={!allow ? "cyan" : undefined}>
+					{!allow ? "❯ Deny" : "  Deny"}
+				</Text>
+				<Text> (←→ toggle · Enter confirm · Esc deny)</Text>
 			</Box>
 		</Box>
 	)

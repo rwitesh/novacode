@@ -1,18 +1,114 @@
-import type { ModelMessage, ToolCallPart, ToolResultPart } from "ai"
+import type { ModelMessage, ToolResultPart } from "ai"
 import { Box, Text } from "ink"
 import { memo } from "react"
 import { summarizeToolOutput } from "../../content.ts"
 import { formatToolArgs } from "../../format.ts"
 import { TOOL_STYLE } from "../constants.ts"
 import { formatMarkdown } from "../markdown/index.ts"
+import type { TimelineEvent } from "../types.ts"
+import { Cursor, Spinner } from "./liveArea.tsx"
 
-export function hasMeaningfulContent(msg: ModelMessage): boolean {
-	if (msg.role === "user") return true
-	if (msg.role === "tool") return msg.content.some((p) => p.type === "tool-result")
-	if (typeof msg.content === "string") return msg.content.trim().length > 0
-	return msg.content.some((p) => p.type === "text" || p.type === "tool-call")
+export function deriveEventsFromMessages(msgs: ModelMessage[]): TimelineEvent[] {
+	const events: TimelineEvent[] = []
+
+	for (let i = 0; i < msgs.length; i++) {
+		const msg = msgs[i]!
+
+		if (msg.role === "user") {
+			const content =
+				typeof msg.content === "string"
+					? msg.content
+					: msg.content.map((c) => (c.type === "text" ? c.text : "")).join("")
+			events.push({
+				id: `user-${i}`,
+				type: "UserMessage",
+				content,
+			})
+			continue
+		}
+
+		if (msg.role === "assistant") {
+			const parts =
+				typeof msg.content === "string"
+					? [{ type: "text" as const, text: msg.content }]
+					: msg.content
+
+			for (let j = 0; j < parts.length; j++) {
+				const part = parts[j]!
+				if (part.type === "text") {
+					if (part.text.trim()) {
+						events.push({
+							id: `assistant-${i}-${j}`,
+							type: "AssistantMessage",
+							content: part.text,
+						})
+					}
+				} else if (part.type === "tool-call") {
+					// Search for tool result in subsequent messages
+					let foundResult: ToolResultPart | null = null
+					for (let k = i + 1; k < msgs.length; k++) {
+						const nextMsg = msgs[k]!
+						if (nextMsg.role === "tool" && Array.isArray(nextMsg.content)) {
+							const resPart = nextMsg.content.find(
+								(p): p is ToolResultPart =>
+									p.type === "tool-result" && p.toolCallId === part.toolCallId,
+							)
+							if (resPart) {
+								foundResult = resPart
+								break
+							}
+						}
+					}
+
+					const formattedArgs = formatToolArgs(part.input as Record<string, unknown>, true)
+
+					if (foundResult) {
+						const { text, isError } = summarizeToolOutput(foundResult.output)
+						if (isError) {
+							events.push({
+								id: `tool-${part.toolCallId}`,
+								type: "ToolFailed",
+								toolCallId: part.toolCallId,
+								toolName: part.toolName,
+								args: formattedArgs,
+								error: text,
+							})
+						} else {
+							let lineCount: number | undefined
+							let matchCount: number | undefined
+							if (part.toolName === "read") {
+								lineCount = text.split("\n").length
+							} else if (part.toolName === "grep") {
+								matchCount = text.split("\n").filter(Boolean).length
+							}
+							events.push({
+								id: `tool-${part.toolCallId}`,
+								type: "ToolCompleted",
+								toolCallId: part.toolCallId,
+								toolName: part.toolName,
+								args: formattedArgs,
+								resultLineCount: lineCount,
+								resultMatchCount: matchCount,
+							})
+						}
+					} else {
+						events.push({
+							id: `tool-${part.toolCallId}`,
+							type: "ToolStarted",
+							toolCallId: part.toolCallId,
+							toolName: part.toolName,
+							args: formattedArgs,
+						})
+					}
+				}
+			}
+		}
+	}
+
+	return events
 }
-const UserMessage = memo(function UserMessage({
+
+const UserMessageView = memo(function UserMessageView({
 	content,
 	isFirst,
 }: {
@@ -41,86 +137,108 @@ const UserMessage = memo(function UserMessage({
 	)
 })
 
-const ToolCallLine = memo(function ToolCallLine({ part }: { part: ToolCallPart }) {
-	const tool = part.toolName
-	const args = formatToolArgs(part.input as Record<string, unknown>, true)
-	const color = TOOL_STYLE[tool] ?? "white"
-	return (
-		<Box flexDirection="row" marginTop={0}>
-			<Text dimColor color={color}>
-				→ {tool}
-			</Text>
-			{args && <Text dimColor> {args}</Text>}
-		</Box>
-	)
-})
-
-const ToolResultMessage = memo(function ToolResultMessage({ part }: { part: ToolResultPart }) {
-	const { text, isError } = summarizeToolOutput(part.output)
-	const tool = part.toolName
-	const isRead = tool === "read"
-	const lineCount = isRead && !isError ? text.split("\n").length : 0
-	const color = TOOL_STYLE[tool] ?? "white"
-
-	return (
-		<Box flexDirection="row" marginTop={0}>
-			<Text color={isError ? "red" : "green"}>{isError ? "✗" : "✓"} </Text>
-			<Text color={color} bold>
-				{tool}
-			</Text>
-			{isRead && !isError && <Text dimColor> ({lineCount} lines)</Text>}
-			{isError && text && <Text color="red"> {text.slice(0, 80)}</Text>}
-		</Box>
-	)
-})
-
-export const Message = memo(function Message({
-	msg,
-	isFirst,
+export const EventRenderer = memo(function EventRenderer({
+	event,
+	isFirst = false,
 }: {
-	msg: ModelMessage
-	isFirst: boolean
+	event: TimelineEvent
+	isFirst?: boolean
 }) {
-	if (msg.role === "user") {
-		const content =
-			typeof msg.content === "string"
-				? msg.content
-				: msg.content.map((c) => (c.type === "text" ? c.text : "")).join("")
-		return <UserMessage content={content} isFirst={isFirst} />
+	switch (event.type) {
+		case "UserMessage":
+			return <UserMessageView content={event.content} isFirst={isFirst} />
+
+		case "AssistantMessage": {
+			const text = formatMarkdown(event.content)
+			return (
+				<Box flexDirection="column" marginTop={0}>
+					<Text>
+						{text}
+						{event.id === "active-text" && <Cursor />}
+					</Text>
+				</Box>
+			)
+		}
+
+		case "ToolStarted": {
+			const color = TOOL_STYLE[event.toolName] ?? "white"
+			return (
+				<Box flexDirection="row" marginTop={0}>
+					<Box marginRight={1}>
+						<Spinner />
+					</Box>
+					<Text color={color} bold>
+						{event.toolName}
+					</Text>
+					{event.args && <Text dimColor> {event.args}</Text>}
+				</Box>
+			)
+		}
+
+		case "ToolCompleted": {
+			const color = TOOL_STYLE[event.toolName] ?? "white"
+			return (
+				<Box flexDirection="row" marginTop={0}>
+					<Text color="green">● </Text>
+					<Text color={color} bold>
+						{event.toolName}
+					</Text>
+					{event.args && <Text dimColor> {event.args}</Text>}
+					{event.resultLineCount !== undefined && (
+						<Text dimColor> ({event.resultLineCount} lines)</Text>
+					)}
+					{event.resultMatchCount !== undefined && (
+						<Text dimColor> ({event.resultMatchCount} matches)</Text>
+					)}
+				</Box>
+			)
+		}
+
+		case "ToolFailed": {
+			const color = TOOL_STYLE[event.toolName] ?? "white"
+			return (
+				<Box flexDirection="column" marginTop={0}>
+					<Box flexDirection="row">
+						<Text color="red">✖ </Text>
+						<Text color={color} bold>
+							{event.toolName}
+						</Text>
+						{event.args && <Text dimColor> {event.args}</Text>}
+					</Box>
+					<Box marginLeft={2}>
+						<Text color="red">{event.error}</Text>
+					</Box>
+				</Box>
+			)
+		}
+
+		case "Thinking": {
+			const label = event.id === "active-working" ? "working…" : "Thinking…"
+			return (
+				<Box flexDirection="row" marginTop={0}>
+					<Box marginRight={1}>
+						<Spinner />
+					</Box>
+					<Text color="yellow">{label}</Text>
+				</Box>
+			)
+		}
+
+		case "Warning":
+			return (
+				<Box flexDirection="row" marginTop={0}>
+					<Text color="yellow">⚠ {event.content}</Text>
+				</Box>
+			)
+
+		case "SystemMessage":
+			return (
+				<Box flexDirection="row" marginTop={0}>
+					<Text color="blue">ℹ {event.content}</Text>
+				</Box>
+			)
+
+		default:
+			return null
 	}
-
-	if (msg.role === "assistant") {
-		const parts =
-			typeof msg.content === "string" ? [{ type: "text" as const, text: msg.content }] : msg.content
-		const textContent = parts
-			.filter((p): p is { type: "text"; text: string } => p.type === "text")
-			.map((p) => p.text)
-			.join("")
-		const toolCalls = parts.filter((p): p is ToolCallPart => p.type === "tool-call")
-
-		if (!textContent.trim() && toolCalls.length === 0) return null
-
-		return (
-			<Box flexDirection="column" marginTop={0}>
-				{textContent.trim() && <Text>{formatMarkdown(textContent)}</Text>}
-				{toolCalls.map((c, i) => (
-					// biome-ignore lint/suspicious/noArrayIndexKey: stable within a message
-					<ToolCallLine key={i} part={c} />
-				))}
-			</Box>
-		)
-	}
-
-	// tool message: content is always an array of tool-result parts
-	if (msg.role !== "tool") return null
-	const results = msg.content.filter((p): p is ToolResultPart => p.type === "tool-result")
-	if (results.length === 0) return null
-	return (
-		<Box flexDirection="column">
-			{results.map((p, i) => (
-				// biome-ignore lint/suspicious/noArrayIndexKey: stable within a message
-				<ToolResultMessage key={i} part={p} />
-			))}
-		</Box>
-	)
 })

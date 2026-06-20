@@ -14,7 +14,7 @@ export async function runOnboarding(): Promise<NovaConfig> {
 		sortedProviders.map((p) => ({ value: p.id, label: p.name })),
 	)
 	if (!providerId) {
-		console.log(chalk.dim("Cancelled"))
+		console.log("Cancelled")
 		process.exit(0)
 	}
 
@@ -26,7 +26,7 @@ export async function runOnboarding(): Promise<NovaConfig> {
 
 	const apiKey = await standalonePassword(`Enter ${provider.name} API key`)
 	if (!apiKey) {
-		console.log(chalk.dim("Cancelled"))
+		console.log("Cancelled")
 		process.exit(0)
 	}
 
@@ -39,7 +39,7 @@ export async function runOnboarding(): Promise<NovaConfig> {
 		})),
 	)
 	if (!modelId) {
-		console.log(chalk.dim("Cancelled"))
+		console.log("Cancelled")
 		process.exit(0)
 	}
 
