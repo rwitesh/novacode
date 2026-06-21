@@ -1,15 +1,9 @@
-import type { ToolResultOutput } from "@ai-sdk/provider-utils"
 import type { ModelMessage } from "ai"
 import { Box, render, useApp, useInput, useWindowSize } from "ink"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
-import { generateSessionTitle } from "../compact.ts"
-import { loadAuth } from "../config/store.ts"
-import { summarizeToolOutput } from "../content.ts"
 import type { SessionStore } from "../db/sessionStore.ts"
-import { formatToolArgs } from "../format.ts"
-import { getModel, getProvider } from "../models/lookup.ts"
 import type { PolicyEngine } from "../policy/engine.ts"
 import { estimateTokens } from "../tokens.ts"
 import type {
@@ -23,13 +17,15 @@ import type {
 import { checkForUpdate, getCurrentVersion } from "../update.ts"
 import { Composer } from "./components/composer.tsx"
 import { Conversation } from "./components/conversation.tsx"
-import { deriveEventsFromMessages } from "./components/message.tsx"
 import { StatusBar } from "./components/statusBar.tsx"
-import { useStreamBuffer } from "./hooks/useStreamBuffer.ts"
+import { deriveEventsFromMessages } from "./deriveEvents.ts"
+import { useScrollManager } from "./hooks/useScrollManager.ts"
+import { useSession } from "./hooks/useSession.ts"
 import { useTip } from "./hooks/useTip.ts"
+import { useTurnRunner } from "./hooks/useTurnRunner.ts"
 import { PromptOverlay } from "./prompts.tsx"
 import { ThemeProvider, useTheme } from "./theme/index.tsx"
-import type { ActiveTool, PromptMode, TimelineEvent } from "./types.ts"
+import type { PromptMode, TimelineEvent } from "./types.ts"
 
 export async function interactive(
 	agent: Agent,
@@ -74,31 +70,17 @@ function estimateActiveInputTokens(agent: Agent, messages: ModelMessage[]): numb
 	return estimateTokens(agent.system) + estimateTokens(messages)
 }
 
-function errorMessage(err: unknown): string {
-	if (err instanceof Error) {
-		const last = "lastError" in err ? (err as { lastError: unknown }).lastError : null
-		if (last instanceof Error) return errorMessage(last)
-		const body = (err as { responseBody?: string }).responseBody
-		if (body) {
-			try {
-				const parsed = JSON.parse(body) as { error?: { message?: string }; message?: string }
-				return parsed.error?.message ?? parsed.message ?? err.message
-			} catch {}
-		}
-		return err.message
-	}
-	return String(err)
-}
-
 function buildSessionInfo(
 	version: string,
 	skills: Skill[],
 	hasAgentsMd: boolean,
 	updateInfo: { hasUpdate: boolean; current: string; latest: string } | null,
+	permissionMode: PermissionMode,
 ): string {
 	const lines: string[] = [`NovaCode v${version}`]
 	if (hasAgentsMd) lines.push("✓ AGENTS.md detected")
 	if (skills.length > 0) lines.push(`✓ ${skills.length} skills loaded`)
+	lines.push(`🔒 ${permissionMode}`)
 	if (updateInfo?.hasUpdate) {
 		lines.push(`✓ Update available (v${updateInfo.current} → v${updateInfo.latest})`)
 	}
@@ -128,171 +110,77 @@ function App({
 	const { rows } = useWindowSize()
 	const terminalRows = rows || 24
 
-	const [currSessionId, setCurrSessionId] = useState(initialSessionId)
-	const [msgs, setMsgs] = useState<ModelMessage[]>(initialHistory)
+	const scroll = useScrollManager()
+	const session = useSession(agent, store, initialSessionId, initialHistory)
+	const turn = useTurnRunner(
+		agent,
+		store,
+		session.sessionId,
+		session.setOutputTokens,
+		session.commitMsg,
+		session.commitDelta,
+	)
+	const tip = useTip()
 
-	const [thinking, setThinking] = useState(false)
-	const [busy, setBusy] = useState(false)
-	const [input, setInput] = useState("")
-
-	const [activeTools, setActiveTools] = useState<ActiveTool[]>([])
-	const [outputTokens, setOutputTokens] = useState(0)
-
-	const [selCmdIdx, setSelCmdIdx] = useState(0)
-	const [promptSelectedIdx, setPromptSelectedIdx] = useState(0)
-	const [mode, setMode] = useState<PromptMode>({ type: "chat" })
 	const [permissionMode, setPermissionMode] = useState<PermissionMode>(policy.mode)
-	const resolveRef = useRef<((v: unknown) => void) | null>(null)
-	const history = useRef<string[]>([])
-	const hIdx = useRef(-1)
-	const abortCtrl = useRef<AbortController | null>(null)
-	const committed = useRef(0)
 	const [updateInfo, setUpdateInfo] = useState<{
 		hasUpdate: boolean
 		current: string
 		latest: string
 	} | null>(null)
+
+	const [input, setInput] = useState("")
+	const [selCmdIdx, setSelCmdIdx] = useState(0)
+	const [promptSelectedIdx, setPromptSelectedIdx] = useState(0)
+	const [mode, setMode] = useState<PromptMode>({ type: "chat" })
+	const resolveRef = useRef<((v: unknown) => void) | null>(null)
+	const history = useRef<string[]>([])
+	const hIdx = useRef(-1)
+
 	const { exit } = useApp()
 	const lastExitPress = useRef<{ key: "C"; ts: number } | null>(null)
 	const [exitConfirmKey, setExitConfirmKey] = useState<"C" | null>(null)
 
-	const { bufferedStream, append: appendStream, reset: resetStream } = useStreamBuffer()
-	const tip = useTip()
-
-	const [scrollOffset, setScrollOffset] = useState(0)
-	const [heights, setHeights] = useState({ viewport: 0, content: 0 })
-	const [userScrolled, setUserScrolled] = useState(false)
-	const lastMaxOffset = useRef(0)
-	const maxOffset = Math.max(0, heights.content - heights.viewport)
-
 	useEffect(() => {
-		setScrollOffset((prev) => Math.min(prev, maxOffset))
-	}, [maxOffset])
-
-	useEffect(() => {
-		const delta = maxOffset - lastMaxOffset.current
-		if (delta > 0) {
-			if (!userScrolled) {
-				setScrollOffset(0)
-			} else {
-				setScrollOffset((prev) => Math.min(maxOffset, prev + delta))
-			}
-		}
-		lastMaxOffset.current = maxOffset
-	}, [maxOffset, userScrolled])
-
-	function scrollBy(deltaRows: number) {
-		setUserScrolled(true)
-		setScrollOffset((prev) => Math.min(maxOffset, Math.max(0, prev + deltaRows)))
-	}
-
-	function scrollToBottom() {
-		setUserScrolled(false)
-		setScrollOffset(0)
-	}
-
-	function scrollToTop() {
-		setUserScrolled(true)
-		setScrollOffset(maxOffset)
-	}
-
-	useEffect(() => {
-		const check = async () => {
-			const info = await checkForUpdate()
+		checkForUpdate().then((info) => {
 			if (info?.hasUpdate) {
 				setUpdateInfo({ hasUpdate: true, current: info.current, latest: info.latest })
 			}
-		}
-		check()
+		})
 	}, [])
 
-	useEffect(() => {
-		store.get(initialSessionId).then((s) => {
-			if (s) {
-				setOutputTokens(s.outputTokens)
-			}
-		})
-	}, [store, initialSessionId])
-
 	const usage = useMemo<Usage>(() => {
-		return {
-			in: estimateActiveInputTokens(agent, agent.messages),
-			out: outputTokens,
-		}
-	}, [agent, outputTokens])
+		const inTokens = session.systemPromptShown.current
+			? estimateActiveInputTokens(agent, agent.messages)
+			: 0
+		return { in: inTokens, out: session.outputTokens }
+	}, [agent, session.outputTokens, session.systemPromptShown])
 
-	async function handleSwitchSession(newSessionId: string) {
-		const s = await store.get(newSessionId)
-		if (!s) return
-
-		const provider = getProvider(s.provider)
-		const model = getModel(s.provider, s.model)
-		if (provider && model) {
-			const auth = await loadAuth()
-			const apiKey = auth.apiKeys[s.provider] || ""
-			agent.updateConfig({
-				provider: provider.id,
-				model,
-				apiKey,
-			})
-		}
-
-		const activeMsgs = await store.messages(newSessionId)
-		const fullHistory = await store.history(newSessionId)
-		agent.setMessages(activeMsgs)
-		setMsgs(fullHistory)
-		setCurrSessionId(newSessionId)
-		scrollToBottom()
-
-		if (model) {
-			setOutputTokens(s.outputTokens)
-		}
-	}
-
-	async function handleNewSession() {
-		const m = agent.model
-		const session = await store.create(process.cwd(), m.id, m.provider)
-		agent.setMessages([])
-		setMsgs([])
-		setCurrSessionId(session.id)
-		setOutputTokens(0)
-		scrollToBottom()
-	}
-
-	const prompts: Prompts = {
-		select: useCallback(
-			(config) =>
-				new Promise((resolve) => {
+	const prompts: Prompts = useMemo(
+		() => ({
+			select: (config) =>
+				new Promise<string | null>((resolve) => {
 					resolveRef.current = resolve as (v: unknown) => void
 					setMode({ type: "select", ...config })
 				}),
-			[],
-		),
-		searchSelect: useCallback(
-			(config) =>
-				new Promise((resolve) => {
+			searchSelect: (config) =>
+				new Promise<string | null>((resolve) => {
 					resolveRef.current = resolve as (v: unknown) => void
 					setMode({ type: "searchSelect", ...config })
 				}),
-			[],
-		),
-		password: useCallback(
-			(config) =>
-				new Promise((resolve) => {
+			password: (config) =>
+				new Promise<string | null>((resolve) => {
 					resolveRef.current = resolve as (v: unknown) => void
 					setMode({ type: "password", ...config })
 				}),
-			[],
-		),
-		confirm: useCallback(
-			(config) =>
-				new Promise((resolve) => {
+			confirm: (config) =>
+				new Promise<boolean | null>((resolve) => {
 					resolveRef.current = resolve as (v: unknown) => void
 					setMode({ type: "confirm", ...config })
 				}),
-			[],
-		),
-	}
+		}),
+		[],
+	)
 
 	const approver: PolicyApprover = useMemo(
 		() => ({
@@ -317,60 +205,6 @@ function App({
 		fn?.(value)
 	}
 
-	function commitMsg(msg: ModelMessage) {
-		setMsgs((prev) => [...prev, msg])
-		agent.appendMessages([msg])
-		store.append(currSessionId, msg).catch((err) => {
-			console.error("Error appending message to session store:", err)
-		})
-	}
-
-	async function commitDelta(messages: ModelMessage[]) {
-		const delta = messages.slice(committed.current)
-		if (delta.length === 0) return
-		committed.current = messages.length
-
-		for (const msg of delta) {
-			await store.append(currSessionId, msg)
-		}
-
-		setMsgs((prev) => [...prev, ...delta])
-		agent.appendMessages(delta)
-
-		const committedToolCallIds = new Set<string>()
-		for (const msg of delta) {
-			if (msg.role === "assistant" && Array.isArray(msg.content)) {
-				for (const part of msg.content) {
-					if (part.type === "tool-call") {
-						committedToolCallIds.add(part.toolCallId)
-					}
-				}
-			}
-			if (msg.role === "tool" && Array.isArray(msg.content)) {
-				for (const part of msg.content) {
-					if (part.type === "tool-result") {
-						committedToolCallIds.add(part.toolCallId)
-					}
-				}
-			}
-		}
-
-		if (committedToolCallIds.size > 0) {
-			setActiveTools((prev) => prev.filter((t) => !committedToolCallIds.has(t.id)))
-		}
-
-		const committedText = delta.some(
-			(msg) =>
-				msg.role === "assistant" &&
-				(typeof msg.content === "string"
-					? msg.content.trim().length > 0
-					: msg.content.some((part) => part.type === "text" && part.text.trim().length > 0)),
-		)
-		if (committedText) {
-			resetStream()
-		}
-	}
-
 	async function handlePermissionSwitch() {
 		const picked = await prompts.select({
 			message: "Permission mode",
@@ -390,7 +224,7 @@ function App({
 		if (picked !== "restricted" && picked !== "unrestricted") return
 		policy.setMode(picked)
 		setPermissionMode(picked)
-		commitMsg({
+		session.commitMsg({
 			role: "assistant",
 			content: `✓ Permission mode set to ${picked}.`,
 		})
@@ -428,39 +262,47 @@ function App({
 			return { label: "Press Ctrl+C again to exit", color: theme.palette.warning }
 		if (mode.type === "searchSelect") return { label: "Filtering...", color: theme.palette.primary }
 		if (mode.type !== "chat") return { label: "Waiting for input", color: theme.palette.muted }
-		if (thinking) return { label: "Thinking...", color: theme.palette.warning }
-		if (activeTools.length > 0)
+		if (turn.thinking) return { label: "Thinking...", color: theme.palette.warning }
+		if (turn.activeTools.length > 0)
 			return {
-				label: `Running ${activeTools.length} tool${activeTools.length > 1 ? "s" : ""}...`,
+				label: `Running ${turn.activeTools.length} tool${turn.activeTools.length > 1 ? "s" : ""}...`,
 				color: theme.palette.primary,
 			}
-		if (bufferedStream) return { label: "Responding...", color: theme.palette.primary }
-		if (busy) return { label: "Working...", color: theme.palette.warning }
+		if (turn.bufferedStream) return { label: "Responding...", color: theme.palette.primary }
+		if (turn.busy) return { label: "Working...", color: theme.palette.warning }
 		return { label: "Ready", color: theme.palette.success }
-	}, [exitConfirmKey, mode.type, thinking, activeTools, bufferedStream, busy, theme])
+	}, [
+		exitConfirmKey,
+		mode.type,
+		turn.thinking,
+		turn.activeTools,
+		turn.bufferedStream,
+		turn.busy,
+		theme,
+	])
 
 	const completedEvents = useMemo<TimelineEvent[]>(() => {
-		const info = buildSessionInfo(version, skills, hasAgentsMd, updateInfo)
-		const events = deriveEventsFromMessages(msgs)
+		const info = buildSessionInfo(version, skills, hasAgentsMd, updateInfo, permissionMode)
+		const events = deriveEventsFromMessages(session.messages)
 		return [{ id: "session-started", type: "SessionStarted", content: info }, ...events]
-	}, [msgs, version, skills, hasAgentsMd, updateInfo])
+	}, [session.messages, version, skills, hasAgentsMd, updateInfo, permissionMode])
 
 	const activeEvents = useMemo<TimelineEvent[]>(() => {
 		const events: TimelineEvent[] = []
 
-		if (thinking) {
+		if (turn.thinking) {
 			events.push({ id: "active-thinking", type: "Thinking" })
 		}
 
-		if (bufferedStream) {
+		if (turn.bufferedStream) {
 			events.push({
 				id: "active-text",
 				type: "AssistantMessage",
-				content: bufferedStream,
+				content: turn.bufferedStream,
 			})
 		}
 
-		for (const t of activeTools) {
+		for (const t of turn.activeTools) {
 			if (t.status === "running") {
 				events.push({
 					id: t.id,
@@ -491,12 +333,18 @@ function App({
 			}
 		}
 
-		if (busy && !thinking && !bufferedStream && activeTools.length === 0 && mode.type === "chat") {
+		if (
+			turn.busy &&
+			!turn.thinking &&
+			!turn.bufferedStream &&
+			turn.activeTools.length === 0 &&
+			mode.type === "chat"
+		) {
 			events.push({ id: "active-working", type: "Thinking" })
 		}
 
 		return events
-	}, [thinking, bufferedStream, activeTools, busy, mode.type])
+	}, [turn.thinking, turn.bufferedStream, turn.activeTools, turn.busy, mode.type])
 
 	const allEvents = useMemo<TimelineEvent[]>(
 		() => [...completedEvents, ...activeEvents],
@@ -505,11 +353,8 @@ function App({
 
 	useInput((ch, key) => {
 		if (key.ctrl && (ch === "c" || ch === "d")) {
-			if (busy) {
-				if (ch === "c" && abortCtrl.current) {
-					abortCtrl.current.abort()
-					abortCtrl.current = null
-				}
+			if (turn.busy) {
+				if (ch === "c") turn.abort()
 				return
 			}
 
@@ -580,9 +425,8 @@ function App({
 		if (mode.type !== "chat") return
 
 		if (key.escape) {
-			if (abortCtrl.current) {
-				abortCtrl.current.abort()
-				abortCtrl.current = null
+			if (turn.busy) {
+				turn.abort()
 			} else if (input) {
 				setInput("")
 			}
@@ -590,19 +434,19 @@ function App({
 		}
 
 		if (key.pageUp) {
-			scrollBy(Math.max(1, (heights.viewport || terminalRows) - 1))
+			scroll.scrollBy(Math.max(1, (scroll.heights.viewport || terminalRows) - 1))
 			return
 		}
 		if (key.pageDown) {
-			scrollBy(-Math.max(1, (heights.viewport || terminalRows) - 1))
+			scroll.scrollBy(-Math.max(1, (scroll.heights.viewport || terminalRows) - 1))
 			return
 		}
 		if (key.home) {
-			scrollToTop()
+			scroll.scrollToTop()
 			return
 		}
 		if (key.end) {
-			scrollToBottom()
+			scroll.scrollToBottom()
 			return
 		}
 
@@ -629,9 +473,7 @@ function App({
 		if (key.tab) {
 			if (isTypingCmd && suggestions.length > 0) {
 				const match = suggestions[selCmdIdx]
-				if (match) {
-					setInput(`/${match.name} `)
-				}
+				if (match) setInput(`/${match.name} `)
 			}
 			return
 		}
@@ -643,16 +485,14 @@ function App({
 			return
 		}
 
-		if (busy) return
+		if (turn.busy) return
 
 		let line = input.trim()
 		if (!line) return
 
 		if (isTypingCmd && suggestions.length > 0) {
 			const match = suggestions[selCmdIdx]
-			if (match) {
-				line = `/${match.name}`
-			}
+			if (match) line = `/${match.name}`
 		}
 
 		setInput("")
@@ -671,155 +511,41 @@ function App({
 				return
 			}
 			if (line === "/compact") {
-				setBusy(true)
+				turn.setBusy(true)
 			}
 			dispatch(
 				line,
 				agent,
 				store,
-				currSessionId,
+				session.sessionId,
 				prompts,
 				exit,
-				handleSwitchSession,
-				handleNewSession,
+				session.switchSession,
+				session.newSession,
 				skills,
 			).then((r) => {
-				setBusy(false)
+				turn.setBusy(false)
 				if (r) {
-					commitMsg({ role: "assistant", content: r })
+					session.commitMsg({ role: "assistant", content: r })
 				}
 			})
 			return
 		}
 
 		const userMsg: ModelMessage = { role: "user", content: line }
-		commitMsg(userMsg)
+		session.commitMsg(userMsg)
 
-		abortCtrl.current = new AbortController()
-		void runTurn(abortCtrl.current.signal)
+		const ctrl = new AbortController()
+		void turn.run(ctrl)
 	})
-
-	async function runTurn(signal: AbortSignal) {
-		setBusy(true)
-		resetStream()
-		setThinking(false)
-		setActiveTools([])
-		committed.current = 0
-		let streamError: unknown
-
-		try {
-			const result = await agent.prompt(signal, async (event) => {
-				const u = event.usage
-				if (u) {
-					setOutputTokens((prev) => prev + (u.outputTokens ?? 0))
-					await store.addUsage(currSessionId, u.inputTokens ?? 0, u.outputTokens ?? 0)
-				}
-				if (event.response?.messages?.length) {
-					await commitDelta(event.response.messages)
-				}
-			})
-
-			for await (const part of result.fullStream) {
-				switch (part.type) {
-					case "text-delta":
-						if (part.text) {
-							setThinking(false)
-							appendStream(part.text)
-						}
-						break
-					case "reasoning-delta":
-						setThinking(true)
-						break
-					case "tool-call": {
-						setThinking(false)
-						const args = formatToolArgs(part.input as Record<string, unknown>, false)
-						setActiveTools((prev) => {
-							if (prev.some((t) => t.id === part.toolCallId)) return prev
-							return [
-								...prev,
-								{
-									id: part.toolCallId,
-									name: part.toolName,
-									args,
-									status: "running" as const,
-								},
-							]
-						})
-						break
-					}
-					case "tool-result": {
-						const { text, isError } = summarizeToolOutput(part.output as ToolResultOutput)
-						setActiveTools((prev) =>
-							prev.map((t) => {
-								if (t.id === part.toolCallId) {
-									if (isError) {
-										return {
-											...t,
-											status: "failure" as const,
-											error: text,
-										}
-									}
-									let lineCount: number | undefined
-									let matchCount: number | undefined
-									if (t.name === "read") {
-										lineCount = text.split("\n").length
-									} else if (t.name === "grep") {
-										matchCount = text.split("\n").filter(Boolean).length
-									}
-									return {
-										...t,
-										status: "success" as const,
-										lineCount,
-										matchCount,
-									}
-								}
-								return t
-							}),
-						)
-						break
-					}
-					case "error":
-						streamError = part.error
-						break
-				}
-			}
-
-			const resp = await result.response
-			await commitDelta(resp.messages)
-
-			store
-				.get(currSessionId)
-				.then((s) => {
-					if (s && !s.title && agent.messages.length >= 2) {
-						generateSessionTitle(agent.messages, agent.model, agent.apiKey)
-							.then((title) => {
-								if (title) store.setTitle(currSessionId, title).catch(() => {})
-							})
-							.catch(() => {})
-					}
-				})
-				.catch(() => {})
-		} catch (err) {
-			if (signal.aborted) {
-				commitMsg({ role: "assistant", content: "(aborted)" })
-			} else {
-				commitMsg({
-					role: "assistant",
-					content: `Error: ${errorMessage(streamError ?? err)}`,
-				})
-			}
-		} finally {
-			abortCtrl.current = null
-			setBusy(false)
-			resetStream()
-			setThinking(false)
-			setActiveTools([])
-		}
-	}
 
 	return (
 		<Box flexDirection="column" width="100%" height={terminalRows}>
-			<Conversation events={allEvents} scrollOffset={scrollOffset} onLayout={setHeights} />
+			<Conversation
+				events={allEvents}
+				scrollOffset={scroll.scrollOffset}
+				onLayout={scroll.onLayout}
+			/>
 			{mode.type !== "chat" && (
 				<PromptOverlay
 					mode={mode}
@@ -835,7 +561,6 @@ function App({
 				model={agent.model}
 				usage={usage}
 				tip={tip}
-				permissionMode={permissionMode}
 			/>
 		</Box>
 	)

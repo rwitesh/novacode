@@ -28,7 +28,7 @@ export function Conversation({
 	const top = scrollOffset - maxOffset
 
 	return (
-		<Box ref={viewportRef} flexGrow={1} flexDirection="column" overflow="hidden">
+		<Box ref={viewportRef} flexGrow={1} flexDirection="column" overflow="hidden" paddingY={1}>
 			<Box ref={contentRef} flexDirection="column" position="relative" top={top}>
 				{events.map((event) => (
 					<EventRenderer key={event.id} event={event} />
