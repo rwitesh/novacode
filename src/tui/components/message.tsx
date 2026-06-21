@@ -3,8 +3,8 @@ import { Box, Text } from "ink"
 import { memo } from "react"
 import { summarizeToolOutput } from "../../content.ts"
 import { formatToolArgs } from "../../format.ts"
-import { TOOL_STYLE } from "../constants.ts"
 import { formatMarkdown } from "../markdown/index.ts"
+import { useTheme } from "../theme/index.tsx"
 import type { TimelineEvent } from "../types.ts"
 import { Cursor, Spinner } from "./liveArea.tsx"
 
@@ -19,11 +19,13 @@ export function deriveEventsFromMessages(msgs: ModelMessage[]): TimelineEvent[] 
 				typeof msg.content === "string"
 					? msg.content
 					: msg.content.map((c) => (c.type === "text" ? c.text : "")).join("")
-			events.push({
-				id: `user-${i}`,
-				type: "UserMessage",
-				content,
-			})
+			if (content.trim()) {
+				events.push({
+					id: `user-${i}`,
+					type: "UserMessage",
+					content,
+				})
+			}
 			continue
 		}
 
@@ -44,7 +46,6 @@ export function deriveEventsFromMessages(msgs: ModelMessage[]): TimelineEvent[] 
 						})
 					}
 				} else if (part.type === "tool-call") {
-					// Search for tool result in subsequent messages
 					let foundResult: ToolResultPart | null = null
 					for (let k = i + 1; k < msgs.length; k++) {
 						const nextMsg = msgs[k]!
@@ -60,7 +61,7 @@ export function deriveEventsFromMessages(msgs: ModelMessage[]): TimelineEvent[] 
 						}
 					}
 
-					const formattedArgs = formatToolArgs(part.input as Record<string, unknown>, true)
+					const args = formatToolArgs(part.input as Record<string, unknown>, false)
 
 					if (foundResult) {
 						const { text, isError } = summarizeToolOutput(foundResult.output)
@@ -70,26 +71,23 @@ export function deriveEventsFromMessages(msgs: ModelMessage[]): TimelineEvent[] 
 								type: "ToolFailed",
 								toolCallId: part.toolCallId,
 								toolName: part.toolName,
-								args: formattedArgs,
+								args,
 								error: text,
 							})
 						} else {
-							let lineCount: number | undefined
-							let matchCount: number | undefined
-							if (part.toolName === "read") {
-								lineCount = text.split("\n").length
-							} else if (part.toolName === "grep") {
-								matchCount = text.split("\n").filter(Boolean).length
-							}
-							events.push({
+							const completedEvent: TimelineEvent = {
 								id: `tool-${part.toolCallId}`,
 								type: "ToolCompleted",
 								toolCallId: part.toolCallId,
 								toolName: part.toolName,
-								args: formattedArgs,
-								resultLineCount: lineCount,
-								resultMatchCount: matchCount,
-							})
+								args,
+							}
+							if (part.toolName === "read") {
+								completedEvent.resultLineCount = text.split("\n").length
+							} else if (part.toolName === "grep") {
+								completedEvent.resultMatchCount = text.split("\n").filter(Boolean).length
+							}
+							events.push(completedEvent)
 						}
 					} else {
 						events.push({
@@ -97,7 +95,7 @@ export function deriveEventsFromMessages(msgs: ModelMessage[]): TimelineEvent[] 
 							type: "ToolStarted",
 							toolCallId: part.toolCallId,
 							toolName: part.toolName,
-							args: formattedArgs,
+							args,
 						})
 					}
 				}
@@ -108,133 +106,135 @@ export function deriveEventsFromMessages(msgs: ModelMessage[]): TimelineEvent[] 
 	return events
 }
 
-const UserMessageView = memo(function UserMessageView({
-	content,
-	isFirst,
-}: {
-	content: string
-	isFirst: boolean
-}) {
-	const columns = process.stdout.columns || 80
-	const dividerWidth = Math.max(10, columns - 2)
-	const divider = "─".repeat(dividerWidth)
-
+const SessionStartedView = memo(function SessionStartedView({ content }: { content: string }) {
+	const theme = useTheme()
 	return (
-		<Box flexDirection="column" marginTop={isFirst ? 0 : 1} marginBottom={1}>
-			<Text color="green">{divider}</Text>
-			<Box flexDirection="row">
-				<Box flexShrink={0} marginRight={1}>
-					<Text bold color="greenBright">
-						{"❯"}
-					</Text>
-				</Box>
-				<Box flexGrow={1} flexShrink={1}>
-					<Text>{content}</Text>
-				</Box>
-			</Box>
-			<Text color="green">{divider}</Text>
+		<Box flexDirection="column" marginY={1}>
+			<Text color={theme.palette.muted}>{content}</Text>
 		</Box>
 	)
 })
 
-export const EventRenderer = memo(function EventRenderer({
-	event,
-	isFirst = false,
+const UserMessageView = memo(function UserMessageView({ content }: { content: string }) {
+	const theme = useTheme()
+	return (
+		<Box flexDirection="column" alignItems="flex-start" marginTop={1} marginBottom={1}>
+			<Text bold color={theme.palette.primary} wrap="wrap">
+				{content}
+			</Text>
+		</Box>
+	)
+})
+
+const AssistantMessageView = memo(function AssistantMessageView({
+	content,
+	isStreaming = false,
 }: {
-	event: TimelineEvent
-	isFirst?: boolean
+	content: string
+	isStreaming?: boolean
 }) {
+	const theme = useTheme()
+	const text = isStreaming ? content : formatMarkdown(content)
+	return (
+		<Box flexDirection="column" marginBottom={1}>
+			<Text color={theme.palette.fg} wrap="wrap">
+				{text}
+				{isStreaming && <Cursor />}
+			</Text>
+		</Box>
+	)
+})
+
+const ToolEventView = memo(function ToolEventView({ event }: { event: TimelineEvent }) {
+	const theme = useTheme()
+	if (
+		event.type !== "ToolStarted" &&
+		event.type !== "ToolCompleted" &&
+		event.type !== "ToolFailed"
+	) {
+		return null
+	}
+
+	const isRunning = event.type === "ToolStarted"
+	const isFailure = event.type === "ToolFailed"
+	const bulletColor = isRunning
+		? theme.palette.warning
+		: isFailure
+			? theme.palette.error
+			: theme.palette.success
+	const bullet = isRunning ? "○" : "●"
+
+	return (
+		<Box flexDirection="column" marginBottom={0}>
+			<Box flexDirection="row">
+				<Text color={bulletColor}>{bullet} </Text>
+				<Text bold color={theme.palette.primary}>
+					{event.toolName}
+				</Text>
+				<Text color={theme.palette.muted}> {event.args}</Text>
+				{event.type === "ToolCompleted" && event.resultLineCount !== undefined && (
+					<Text color={theme.palette.muted}> ({event.resultLineCount} lines)</Text>
+				)}
+				{event.type === "ToolCompleted" && event.resultMatchCount !== undefined && (
+					<Text color={theme.palette.muted}> ({event.resultMatchCount} matches)</Text>
+				)}
+			</Box>
+			{isFailure && (
+				<Box marginLeft={2}>
+					<Text color={theme.palette.error}>{event.error}</Text>
+				</Box>
+			)}
+		</Box>
+	)
+})
+
+const ThinkingView = memo(function ThinkingView({ label }: { label: string }) {
+	const theme = useTheme()
+	return (
+		<Box flexDirection="row" marginBottom={0}>
+			<Box marginRight={1}>
+				<Spinner />
+			</Box>
+			<Text color={theme.palette.warning}>{label}</Text>
+		</Box>
+	)
+})
+
+export const EventRenderer = memo(function EventRenderer({ event }: { event: TimelineEvent }) {
+	const theme = useTheme()
 	switch (event.type) {
+		case "SessionStarted":
+			return <SessionStartedView content={event.content} />
+
 		case "UserMessage":
-			return <UserMessageView content={event.content} isFirst={isFirst} />
+			return <UserMessageView content={event.content} />
 
-		case "AssistantMessage": {
-			const text = formatMarkdown(event.content)
+		case "AssistantMessage":
 			return (
-				<Box flexDirection="column" marginTop={0}>
-					<Text>
-						{text}
-						{event.id === "active-text" && <Cursor />}
-					</Text>
-				</Box>
+				<AssistantMessageView content={event.content} isStreaming={event.id === "active-text"} />
 			)
-		}
 
-		case "ToolStarted": {
-			const color = TOOL_STYLE[event.toolName] ?? "white"
-			return (
-				<Box flexDirection="row" marginTop={0}>
-					<Box marginRight={1}>
-						<Spinner />
-					</Box>
-					<Text color={color} bold>
-						{event.toolName}
-					</Text>
-					{event.args && <Text dimColor> {event.args}</Text>}
-				</Box>
-			)
-		}
-
-		case "ToolCompleted": {
-			const color = TOOL_STYLE[event.toolName] ?? "white"
-			return (
-				<Box flexDirection="row" marginTop={0}>
-					<Text color="green">● </Text>
-					<Text color={color} bold>
-						{event.toolName}
-					</Text>
-					{event.args && <Text dimColor> {event.args}</Text>}
-					{event.resultLineCount !== undefined && (
-						<Text dimColor> ({event.resultLineCount} lines)</Text>
-					)}
-					{event.resultMatchCount !== undefined && (
-						<Text dimColor> ({event.resultMatchCount} matches)</Text>
-					)}
-				</Box>
-			)
-		}
-
-		case "ToolFailed": {
-			const color = TOOL_STYLE[event.toolName] ?? "white"
-			return (
-				<Box flexDirection="column" marginTop={0}>
-					<Box flexDirection="row">
-						<Text color="red">✖ </Text>
-						<Text color={color} bold>
-							{event.toolName}
-						</Text>
-						{event.args && <Text dimColor> {event.args}</Text>}
-					</Box>
-					<Box marginLeft={2}>
-						<Text color="red">{event.error}</Text>
-					</Box>
-				</Box>
-			)
-		}
+		case "ToolStarted":
+		case "ToolCompleted":
+		case "ToolFailed":
+			return <ToolEventView event={event} />
 
 		case "Thinking": {
-			const label = event.id === "active-working" ? "working…" : "Thinking…"
-			return (
-				<Box flexDirection="row" marginTop={0}>
-					<Box marginRight={1}>
-						<Spinner />
-					</Box>
-					<Text color="yellow">{label}</Text>
-				</Box>
-			)
+			const label = event.id === "active-working" ? "Working…" : "Thinking…"
+			return <ThinkingView label={label} />
 		}
 
 		case "Warning":
 			return (
-				<Box flexDirection="row" marginTop={0}>
-					<Text color="yellow">⚠ {event.content}</Text>
+				<Box flexDirection="row" marginBottom={0}>
+					<Text color={theme.palette.warning}>⚠ {event.content}</Text>
 				</Box>
 			)
 
 		case "SystemMessage":
 			return (
-				<Box flexDirection="row" marginTop={0}>
-					<Text color="blue">ℹ {event.content}</Text>
+				<Box flexDirection="row" marginBottom={0}>
+					<Text color={theme.palette.primary}>ℹ {event.content}</Text>
 				</Box>
 			)
 

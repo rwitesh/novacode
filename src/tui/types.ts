@@ -3,6 +3,11 @@ import type { ApprovalRequest } from "../types.ts"
 export type TimelineEvent =
 	| {
 			id: string
+			type: "SessionStarted"
+			content: string
+	  }
+	| {
+			id: string
 			type: "UserMessage"
 			content: string
 	  }

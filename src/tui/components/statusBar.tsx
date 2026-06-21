@@ -1,5 +1,6 @@
 import { Box, Text } from "ink"
 import type { Model, PermissionMode, Usage } from "../../types.ts"
+import { useTheme } from "../theme/index.tsx"
 
 function fmtK(n: number): string {
 	const k = n / 1000
@@ -13,67 +14,45 @@ function formatTokenUsage(used: number, contextWindow: number): string {
 }
 
 export function StatusBar({
+	activity,
+	activityColor,
 	model,
 	usage,
-	busy,
-	suggestions,
-	selCmdIdx,
-	exitConfirmKey,
 	tip,
 	permissionMode,
 }: {
+	activity: string
+	activityColor: string
 	model: Model
 	usage: Usage
-	busy: boolean
-	suggestions: Array<{ name: string; desc: string }>
-	selCmdIdx: number
-	exitConfirmKey: "C" | null
-	tip: string | null
+	tip: string
 	permissionMode: PermissionMode
 }) {
-	return (
-		<Box justifyContent="space-between">
-			<Box>
-				{suggestions.length > 0 ? (
-					<Box flexDirection="column" marginLeft={2}>
-						{suggestions.map((s, i) => (
-							<Box key={s.name}>
-								<Text
-									color={i === selCmdIdx ? "black" : "yellow"}
-									backgroundColor={i === selCmdIdx ? "yellow" : undefined}
-								>
-									/{s.name.padEnd(12)}
-								</Text>
-								<Text dimColor> {s.desc}</Text>
-							</Box>
-						))}
-					</Box>
-				) : exitConfirmKey === "C" ? (
-					<Text color="yellow">Press Ctrl+C again to exit</Text>
-				) : busy ? (
-					<Box>
-						<Text dimColor>Esc abort</Text>
-						{tip && (
-							<>
-								<Text dimColor> · </Text>
-								<Text color="cyan" dimColor>
-									{tip}
-								</Text>
-							</>
-						)}
-					</Box>
-				) : (
-					<Text dimColor>Enter to send · /help for commands</Text>
-				)}
-			</Box>
+	const theme = useTheme()
+	const permissionColor =
+		permissionMode === "restricted" ? theme.palette.warning : theme.palette.success
 
-			<Box>
-				<Text color={permissionMode === "restricted" ? "yellow" : "green"}>●</Text>
-				<Text dimColor> {permissionMode}</Text>
-				<Text dimColor> │ </Text>
-				<Text dimColor>{formatTokenUsage(usage.in, model.contextWindow)}</Text>
-				<Text dimColor> │ </Text>
-				<Text dimColor>{model.id}</Text>
+	return (
+		<Box
+			flexDirection="row"
+			flexShrink={0}
+			paddingX={1}
+			backgroundColor={theme.palette.bg}
+			justifyContent="space-between"
+		>
+			<Box flexGrow={1} flexShrink={1}>
+				<Text wrap="truncate-end" color={theme.palette.fg}>
+					<Text color={activityColor}>{activity}</Text>
+					<Text color={theme.palette.muted}> • </Text>
+					<Text bold>{model.id}</Text>
+					<Text color={theme.palette.muted}> • </Text>
+					<Text color={theme.palette.muted}>{formatTokenUsage(usage.in, model.contextWindow)}</Text>
+					<Text color={theme.palette.muted}> • </Text>
+					<Text color={theme.palette.primary}>Tip: {tip}</Text>
+				</Text>
+			</Box>
+			<Box flexShrink={0}>
+				<Text color={permissionColor}>●</Text>
 			</Box>
 		</Box>
 	)

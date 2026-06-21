@@ -1,25 +1,15 @@
-import { Text } from "ink"
-import { useEffect, useState } from "react"
+import { Text, useAnimation } from "ink"
 import { SPINNER_FRAMES } from "../constants.ts"
+import { useTheme } from "../theme/index.tsx"
 
 export function Spinner() {
-	const [frame, setFrame] = useState(0)
-
-	useEffect(() => {
-		const timer = setInterval(() => {
-			setFrame((f) => (f + 1) % SPINNER_FRAMES.length)
-		}, 80)
-		return () => clearInterval(timer)
-	}, [])
-
-	return <Text color="yellow">{SPINNER_FRAMES[frame]}</Text>
+	const theme = useTheme()
+	const { frame } = useAnimation({ interval: 80 })
+	return <Text color={theme.palette.primary}>{SPINNER_FRAMES[frame % SPINNER_FRAMES.length]}</Text>
 }
 
 export function Cursor() {
-	const [visible, setVisible] = useState(true)
-	useEffect(() => {
-		const timer = setInterval(() => setVisible((v) => !v), 530)
-		return () => clearInterval(timer)
-	}, [])
-	return <Text color="white">{visible ? "█" : " "}</Text>
+	const theme = useTheme()
+	const { frame } = useAnimation({ interval: 530 })
+	return <Text color={theme.palette.muted}>{frame % 2 === 0 ? "█" : " "}</Text>
 }

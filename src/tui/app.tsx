@@ -1,7 +1,6 @@
 import type { ToolResultOutput } from "@ai-sdk/provider-utils"
 import type { ModelMessage } from "ai"
-import chalk from "chalk"
-import { Box, render, Static, Text, useApp, useInput } from "ink"
+import { Box, render, useApp, useInput, useWindowSize } from "ink"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
@@ -12,7 +11,6 @@ import type { SessionStore } from "../db/sessionStore.ts"
 import { formatToolArgs } from "../format.ts"
 import { getModel, getProvider } from "../models/lookup.ts"
 import type { PolicyEngine } from "../policy/engine.ts"
-import { groupSkills } from "../skills/index.ts"
 import { estimateTokens } from "../tokens.ts"
 import type {
 	ApprovalRequest,
@@ -23,18 +21,14 @@ import type {
 	Usage,
 } from "../types.ts"
 import { checkForUpdate, getCurrentVersion } from "../update.ts"
-import { Cursor } from "./components/liveArea.tsx"
-import { deriveEventsFromMessages, EventRenderer } from "./components/message.tsx"
+import { Composer } from "./components/composer.tsx"
+import { Conversation } from "./components/conversation.tsx"
+import { deriveEventsFromMessages } from "./components/message.tsx"
 import { StatusBar } from "./components/statusBar.tsx"
 import { useStreamBuffer } from "./hooks/useStreamBuffer.ts"
 import { useTip } from "./hooks/useTip.ts"
-import {
-	ApprovalPrompt,
-	ConfirmPrompt,
-	PasswordPrompt,
-	SearchSelectPrompt,
-	SelectPrompt,
-} from "./prompts.tsx"
+import { PromptOverlay } from "./prompts.tsx"
+import { ThemeProvider, useTheme } from "./theme/index.tsx"
 import type { ActiveTool, PromptMode, TimelineEvent } from "./types.ts"
 
 export async function interactive(
@@ -47,36 +41,26 @@ export async function interactive(
 ): Promise<void> {
 	process.stdout.write("\x1B[?25l")
 	const version = await getCurrentVersion()
-	process.stdout.write(`${chalk.cyan.bold("⚡ novacode")} ${chalk.gray(`v${version}`)}\n`)
-	process.stdout.write(
-		`${chalk.dim("  mode:")}    ${policy.mode === "restricted" ? chalk.yellow("restricted") : chalk.green("unrestricted")}\n`,
-	)
-	if (hasAgentsMd) {
-		process.stdout.write(`${chalk.dim("  context:")} ${chalk.cyan("AGENTS.md")}\n`)
-	}
-	if (skills.length > 0) {
-		const skillNames = groupSkills(skills)
-			.map((g) =>
-				g.length > 1
-					? `${chalk.cyan(g[0]!.name)} ${chalk.yellow("(duplicate)")}`
-					: chalk.cyan(g[0]!.name),
-			)
-			.join(", ")
-		process.stdout.write(`${chalk.dim("  skills:")}  ${skillNames}\n`)
-	}
-
 	const initialHistory: ModelMessage[] = await store.history(sessionId)
+
+	if (process.stdout.isTTY) {
+		process.stdout.write("\x1b[2J\x1b[3J\x1b[H")
+	}
 
 	try {
 		const { waitUntilExit } = render(
-			<App
-				agent={agent}
-				store={store}
-				sessionId={sessionId}
-				skills={skills}
-				initialHistory={initialHistory}
-				policy={policy}
-			/>,
+			<ThemeProvider>
+				<App
+					agent={agent}
+					store={store}
+					sessionId={sessionId}
+					skills={skills}
+					initialHistory={initialHistory}
+					policy={policy}
+					version={version}
+					hasAgentsMd={hasAgentsMd}
+				/>
+			</ThemeProvider>,
 			{ exitOnCtrlC: false },
 		)
 		await waitUntilExit()
@@ -106,6 +90,21 @@ function errorMessage(err: unknown): string {
 	return String(err)
 }
 
+function buildSessionInfo(
+	version: string,
+	skills: Skill[],
+	hasAgentsMd: boolean,
+	updateInfo: { hasUpdate: boolean; current: string; latest: string } | null,
+): string {
+	const lines: string[] = [`NovaCode v${version}`]
+	if (hasAgentsMd) lines.push("✓ AGENTS.md detected")
+	if (skills.length > 0) lines.push(`✓ ${skills.length} skills loaded`)
+	if (updateInfo?.hasUpdate) {
+		lines.push(`✓ Update available (v${updateInfo.current} → v${updateInfo.latest})`)
+	}
+	return lines.join("\n")
+}
+
 function App({
 	agent,
 	store,
@@ -113,6 +112,8 @@ function App({
 	skills,
 	initialHistory,
 	policy,
+	version,
+	hasAgentsMd,
 }: {
 	agent: Agent
 	store: SessionStore
@@ -120,74 +121,25 @@ function App({
 	skills: Skill[]
 	initialHistory: ModelMessage[]
 	policy: PolicyEngine
+	version: string
+	hasAgentsMd: boolean
 }) {
+	const theme = useTheme()
+	const { rows } = useWindowSize()
+	const terminalRows = rows || 24
+
 	const [currSessionId, setCurrSessionId] = useState(initialSessionId)
 	const [msgs, setMsgs] = useState<ModelMessage[]>(initialHistory)
 
 	const [thinking, setThinking] = useState(false)
 	const [busy, setBusy] = useState(false)
 	const [input, setInput] = useState("")
-	const [status, setStatus] = useState("")
 
 	const [activeTools, setActiveTools] = useState<ActiveTool[]>([])
 	const [outputTokens, setOutputTokens] = useState(0)
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: reactively run on msgs change to sync with agent.messages changes
-	const usage = useMemo<Usage>(() => {
-		return {
-			in: estimateActiveInputTokens(agent, agent.messages),
-			out: outputTokens,
-		}
-	}, [agent, msgs, outputTokens])
-
-	const handleSwitchSession = useCallback(
-		async (newSessionId: string) => {
-			const s = await store.get(newSessionId)
-			if (!s) return
-
-			const provider = getProvider(s.provider)
-			const model = getModel(s.provider, s.model)
-			if (provider && model) {
-				const auth = await loadAuth()
-				const apiKey = auth.apiKeys[s.provider] || ""
-				agent.updateConfig({
-					provider: provider.id,
-					model,
-					apiKey,
-				})
-			}
-
-			const activeMsgs = await store.messages(newSessionId)
-			const fullHistory = await store.history(newSessionId)
-			agent.setMessages(activeMsgs)
-			setMsgs(fullHistory)
-			setCurrSessionId(newSessionId)
-
-			if (model) {
-				setOutputTokens(s.outputTokens)
-			}
-		},
-		[store, agent],
-	)
-
-	const handleNewSession = useCallback(async () => {
-		const m = agent.model
-		const session = await store.create(process.cwd(), m.id, m.provider)
-		agent.setMessages([])
-		setMsgs([])
-		setCurrSessionId(session.id)
-
-		setOutputTokens(0)
-	}, [store, agent])
-
-	useEffect(() => {
-		store.get(initialSessionId).then((s) => {
-			if (s) {
-				setOutputTokens(s.outputTokens)
-			}
-		})
-	}, [store, initialSessionId])
 	const [selCmdIdx, setSelCmdIdx] = useState(0)
+	const [promptSelectedIdx, setPromptSelectedIdx] = useState(0)
 	const [mode, setMode] = useState<PromptMode>({ type: "chat" })
 	const [permissionMode, setPermissionMode] = useState<PermissionMode>(policy.mode)
 	const resolveRef = useRef<((v: unknown) => void) | null>(null)
@@ -196,6 +148,7 @@ function App({
 	const abortCtrl = useRef<AbortController | null>(null)
 	const committed = useRef(0)
 	const [updateInfo, setUpdateInfo] = useState<{
+		hasUpdate: boolean
 		current: string
 		latest: string
 	} | null>(null)
@@ -204,26 +157,107 @@ function App({
 	const [exitConfirmKey, setExitConfirmKey] = useState<"C" | null>(null)
 
 	const { bufferedStream, append: appendStream, reset: resetStream } = useStreamBuffer()
-	const tip = useTip(busy)
+	const tip = useTip()
+
+	const [scrollOffset, setScrollOffset] = useState(0)
+	const [heights, setHeights] = useState({ viewport: 0, content: 0 })
+	const [userScrolled, setUserScrolled] = useState(false)
+	const lastMaxOffset = useRef(0)
+	const maxOffset = Math.max(0, heights.content - heights.viewport)
+
+	useEffect(() => {
+		setScrollOffset((prev) => Math.min(prev, maxOffset))
+	}, [maxOffset])
+
+	useEffect(() => {
+		const delta = maxOffset - lastMaxOffset.current
+		if (delta > 0) {
+			if (!userScrolled) {
+				setScrollOffset(0)
+			} else {
+				setScrollOffset((prev) => Math.min(maxOffset, prev + delta))
+			}
+		}
+		lastMaxOffset.current = maxOffset
+	}, [maxOffset, userScrolled])
+
+	function scrollBy(deltaRows: number) {
+		setUserScrolled(true)
+		setScrollOffset((prev) => Math.min(maxOffset, Math.max(0, prev + deltaRows)))
+	}
+
+	function scrollToBottom() {
+		setUserScrolled(false)
+		setScrollOffset(0)
+	}
+
+	function scrollToTop() {
+		setUserScrolled(true)
+		setScrollOffset(maxOffset)
+	}
 
 	useEffect(() => {
 		const check = async () => {
 			const info = await checkForUpdate()
 			if (info?.hasUpdate) {
-				setUpdateInfo({ current: info.current, latest: info.latest })
+				setUpdateInfo({ hasUpdate: true, current: info.current, latest: info.latest })
 			}
 		}
 		check()
 	}, [])
 
-	const isTypingCmd = input.startsWith("/") && !input.includes(" ")
-	const suggestions = isTypingCmd
-		? COMMANDS.filter(
-				(c) =>
-					c.name.startsWith(input.slice(1).toLowerCase()) ||
-					c.aliases?.some((a) => a.startsWith(input.slice(1).toLowerCase())),
-			)
-		: []
+	useEffect(() => {
+		store.get(initialSessionId).then((s) => {
+			if (s) {
+				setOutputTokens(s.outputTokens)
+			}
+		})
+	}, [store, initialSessionId])
+
+	const usage = useMemo<Usage>(() => {
+		return {
+			in: estimateActiveInputTokens(agent, agent.messages),
+			out: outputTokens,
+		}
+	}, [agent, outputTokens])
+
+	async function handleSwitchSession(newSessionId: string) {
+		const s = await store.get(newSessionId)
+		if (!s) return
+
+		const provider = getProvider(s.provider)
+		const model = getModel(s.provider, s.model)
+		if (provider && model) {
+			const auth = await loadAuth()
+			const apiKey = auth.apiKeys[s.provider] || ""
+			agent.updateConfig({
+				provider: provider.id,
+				model,
+				apiKey,
+			})
+		}
+
+		const activeMsgs = await store.messages(newSessionId)
+		const fullHistory = await store.history(newSessionId)
+		agent.setMessages(activeMsgs)
+		setMsgs(fullHistory)
+		setCurrSessionId(newSessionId)
+		scrollToBottom()
+
+		if (model) {
+			setOutputTokens(s.outputTokens)
+		}
+	}
+
+	async function handleNewSession() {
+		const m = agent.model
+		const session = await store.create(process.cwd(), m.id, m.provider)
+		agent.setMessages([])
+		setMsgs([])
+		setCurrSessionId(session.id)
+		setOutputTokens(0)
+		scrollToBottom()
+	}
 
 	const prompts: Prompts = {
 		select: useCallback(
@@ -358,7 +392,7 @@ function App({
 		setPermissionMode(picked)
 		commitMsg({
 			role: "assistant",
-			content: chalk.green(`✓ Permission mode set to ${picked}.`),
+			content: `✓ Permission mode set to ${picked}.`,
 		})
 	}
 
@@ -367,14 +401,114 @@ function App({
 		setSelCmdIdx(0)
 	}, [input])
 
+	const isTypingCmd = input.startsWith("/") && !input.includes(" ")
+	const suggestions = useMemo(
+		() =>
+			isTypingCmd
+				? COMMANDS.filter(
+						(c) =>
+							c.name.startsWith(input.slice(1).toLowerCase()) ||
+							c.aliases?.some((a) => a.startsWith(input.slice(1).toLowerCase())),
+					)
+				: [],
+		[input, isTypingCmd],
+	)
+
+	const searchFilteredOptions = useMemo(() => {
+		if (mode.type !== "searchSelect") return []
+		const q = input.trim().toLowerCase()
+		if (!q) return mode.options
+		return mode.options.filter((o) => o.label.toLowerCase().includes(q))
+	}, [input, mode])
+
+	const composerSuggestions = mode.type === "chat" ? suggestions : []
+
+	const activity = useMemo(() => {
+		if (exitConfirmKey === "C")
+			return { label: "Press Ctrl+C again to exit", color: theme.palette.warning }
+		if (mode.type === "searchSelect") return { label: "Filtering...", color: theme.palette.primary }
+		if (mode.type !== "chat") return { label: "Waiting for input", color: theme.palette.muted }
+		if (thinking) return { label: "Thinking...", color: theme.palette.warning }
+		if (activeTools.length > 0)
+			return {
+				label: `Running ${activeTools.length} tool${activeTools.length > 1 ? "s" : ""}...`,
+				color: theme.palette.primary,
+			}
+		if (bufferedStream) return { label: "Responding...", color: theme.palette.primary }
+		if (busy) return { label: "Working...", color: theme.palette.warning }
+		return { label: "Ready", color: theme.palette.success }
+	}, [exitConfirmKey, mode.type, thinking, activeTools, bufferedStream, busy, theme])
+
+	const completedEvents = useMemo<TimelineEvent[]>(() => {
+		const info = buildSessionInfo(version, skills, hasAgentsMd, updateInfo)
+		const events = deriveEventsFromMessages(msgs)
+		return [{ id: "session-started", type: "SessionStarted", content: info }, ...events]
+	}, [msgs, version, skills, hasAgentsMd, updateInfo])
+
+	const activeEvents = useMemo<TimelineEvent[]>(() => {
+		const events: TimelineEvent[] = []
+
+		if (thinking) {
+			events.push({ id: "active-thinking", type: "Thinking" })
+		}
+
+		if (bufferedStream) {
+			events.push({
+				id: "active-text",
+				type: "AssistantMessage",
+				content: bufferedStream,
+			})
+		}
+
+		for (const t of activeTools) {
+			if (t.status === "running") {
+				events.push({
+					id: t.id,
+					type: "ToolStarted",
+					toolCallId: t.id,
+					toolName: t.name,
+					args: t.args,
+				})
+			} else if (t.status === "success") {
+				events.push({
+					id: t.id,
+					type: "ToolCompleted",
+					toolCallId: t.id,
+					toolName: t.name,
+					args: t.args,
+					resultLineCount: t.lineCount,
+					resultMatchCount: t.matchCount,
+				})
+			} else if (t.status === "failure") {
+				events.push({
+					id: t.id,
+					type: "ToolFailed",
+					toolCallId: t.id,
+					toolName: t.name,
+					args: t.args,
+					error: t.error ?? "Unknown error",
+				})
+			}
+		}
+
+		if (busy && !thinking && !bufferedStream && activeTools.length === 0 && mode.type === "chat") {
+			events.push({ id: "active-working", type: "Thinking" })
+		}
+
+		return events
+	}, [thinking, bufferedStream, activeTools, busy, mode.type])
+
+	const allEvents = useMemo<TimelineEvent[]>(
+		() => [...completedEvents, ...activeEvents],
+		[completedEvents, activeEvents],
+	)
+
 	useInput((ch, key) => {
 		if (key.ctrl && (ch === "c" || ch === "d")) {
 			if (busy) {
-				if (ch === "c") {
-					if (abortCtrl.current) {
-						abortCtrl.current.abort()
-						abortCtrl.current = null
-					}
+				if (ch === "c" && abortCtrl.current) {
+					abortCtrl.current.abort()
+					abortCtrl.current = null
 				}
 				return
 			}
@@ -404,6 +538,45 @@ function App({
 			return
 		}
 
+		if (mode.type === "searchSelect") {
+			if (key.escape) {
+				resolvePrompt(null)
+				setInput("")
+				return
+			}
+			if (key.return) {
+				if (searchFilteredOptions.length > 0) {
+					resolvePrompt(searchFilteredOptions[promptSelectedIdx]?.value ?? null)
+					setInput("")
+				}
+				return
+			}
+			if (key.upArrow) {
+				setPromptSelectedIdx((prev) =>
+					searchFilteredOptions.length === 0
+						? 0
+						: (prev - 1 + searchFilteredOptions.length) % searchFilteredOptions.length,
+				)
+				return
+			}
+			if (key.downArrow) {
+				setPromptSelectedIdx((prev) =>
+					searchFilteredOptions.length === 0 ? 0 : (prev + 1) % searchFilteredOptions.length,
+				)
+				return
+			}
+			if (key.backspace || key.delete) {
+				setInput((prev) => prev.slice(0, -1))
+				setPromptSelectedIdx(0)
+				return
+			}
+			if (ch && !key.ctrl && !key.meta && ch.trim()) {
+				setInput((prev) => prev + ch)
+				setPromptSelectedIdx(0)
+			}
+			return
+		}
+
 		if (mode.type !== "chat") return
 
 		if (key.escape) {
@@ -415,6 +588,24 @@ function App({
 			}
 			return
 		}
+
+		if (key.pageUp) {
+			scrollBy(Math.max(1, (heights.viewport || terminalRows) - 1))
+			return
+		}
+		if (key.pageDown) {
+			scrollBy(-Math.max(1, (heights.viewport || terminalRows) - 1))
+			return
+		}
+		if (key.home) {
+			scrollToTop()
+			return
+		}
+		if (key.end) {
+			scrollToBottom()
+			return
+		}
+
 		if (key.upArrow) {
 			if (isTypingCmd && suggestions.length > 0) {
 				setSelCmdIdx((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1))
@@ -481,7 +672,6 @@ function App({
 			}
 			if (line === "/compact") {
 				setBusy(true)
-				setStatus("Compacting...")
 			}
 			dispatch(
 				line,
@@ -495,7 +685,6 @@ function App({
 				skills,
 			).then((r) => {
 				setBusy(false)
-				setStatus("")
 				if (r) {
 					commitMsg({ role: "assistant", content: r })
 				}
@@ -514,7 +703,6 @@ function App({
 		setBusy(true)
 		resetStream()
 		setThinking(false)
-		setStatus("")
 		setActiveTools([])
 		committed.current = 0
 		let streamError: unknown
@@ -536,18 +724,15 @@ function App({
 					case "text-delta":
 						if (part.text) {
 							setThinking(false)
-							setStatus("")
 							appendStream(part.text)
 						}
 						break
 					case "reasoning-delta":
 						setThinking(true)
-						setStatus("")
 						break
 					case "tool-call": {
 						setThinking(false)
-						setStatus("")
-						const formattedArgs = formatToolArgs(part.input as Record<string, unknown>, true)
+						const args = formatToolArgs(part.input as Record<string, unknown>, false)
 						setActiveTools((prev) => {
 							if (prev.some((t) => t.id === part.toolCallId)) return prev
 							return [
@@ -555,7 +740,7 @@ function App({
 								{
 									id: part.toolCallId,
 									name: part.toolName,
-									args: formattedArgs,
+									args,
 									status: "running" as const,
 								},
 							]
@@ -573,20 +758,19 @@ function App({
 											status: "failure" as const,
 											error: text,
 										}
-									} else {
-										let lineCount: number | undefined
-										let matchCount: number | undefined
-										if (t.name === "read") {
-											lineCount = text.split("\n").length
-										} else if (t.name === "grep") {
-											matchCount = text.split("\n").filter(Boolean).length
-										}
-										return {
-											...t,
-											status: "success" as const,
-											lineCount,
-											matchCount,
-										}
+									}
+									let lineCount: number | undefined
+									let matchCount: number | undefined
+									if (t.name === "read") {
+										lineCount = text.split("\n").length
+									} else if (t.name === "grep") {
+										matchCount = text.split("\n").filter(Boolean).length
+									}
+									return {
+										...t,
+										status: "success" as const,
+										lineCount,
+										matchCount,
 									}
 								}
 								return t
@@ -596,7 +780,6 @@ function App({
 					}
 					case "error":
 						streamError = part.error
-						setStatus(chalk.red("Error"))
 						break
 				}
 			}
@@ -604,7 +787,6 @@ function App({
 			const resp = await result.response
 			await commitDelta(resp.messages)
 
-			setStatus("")
 			store
 				.get(currSessionId)
 				.then((s) => {
@@ -619,11 +801,11 @@ function App({
 				.catch(() => {})
 		} catch (err) {
 			if (signal.aborted) {
-				commitMsg({ role: "assistant", content: chalk.gray("(aborted)") })
+				commitMsg({ role: "assistant", content: "(aborted)" })
 			} else {
 				commitMsg({
 					role: "assistant",
-					content: chalk.red(`Error: ${errorMessage(streamError ?? err)}`),
+					content: `Error: ${errorMessage(streamError ?? err)}`,
 				})
 			}
 		} finally {
@@ -631,193 +813,30 @@ function App({
 			setBusy(false)
 			resetStream()
 			setThinking(false)
-			setStatus("")
 			setActiveTools([])
 		}
 	}
 
-	const completedEvents = useMemo(() => deriveEventsFromMessages(msgs), [msgs])
-
-	const activeEvents = useMemo(() => {
-		const events: TimelineEvent[] = []
-
-		if (thinking) {
-			events.push({
-				id: "active-thinking",
-				type: "Thinking",
-			})
-		}
-
-		if (bufferedStream) {
-			events.push({
-				id: "active-text",
-				type: "AssistantMessage",
-				content: bufferedStream,
-			})
-		}
-
-		for (const t of activeTools) {
-			if (t.status === "running") {
-				events.push({
-					id: t.id,
-					type: "ToolStarted",
-					toolCallId: t.id,
-					toolName: t.name,
-					args: t.args,
-				})
-			} else if (t.status === "success") {
-				events.push({
-					id: t.id,
-					type: "ToolCompleted",
-					toolCallId: t.id,
-					toolName: t.name,
-					args: t.args,
-					resultLineCount: t.lineCount,
-					resultMatchCount: t.matchCount,
-				})
-			} else if (t.status === "failure") {
-				events.push({
-					id: t.id,
-					type: "ToolFailed",
-					toolCallId: t.id,
-					toolName: t.name,
-					args: t.args,
-					error: t.error ?? "Unknown error",
-				})
-			}
-		}
-
-		if (status) {
-			events.push({
-				id: "active-status",
-				type: "SystemMessage",
-				content: status,
-			})
-		}
-
-		if (busy && !thinking && mode.type === "chat") {
-			events.push({
-				id: "active-working",
-				type: "Thinking",
-			})
-		}
-
-		return events
-	}, [thinking, busy, bufferedStream, activeTools, status, mode.type])
-
 	return (
-		<Box flexDirection="column" paddingX={1} width="100%">
-			<Static key={currSessionId} items={completedEvents}>
-				{(e, i) => <EventRenderer key={e.id} event={e} isFirst={i === 0} />}
-			</Static>
-
-			{activeEvents.map((e) => (
-				<EventRenderer key={e.id} event={e} />
-			))}
-
-			{(mode.type === "select" ||
-				mode.type === "searchSelect" ||
-				mode.type === "password" ||
-				mode.type === "confirm" ||
-				mode.type === "approval") && (
-				<Box
-					flexDirection="column"
-					marginTop={completedEvents.length > 0 || activeEvents.length > 0 ? 1 : 0}
-				>
-					{mode.type === "select" && (
-						<SelectPrompt
-							message={mode.message}
-							options={mode.options}
-							header={mode.header}
-							footer={mode.footer}
-							onSelect={resolvePrompt}
-						/>
-					)}
-					{mode.type === "searchSelect" && (
-						<SearchSelectPrompt
-							message={mode.message}
-							options={mode.options}
-							header={mode.header}
-							footer={mode.footer}
-							onSelect={resolvePrompt}
-						/>
-					)}
-					{mode.type === "password" && (
-						<PasswordPrompt
-							message={mode.message}
-							validate={mode.validate}
-							onSubmit={resolvePrompt}
-						/>
-					)}
-					{mode.type === "confirm" && (
-						<ConfirmPrompt message={mode.message} onConfirm={resolvePrompt} />
-					)}
-					{mode.type === "approval" && <ApprovalPrompt req={mode.req} onResolve={resolvePrompt} />}
-				</Box>
+		<Box flexDirection="column" width="100%" height={terminalRows}>
+			<Conversation events={allEvents} scrollOffset={scrollOffset} onLayout={setHeights} />
+			{mode.type !== "chat" && (
+				<PromptOverlay
+					mode={mode}
+					searchQuery={input}
+					searchSelectedIdx={promptSelectedIdx}
+					onResolve={resolvePrompt}
+				/>
 			)}
-
-			{mode.type === "chat" && (
-				<Box
-					flexDirection="column"
-					marginTop={completedEvents.length > 0 || activeEvents.length > 0 ? 1 : 0}
-				>
-					{updateInfo && (
-						<Box
-							borderStyle="round"
-							borderColor="yellow"
-							paddingX={1}
-							marginBottom={1}
-							flexDirection="column"
-						>
-							<Text color="yellow" bold>
-								⬆ Update Available (v{updateInfo.current} → v{updateInfo.latest})
-							</Text>
-							<Text dimColor>
-								Run <Text color="cyan">/update</Text> or <Text color="cyan">nova update</Text> to
-								upgrade.
-							</Text>
-						</Box>
-					)}
-
-					<Box
-						flexDirection="column"
-						borderStyle="single"
-						borderTop
-						borderBottom
-						borderColor="green"
-						borderLeft={false}
-						borderRight={false}
-						paddingTop={0}
-						paddingBottom={0}
-						marginBottom={0}
-					>
-						<Box flexDirection="row">
-							<Box flexShrink={0} marginRight={1}>
-								<Text bold color="greenBright">
-									{"❯"}
-								</Text>
-							</Box>
-							<Box flexGrow={1} flexShrink={1}>
-								<Text>
-									{input}
-									<Cursor />
-								</Text>
-							</Box>
-						</Box>
-					</Box>
-
-					<StatusBar
-						model={agent.model}
-						usage={usage}
-						busy={busy}
-						suggestions={suggestions}
-						selCmdIdx={selCmdIdx}
-						exitConfirmKey={exitConfirmKey}
-						tip={tip}
-						permissionMode={permissionMode}
-					/>
-				</Box>
-			)}
+			<Composer input={input} suggestions={composerSuggestions} selCmdIdx={selCmdIdx} />
+			<StatusBar
+				activity={activity.label}
+				activityColor={activity.color}
+				model={agent.model}
+				usage={usage}
+				tip={tip}
+				permissionMode={permissionMode}
+			/>
 		</Box>
 	)
 }

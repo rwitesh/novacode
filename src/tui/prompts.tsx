@@ -1,11 +1,86 @@
-import { Box, render, Text, useInput } from "ink"
+import { Box, render, Text, useInput, useWindowSize } from "ink"
+import type { ReactNode } from "react"
 import { useMemo, useState } from "react"
 import type { ApprovalRequest } from "../types.ts"
+import { ScrollableList } from "./components/scrollableList.tsx"
+import { defaultTheme, ThemeProvider, useTheme } from "./theme/index.tsx"
+import type { PromptMode } from "./types.ts"
 
 interface SelectOption {
 	value: string
 	label: string
 	hint?: string
+}
+
+function PromptFrame({ children }: { children: ReactNode }) {
+	const theme = useTheme()
+	return (
+		<Box flexDirection="column" paddingX={1} paddingY={1} backgroundColor={theme.palette.bg}>
+			{children}
+		</Box>
+	)
+}
+
+function OptionList({ options, selectedIdx }: { options: SelectOption[]; selectedIdx: number }) {
+	const theme = useTheme()
+	const { rows } = useWindowSize()
+	const terminalRows = rows || 24
+	const visibleCount = Math.max(3, Math.min(options.length, terminalRows - 6))
+
+	return (
+		<ScrollableList
+			items={options}
+			selectedIndex={selectedIdx}
+			visibleCount={visibleCount}
+			keyExtractor={(opt) => opt.value}
+			renderItem={(opt, _idx, isSelected) => (
+				<Box flexDirection="row">
+					<Text
+						bold={isSelected}
+						color={isSelected ? theme.palette.bg : theme.palette.fg}
+						backgroundColor={isSelected ? theme.palette.primary : undefined}
+					>
+						{isSelected ? "❯ " : "  "}
+						{opt.label}
+					</Text>
+					{opt.hint && isSelected && <Text color={theme.palette.muted}> {opt.hint}</Text>}
+				</Box>
+			)}
+		/>
+	)
+}
+
+function Toggle({
+	yesLabel,
+	noLabel,
+	selected,
+}: {
+	yesLabel: string
+	noLabel: string
+	selected: "yes" | "no"
+}) {
+	const theme = useTheme()
+	return (
+		<Box flexDirection="row">
+			<Text
+				bold={selected === "yes"}
+				color={selected === "yes" ? theme.palette.bg : theme.palette.fg}
+				backgroundColor={selected === "yes" ? theme.palette.primary : undefined}
+			>
+				{selected === "yes" ? "❯ " : "  "}
+				{yesLabel}
+			</Text>
+			<Text color={theme.palette.muted}> </Text>
+			<Text
+				bold={selected === "no"}
+				color={selected === "no" ? theme.palette.bg : theme.palette.fg}
+				backgroundColor={selected === "no" ? theme.palette.primary : undefined}
+			>
+				{selected === "no" ? "❯ " : "  "}
+				{noLabel}
+			</Text>
+		</Box>
+	)
 }
 
 export function SelectPrompt({
@@ -21,6 +96,7 @@ export function SelectPrompt({
 	footer?: string
 	onSelect: (value: string | null) => void
 }) {
+	const theme = useTheme()
 	const [idx, setIdx] = useState(0)
 
 	useInput((_, key) => {
@@ -42,131 +118,85 @@ export function SelectPrompt({
 	})
 
 	return (
-		<Box flexDirection="column" paddingX={1}>
+		<PromptFrame>
 			{header && (
 				<Box marginBottom={1}>
-					<Text>{header}</Text>
+					<Text color={theme.palette.muted}>{header}</Text>
 				</Box>
 			)}
 			<Box marginBottom={1}>
-				<Text bold color="cyan">
+				<Text bold color={theme.palette.muted}>
 					{message}
 				</Text>
 			</Box>
-			{options.map((opt, i) => (
-				<Box key={opt.value}>
-					<Text bold={i === idx} color={i === idx ? "cyan" : undefined}>
-						{i === idx ? "❯ " : "  "}
-						{opt.label}
-					</Text>
-					{opt.hint && i === idx && <Text dimColor> {opt.hint}</Text>}
-				</Box>
-			))}
+			<OptionList options={options} selectedIdx={idx} />
 			<Box marginTop={1}>
-				<Text>↑↓ navigate · Enter select · Esc cancel</Text>
+				<Text color={theme.palette.muted}>↑↓ navigate · Enter select · Esc cancel</Text>
 			</Box>
 			{footer && (
 				<Box marginTop={1}>
-					<Text>{footer}</Text>
+					<Text color={theme.palette.muted}>{footer}</Text>
 				</Box>
 			)}
-		</Box>
+		</PromptFrame>
 	)
 }
 
 export function SearchSelectPrompt({
 	message,
 	options,
+	query,
+	selectedIdx,
 	header,
 	footer,
-	onSelect,
 }: {
 	message: string
 	options: SelectOption[]
+	query: string
+	selectedIdx: number
 	header?: string
 	footer?: string
-	onSelect: (value: string | null) => void
 }) {
-	const [query, setQuery] = useState("")
-	const [idx, setIdx] = useState(0)
+	const theme = useTheme()
 
 	const filtered = useMemo(() => {
-		const q = query.trim().toLowerCase()
-		if (!q) return options
-		return options.filter((o) => o.label.toLowerCase().includes(q))
+		const trimmed = query.trim().toLowerCase()
+		if (!trimmed) return options
+		return options.filter((o) => o.label.toLowerCase().includes(trimmed))
 	}, [options, query])
 
-	const sel = filtered.length === 0 ? 0 : Math.min(idx, filtered.length - 1)
-
-	useInput((ch, key) => {
-		if (key.escape) {
-			onSelect(null)
-			return
-		}
-		if (key.return) {
-			if (filtered.length > 0) onSelect(filtered[sel]?.value ?? null)
-			return
-		}
-		if (key.upArrow) {
-			setIdx((i) => (filtered.length === 0 ? 0 : (i - 1 + filtered.length) % filtered.length))
-			return
-		}
-		if (key.downArrow) {
-			setIdx((i) => (filtered.length === 0 ? 0 : (i + 1) % filtered.length))
-			return
-		}
-		if (key.backspace || key.delete) {
-			setQuery((q) => q.slice(0, -1))
-			setIdx(0)
-			return
-		}
-		if (ch && !key.ctrl && !key.meta && ch.trim()) {
-			setQuery((q) => q + ch)
-			setIdx(0)
-		}
-	})
+	const sel = Math.min(selectedIdx, Math.max(0, filtered.length - 1))
 
 	return (
-		<Box flexDirection="column" paddingX={1}>
+		<PromptFrame>
 			{header && (
 				<Box marginBottom={1}>
-					<Text>{header}</Text>
+					<Text color={theme.palette.muted}>{header}</Text>
 				</Box>
 			)}
 			<Box marginBottom={1}>
-				<Text bold color="cyan">
+				<Text bold color={theme.palette.muted}>
 					{message}
 				</Text>
 			</Box>
-			<Box marginBottom={1}>
-				<Text color="cyan">❯ </Text>
-				<Text bold>{query}</Text>
-				<Text color="cyan">▏</Text>
-			</Box>
 			{filtered.length === 0 ? (
 				<Box>
-					<Text dimColor>No matches</Text>
+					<Text color={theme.palette.muted}>No matches</Text>
 				</Box>
 			) : (
-				filtered.map((opt, i) => (
-					<Box key={opt.value}>
-						<Text bold={i === sel} color={i === sel ? "cyan" : undefined}>
-							{i === sel ? "❯ " : "  "}
-							{opt.label}
-						</Text>
-						{opt.hint && i === sel && <Text dimColor> {opt.hint}</Text>}
-					</Box>
-				))
+				<OptionList options={filtered} selectedIdx={sel} />
 			)}
 			<Box marginTop={1}>
-				<Text>type to filter · ↑↓ navigate · Enter select · Esc cancel</Text>
+				<Text color={theme.palette.muted}>
+					type to filter · ↑↓ navigate · Enter select · Esc cancel
+				</Text>
 			</Box>
 			{footer && (
 				<Box marginTop={1}>
-					<Text>{footer}</Text>
+					<Text color={theme.palette.muted}>{footer}</Text>
 				</Box>
 			)}
-		</Box>
+		</PromptFrame>
 	)
 }
 
@@ -179,6 +209,7 @@ export function PasswordPrompt({
 	validate?: (v: string) => string | undefined
 	onSubmit: (value: string | null) => void
 }) {
+	const theme = useTheme()
 	const [value, setValue] = useState("")
 	const [error, setError] = useState("")
 
@@ -208,28 +239,30 @@ export function PasswordPrompt({
 	})
 
 	return (
-		<Box flexDirection="column" paddingX={1}>
+		<PromptFrame>
 			<Box marginBottom={1}>
-				<Text bold color="cyan">
+				<Text bold color={theme.palette.muted}>
 					{message}
 				</Text>
 			</Box>
-			<Box>
-				<Text color="green">│ </Text>
-				<Text bold>{"*".repeat(value.length)}</Text>
-				<Text color="green">│</Text>
+			<Box flexDirection="row">
+				<Text color={theme.palette.muted}>│ </Text>
+				<Text bold color={theme.palette.fg}>
+					{"*".repeat(value.length)}
+				</Text>
+				<Text color={theme.palette.muted}>│</Text>
 			</Box>
 			{error && (
 				<Box marginTop={1}>
-					<Text bold color="red">
+					<Text bold color={theme.palette.error}>
 						✗ {error}
 					</Text>
 				</Box>
 			)}
 			<Box marginTop={1}>
-				<Text>Enter submit · Esc cancel</Text>
+				<Text color={theme.palette.muted}>Enter submit · Esc cancel</Text>
 			</Box>
-		</Box>
+		</PromptFrame>
 	)
 }
 
@@ -257,25 +290,23 @@ export function ConfirmPrompt({
 	})
 
 	return (
-		<Box flexDirection="column" paddingX={1}>
-			<Box marginBottom={1}>
-				<Text bold color="cyan">
-					{message}
-				</Text>
-			</Box>
-			<Box>
-				<Text bold={yes} color={yes ? "cyan" : undefined}>
-					{yes ? "❯ Yes" : "  Yes"}
-				</Text>
-			</Box>
-			<Box>
-				<Text bold={!yes} color={!yes ? "cyan" : undefined}>
-					{!yes ? "❯ No" : "  No"}
-				</Text>
-			</Box>
+		<PromptFrame>
+			<PromptMessage message={message} />
+			<Toggle yesLabel="Yes" noLabel="No" selected={yes ? "yes" : "no"} />
 			<Box marginTop={1}>
-				<Text>←→ toggle · Enter confirm · Esc cancel</Text>
+				<Text color={useTheme().palette.muted}>←→ toggle · Enter confirm · Esc cancel</Text>
 			</Box>
+		</PromptFrame>
+	)
+}
+
+function PromptMessage({ message }: { message: string }) {
+	const theme = useTheme()
+	return (
+		<Box marginBottom={1}>
+			<Text bold color={theme.palette.muted}>
+				{message}
+			</Text>
 		</Box>
 	)
 }
@@ -287,6 +318,7 @@ export function ApprovalPrompt({
 	req: ApprovalRequest
 	onResolve: (allow: boolean | null) => void
 }) {
+	const theme = useTheme()
 	const [allow, setAllow] = useState(true)
 
 	useInput((_, key) => {
@@ -304,28 +336,70 @@ export function ApprovalPrompt({
 	})
 
 	return (
-		<Box flexDirection="column" paddingX={1}>
+		<PromptFrame>
 			{req.warning && (
 				<Box marginBottom={1}>
-					<Text bold color="red">
+					<Text bold color={theme.palette.warning}>
 						{req.warning}
 					</Text>
 				</Box>
 			)}
-			<Box flexDirection="row">
-				<Text bold color="yellow">
+			<Box flexDirection="row" marginBottom={1}>
+				<Text bold color={theme.palette.warning}>
 					Approve?{" "}
 				</Text>
-				<Text bold={allow} color={allow ? "cyan" : undefined}>
-					{allow ? "❯ Allow once  " : "  Allow once  "}
-				</Text>
-				<Text bold={!allow} color={!allow ? "cyan" : undefined}>
-					{!allow ? "❯ Deny" : "  Deny"}
-				</Text>
-				<Text> (←→ toggle · Enter confirm · Esc deny)</Text>
+				<Text color={theme.palette.muted}>{req.summary}</Text>
 			</Box>
-		</Box>
+			<Toggle yesLabel="Allow once" noLabel="Deny" selected={allow ? "yes" : "no"} />
+			<Box marginTop={1}>
+				<Text color={theme.palette.muted}>←→ toggle · Enter confirm · Esc deny</Text>
+			</Box>
+		</PromptFrame>
 	)
+}
+
+export function PromptOverlay({
+	mode,
+	searchQuery,
+	searchSelectedIdx,
+	onResolve,
+}: {
+	mode: PromptMode
+	searchQuery?: string
+	searchSelectedIdx?: number
+	onResolve: (value: unknown) => void
+}) {
+	switch (mode.type) {
+		case "select":
+			return (
+				<SelectPrompt
+					message={mode.message}
+					options={mode.options}
+					header={mode.header}
+					footer={mode.footer}
+					onSelect={onResolve}
+				/>
+			)
+		case "searchSelect":
+			return (
+				<SearchSelectPrompt
+					message={mode.message}
+					options={mode.options}
+					query={searchQuery ?? ""}
+					selectedIdx={searchSelectedIdx ?? 0}
+					header={mode.header}
+					footer={mode.footer}
+				/>
+			)
+		case "password":
+			return <PasswordPrompt message={mode.message} validate={mode.validate} onSubmit={onResolve} />
+		case "confirm":
+			return <ConfirmPrompt message={mode.message} onConfirm={onResolve} />
+		case "approval":
+			return <ApprovalPrompt req={mode.req} onResolve={onResolve} />
+		default:
+			return null
+	}
 }
 
 // Standalone wrappers for use outside the main TUI (e.g. onboarding)
@@ -338,16 +412,18 @@ export function standaloneSelect(
 ): Promise<string | null> {
 	return new Promise((resolve) => {
 		const { unmount } = render(
-			<SelectPrompt
-				message={message}
-				options={options}
-				header={header}
-				footer={footer}
-				onSelect={(v) => {
-					unmount()
-					resolve(v)
-				}}
-			/>,
+			<ThemeProvider theme={defaultTheme}>
+				<SelectPrompt
+					message={message}
+					options={options}
+					header={header}
+					footer={footer}
+					onSelect={(v) => {
+						unmount()
+						resolve(v)
+					}}
+				/>
+			</ThemeProvider>,
 		)
 	})
 }
@@ -358,14 +434,16 @@ export function standalonePassword(
 ): Promise<string | null> {
 	return new Promise((resolve) => {
 		const { unmount } = render(
-			<PasswordPrompt
-				message={message}
-				validate={validate}
-				onSubmit={(v) => {
-					unmount()
-					resolve(v)
-				}}
-			/>,
+			<ThemeProvider theme={defaultTheme}>
+				<PasswordPrompt
+					message={message}
+					validate={validate}
+					onSubmit={(v) => {
+						unmount()
+						resolve(v)
+					}}
+				/>
+			</ThemeProvider>,
 		)
 	})
 }
