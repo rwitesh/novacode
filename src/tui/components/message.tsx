@@ -1,26 +1,42 @@
 import { Box, Text } from "ink"
+import BigText from "ink-big-text"
 import { memo } from "react"
 import { formatMarkdown } from "../markdown/index.ts"
 import { useTheme } from "../theme/index.tsx"
 import type { TimelineEvent } from "../types.ts"
 import { Cursor, Spinner } from "./liveArea.tsx"
 
-const SessionStartedView = memo(function SessionStartedView({ content }: { content: string }) {
+const SplashView = memo(function SplashView({
+	content,
+	update,
+}: {
+	content: string
+	update?: { current: string; latest: string }
+}) {
 	const theme = useTheme()
 	const lines = content.split("\n")
 	return (
-		<Box flexDirection="column" marginBottom={1}>
-			<Box>
-				<Text bold color={theme.palette.primary}>
-					▐ novacode
-				</Text>
-				<Text color={theme.palette.muted}> v{lines[0]}</Text>
-			</Box>
-			{lines.slice(1).map((line) => (
+		<Box flexDirection="column" marginBottom={0}>
+			<BigText
+				text="novacode"
+				font="block"
+				colors={["cyan", "blue"]}
+				space={false}
+				lineHeight={0}
+			/>
+			{lines.map((line) => (
 				<Text key={line} color={theme.palette.muted}>
 					{line}
 				</Text>
 			))}
+			{update && (
+				<Box marginTop={1}>
+					<Text color={theme.palette.success} bold>
+						⬆ v{update.current} → v{update.latest}
+					</Text>
+					<Text color={theme.palette.muted}> Run /update to upgrade</Text>
+				</Box>
+			)}
 		</Box>
 	)
 })
@@ -113,8 +129,8 @@ const ThinkingView = memo(function ThinkingView({ label }: { label: string }) {
 export const EventRenderer = memo(function EventRenderer({ event }: { event: TimelineEvent }) {
 	const theme = useTheme()
 	switch (event.type) {
-		case "SessionStarted":
-			return <SessionStartedView content={event.content} />
+		case "Splash":
+			return <SplashView content={event.content} update={event.update} />
 
 		case "UserMessage":
 			return <UserMessageView content={event.content} />

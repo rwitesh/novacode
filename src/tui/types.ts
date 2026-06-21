@@ -3,8 +3,9 @@ import type { ApprovalRequest } from "../types.ts"
 export type TimelineEvent =
 	| {
 			id: string
-			type: "SessionStarted"
+			type: "Splash"
 			content: string
+			update?: { current: string; latest: string }
 	  }
 	| {
 			id: string

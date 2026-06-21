@@ -77,7 +77,7 @@ function buildSessionInfo(
 	hasAgentsMd: boolean,
 	permissionMode: PermissionMode,
 ): string {
-	const lines: string[] = [`${version}`]
+	const lines: string[] = [`  v${version}`]
 	if (hasAgentsMd) lines.push(`  AGENTS.md detected`)
 	lines.push(`  permission: ${permissionMode}`)
 	if (skills.length > 0) {
@@ -287,9 +287,19 @@ function App({
 
 	const completedEvents = useMemo<TimelineEvent[]>(() => {
 		const events: TimelineEvent[] = []
-		const info = buildSessionInfo(version, skills, hasAgentsMd, permissionMode)
-		events.push({ id: "session-started", type: "SessionStarted", content: info })
-		if (updateInfo?.hasUpdate) {
+		const hasMessages = session.messages.length > 0
+
+		if (!hasMessages) {
+			const info = buildSessionInfo(version, skills, hasAgentsMd, permissionMode)
+			events.push({
+				id: "splash",
+				type: "Splash",
+				content: info,
+				update: updateInfo?.hasUpdate
+					? { current: updateInfo.current, latest: updateInfo.latest }
+					: undefined,
+			})
+		} else if (updateInfo?.hasUpdate) {
 			events.push({
 				id: "update-available",
 				type: "UpdateAvailable",
@@ -297,6 +307,7 @@ function App({
 				latest: updateInfo.latest,
 			})
 		}
+
 		events.push(...deriveEventsFromMessages(session.messages))
 		return events
 	}, [session.messages, version, skills, hasAgentsMd, updateInfo, permissionMode])

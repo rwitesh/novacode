@@ -30,14 +30,14 @@ export function StatusBar({
 
 	return (
 		<Box flexDirection="row" flexShrink={0} paddingX={1} backgroundColor={theme.palette.bg}>
-			<Text wrap="truncate-end" color={theme.palette.fg}>
-				<Text color={activityColor}>{activity}</Text>
-				<Text color={theme.palette.muted}> • </Text>
-				<Text bold>{model.id}</Text>
-				<Text color={theme.palette.muted}> • </Text>
-				<Text color={theme.palette.muted}>{formatTokenUsage(usage.in, model.contextWindow)}</Text>
-				<Text color={theme.palette.muted}> • </Text>
-				<Text color={theme.palette.primary}>Tip: {tip}</Text>
+			<Text color={activityColor}>{activity}</Text>
+			<Text color={theme.palette.muted}> • Tip: </Text>
+			<Text color={theme.palette.primary}>{tip}</Text>
+			<Box flexGrow={1} />
+			<Text color={theme.palette.muted}>{formatTokenUsage(usage.in, model.contextWindow)}</Text>
+			<Text color={theme.palette.muted}> • </Text>
+			<Text bold color={theme.palette.fg}>
+				{model.id}
 			</Text>
 		</Box>
 	)
