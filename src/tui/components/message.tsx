@@ -7,9 +7,20 @@ import { Cursor, Spinner } from "./liveArea.tsx"
 
 const SessionStartedView = memo(function SessionStartedView({ content }: { content: string }) {
 	const theme = useTheme()
+	const lines = content.split("\n")
 	return (
-		<Box flexDirection="column" marginY={1}>
-			<Text color={theme.palette.muted}>{content}</Text>
+		<Box flexDirection="column" marginBottom={1}>
+			<Box>
+				<Text bold color={theme.palette.primary}>
+					▐ novacode
+				</Text>
+				<Text color={theme.palette.muted}> v{lines[0]}</Text>
+			</Box>
+			{lines.slice(1).map((line) => (
+				<Text key={line} color={theme.palette.muted}>
+					{line}
+				</Text>
+			))}
 		</Box>
 	)
 })
@@ -134,6 +145,20 @@ export const EventRenderer = memo(function EventRenderer({ event }: { event: Tim
 			return (
 				<Box flexDirection="row" marginBottom={0}>
 					<Text color={theme.palette.primary}>ℹ {event.content}</Text>
+				</Box>
+			)
+
+		case "UpdateAvailable":
+			return (
+				<Box flexDirection="column" marginBottom={1}>
+					<Box flexDirection="row">
+						<Text color={theme.palette.success} bold>
+							⬆ v{event.current} → v{event.latest}
+						</Text>
+					</Box>
+					<Box marginLeft={2}>
+						<Text color={theme.palette.muted}>Run /update to upgrade</Text>
+					</Box>
 				</Box>
 			)
 

@@ -5,6 +5,7 @@ import type { Agent } from "../agent/agent.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
 import type { SessionStore } from "../db/sessionStore.ts"
 import type { PolicyEngine } from "../policy/engine.ts"
+import { groupSkills } from "../skills/index.ts"
 import { estimateTokens } from "../tokens.ts"
 import type {
 	ApprovalRequest,
@@ -74,15 +75,18 @@ function buildSessionInfo(
 	version: string,
 	skills: Skill[],
 	hasAgentsMd: boolean,
-	updateInfo: { hasUpdate: boolean; current: string; latest: string } | null,
 	permissionMode: PermissionMode,
 ): string {
-	const lines: string[] = [`NovaCode v${version}`]
-	if (hasAgentsMd) lines.push("✓ AGENTS.md detected")
-	if (skills.length > 0) lines.push(`✓ ${skills.length} skills loaded`)
-	lines.push(`🔒 ${permissionMode}`)
-	if (updateInfo?.hasUpdate) {
-		lines.push(`✓ Update available (v${updateInfo.current} → v${updateInfo.latest})`)
+	const lines: string[] = [`${version}`]
+	if (hasAgentsMd) lines.push(`  AGENTS.md detected`)
+	lines.push(`  permission: ${permissionMode}`)
+	if (skills.length > 0) {
+		const groups = groupSkills(skills)
+		const names = groups.map((g) => {
+			const name = g[0]!.name
+			return g.length > 1 ? `${name} (duplicate)` : name
+		})
+		lines.push(`  skills: ${names.join(", ")}`)
 	}
 	return lines.join("\n")
 }
@@ -282,9 +286,19 @@ function App({
 	])
 
 	const completedEvents = useMemo<TimelineEvent[]>(() => {
-		const info = buildSessionInfo(version, skills, hasAgentsMd, updateInfo, permissionMode)
-		const events = deriveEventsFromMessages(session.messages)
-		return [{ id: "session-started", type: "SessionStarted", content: info }, ...events]
+		const events: TimelineEvent[] = []
+		const info = buildSessionInfo(version, skills, hasAgentsMd, permissionMode)
+		events.push({ id: "session-started", type: "SessionStarted", content: info })
+		if (updateInfo?.hasUpdate) {
+			events.push({
+				id: "update-available",
+				type: "UpdateAvailable",
+				current: updateInfo.current,
+				latest: updateInfo.latest,
+			})
+		}
+		events.push(...deriveEventsFromMessages(session.messages))
+		return events
 	}, [session.messages, version, skills, hasAgentsMd, updateInfo, permissionMode])
 
 	const activeEvents = useMemo<TimelineEvent[]>(() => {

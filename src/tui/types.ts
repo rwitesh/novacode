@@ -54,6 +54,12 @@ export type TimelineEvent =
 			type: "SystemMessage"
 			content: string
 	  }
+	| {
+			id: string
+			type: "UpdateAvailable"
+			current: string
+			latest: string
+	  }
 
 export type PromptMode =
 	| { type: "chat" }
