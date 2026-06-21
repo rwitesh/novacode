@@ -22,6 +22,7 @@ npm run lint:fix     # biome lint + auto-fix
 npm run format       # biome format
 npm run typecheck    # tsc --noEmit
 npm run check        # build + typecheck + lint + test (run this before committing)
+npm run clean        # remove node_modules, dist, and IDE dirs
 ```
 
 ## Architecture
@@ -74,9 +75,14 @@ src/
 │   └── discovery.ts     # SKILL.md scanner: .novacode/skills, .agents/skills, ~/.novacode/skills, ~/.agents/skills
 └── tui/
     ├── app.tsx          # interactive TUI application using Ink (consumes streamText fullStream)
-    ├── prompts.tsx      # Ink-based select/searchSelect/password/confirm/approval prompt components
+    ├── prompts.tsx      # re-exports + Prompts interface (thin wrapper over prompts/ dir)
+    ├── deriveEvents.ts  # deriveEventsFromMessages: ModelMessage[] → TimelineEvent[]
     ├── constants.ts     # TUI constants (spinner frames, tool colors, termination phrases)
     ├── types.ts         # UI-specific types: TimelineEvent, PromptMode, ActiveTool
+    ├── theme/           # theme system (React context)
+    │   ├── index.tsx    # ThemeProvider + useTheme hook, exports Theme type + defaults
+    │   ├── types.ts     # Theme interface (palette: bg, fg, muted, primary, secondary, ...)
+    │   └── default.ts   # defaultTheme singleton
     ├── markdown/        # markdown terminal renderer
     │   ├── index.ts     # exports: formatMarkdown, MarkdownRenderer, StreamingMarkdownRenderer
     │   ├── renderer.ts  # MarkdownRenderer class: fences, headers, bullets, code highlighting
@@ -85,11 +91,28 @@ src/
     │   └── richText.ts  # inline formatting: bold, italic, code, links
     ├── hooks/
     │   ├── useStreamBuffer.ts  # frame-rate-limited streaming text buffer hook (~60fps)
-    │   └── useTip.ts           # random tip rotation during busy state
-    └── components/
-        ├── message.tsx       # ModelMessage → TimelineEvent derivation + EventRenderer
-        ├── liveArea.tsx      # Spinner, Cursor
-        └── statusBar.tsx     # footer: hints, token usage, model id, permission mode, suggestions
+    │   ├── useTip.ts           # random tip rotation during busy state
+    │   ├── useTurnRunner.ts    # manages agent prompt lifecycle + streaming + tool state
+    │   ├── useSession.ts       # session state: messages, commitDelta, switchSession, newSession
+    │   └── useScrollManager.ts # scroll offset tracking with auto-follow
+    ├── components/
+    │   ├── message.tsx       # EventRenderer: renders TimelineEvents (user/assistant/tool/thinking/warning)
+    │   ├── conversation.tsx  # scrollable timeline container (wraps ScrollableList + EventRenderer)
+    │   ├── composer.tsx      # input box with multiline editing, history, autocomplete
+    │   ├── liveArea.tsx      # Spinner, Cursor, active tool indicators
+    │   ├── statusBar.tsx     # footer: hints, token usage, model id, permission mode, suggestions
+    │   └── scrollableList.tsx # virtual-scroll list with keyboard navigation
+    └── prompts/          # individual prompt components + overlay + standalone wrappers
+        ├── PromptFrame.tsx    # shared frame for prompts
+        ├── SelectPrompt.tsx   # single-choice select
+        ├── SearchSelectPrompt.tsx # fuzzy-filtered select
+        ├── PasswordPrompt.tsx # masked input with validation
+        ├── ConfirmPrompt.tsx  # yes/no confirmation
+        ├── ApprovalPrompt.tsx # tool execution approval gates
+        ├── OptionList.tsx     # rendered option list with highlighting
+        ├── Toggle.tsx         # toggle switch component
+        ├── overlay.tsx        # overlay wrapper that renders prompt inline under timeline
+        └── standalone.tsx     # standalone prompt wrappers for onboarding (outside main TUI)
 ```
 
 ## Agent Loop & API Flow
@@ -223,7 +246,7 @@ These rules prevent the most common mistakes AI agents make when editing this co
 - **`agent/`** — `agent.ts` wraps `streamText` and holds conversation state; `approval.ts` gates tool execution via `PolicyEngine`; `prompt.ts` builds the system prompt. No direct HTTP calls or file I/O (those live in tools).
 - **`policy/`** — the deterministic approval authority. No AI SDK dependency (operates on a local `PolicyCall` shape), no tool definitions.
 - **`commands/`** — slash command handlers. Receive a `Prompts` interface from the TUI for interactive menus. Never import Ink or render directly — use the injected `Prompts` object.
-- **`tui/`** — all rendering lives here. `app.tsx` owns the Ink app, consumes `streamText` `fullStream`, and exposes a `Prompts` implementation. `prompts.tsx` has reusable Ink prompt components plus standalone wrappers for onboarding (outside the main TUI).
+- **`tui/`** — all rendering lives here. `app.tsx` owns the Ink app, consumes `streamText` `fullStream`, and exposes a `Prompts` implementation. `prompts.tsx` is a thin re-export layer over individual prompt components in `prompts/`. `deriveEvents.ts` converts stored `ModelMessage[]` to renderable `TimelineEvent[]`. `theme/` provides a React context-based theme system with a configurable palette. `hooks/` contain stateful logic extracted from components (`useTurnRunner`, `useSession`, `useScrollManager`).
 - **Cross-module imports go one direction:** `main → agent → providers`, `main → tools`, `main → config`, `main → db`, `main → models`, `main → tui`, `compact → providers | db | models`. Never `tools → agent` or `providers → agent` or `commands → tui`.
 
 ## Before Every Commit
