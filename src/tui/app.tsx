@@ -4,7 +4,6 @@ import chalk from "chalk"
 import { Box, render, Static, Text, useApp, useInput } from "ink"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Agent } from "../agent/agent.ts"
-import { trimMessages } from "../agent/trim.ts"
 import { COMMANDS, dispatch } from "../commands/index.ts"
 import { generateSessionTitle } from "../compact.ts"
 import { loadAuth } from "../config/store.ts"
@@ -88,10 +87,7 @@ export async function interactive(
 }
 
 function estimateActiveInputTokens(agent: Agent, messages: ModelMessage[]): number {
-	const systemTokens = estimateTokens(agent.system)
-	const maxInputTokens = agent.model.contextWindow - systemTokens - 4096
-	const trimmed = trimMessages(messages, maxInputTokens)
-	return estimateTokens(trimmed)
+	return estimateTokens(agent.system) + estimateTokens(messages)
 }
 
 function errorMessage(err: unknown): string {

@@ -4,6 +4,7 @@
 
 import os from "node:os"
 import type { ModelMessage, ToolSet } from "ai"
+import { pruneMessages } from "ai"
 import type { Skill } from "../types.ts"
 
 export function buildSystemPrompt(
@@ -76,16 +77,22 @@ export function preparePrompt(
 	messages: ModelMessage[],
 ): { instructions: string; messages: ModelMessage[] } {
 	const firstMsg = messages[0]
-	if (
+	const hasSummary =
 		firstMsg &&
 		firstMsg.role === "user" &&
 		typeof firstMsg.content === "string" &&
 		firstMsg.content.startsWith("[Prior context summary]")
-	) {
-		return {
-			instructions: `${system}\n\n${firstMsg.content}`,
-			messages: messages.slice(1),
-		}
+
+	const instructions = hasSummary ? `${system}\n\n${firstMsg.content}` : system
+	const msgs = hasSummary ? messages.slice(1) : messages
+
+	return {
+		instructions,
+		messages: pruneMessages({
+			messages: msgs,
+			reasoning: "before-last-message",
+			toolCalls: "before-last-message",
+			emptyMessages: "remove",
+		}),
 	}
-	return { instructions: system, messages }
 }

@@ -10,11 +10,9 @@ import type { ModelMessage, OnStepFinishEvent, ToolSet } from "ai"
 import { stepCountIs, streamText } from "ai"
 import type { PolicyEngine } from "../policy/engine.ts"
 import { createModel, reasoningOpts } from "../providers.ts"
-import { estimateTokens } from "../tokens.ts"
 import type { Model } from "../types.ts"
 import { withApproval } from "./approval.ts"
 import { preparePrompt } from "./prompt.ts"
-import { trimMessages } from "./trim.ts"
 
 // Safety cap so a misbehaving model can't loop forever
 const MAX_TURNS = 50
@@ -95,11 +93,7 @@ export class Agent {
 	}
 
 	async prompt(signal?: AbortSignal, onStepFinish?: StepFinishHandler) {
-		const systemTokens = estimateTokens(this.#system)
-		const maxInputTokens = this.#model.contextWindow - systemTokens - 4096
-		const trimmed = trimMessages(this.#messages, maxInputTokens)
-
-		const { instructions, messages: messagesToStream } = preparePrompt(this.#system, trimmed)
+		const { instructions, messages: messagesToStream } = preparePrompt(this.#system, this.#messages)
 
 		return streamText({
 			model: createModel(this.#provider, this.#model.id, this.#apiKey),
