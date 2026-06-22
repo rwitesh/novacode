@@ -57,6 +57,11 @@ export type TimelineEvent =
 	  }
 	| {
 			id: string
+			type: "Notice"
+			content: string
+	  }
+	| {
+			id: string
 			type: "UpdateAvailable"
 			current: string
 			latest: string

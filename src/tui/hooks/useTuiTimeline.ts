@@ -31,6 +31,7 @@ const ROTATE_MS = 8000
  */
 export function useTuiTimeline({
 	messages,
+	notices,
 	contextTokens,
 	version,
 	skills,
@@ -39,6 +40,7 @@ export function useTuiTimeline({
 	turn,
 }: {
 	messages: ModelMessage[]
+	notices: string[]
 	contextTokens: number
 	version: string
 	skills: Skill[]
@@ -119,6 +121,10 @@ export function useTuiTimeline({
 			})
 		}
 
+		for (let i = 0; i < notices.length; i++) {
+			events.push({ id: `notice-${i}`, type: "Notice", content: notices[i]! })
+		}
+
 		if (turn.thinking) {
 			events.push({ id: "active-thinking", type: "Thinking" })
 		}
@@ -169,6 +175,7 @@ export function useTuiTimeline({
 		return events
 	}, [
 		messages.length,
+		notices,
 		version,
 		skills,
 		hasAgentsMd,

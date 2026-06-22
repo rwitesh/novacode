@@ -35,6 +35,8 @@ export function useInputHandler({
 		commitMsg: (msg: ModelMessage) => void
 		switchSession: (id: string) => Promise<void>
 		newSession: () => Promise<void>
+		addNotice: (text: string) => void
+		clearNotices: () => void
 	}
 	turn: {
 		busy: boolean
@@ -203,7 +205,7 @@ export function useInputHandler({
 						skills,
 					)
 					if (r) {
-						session.commitMsg({ role: "assistant", content: r })
+						session.addNotice(r)
 					}
 				} catch (err) {
 					console.error(`Command dispatch error for "${line}":`, err)
@@ -217,6 +219,7 @@ export function useInputHandler({
 
 		// Standard prompt query submission to LLM.
 		const userMsg: ModelMessage = { role: "user", content: line }
+		session.clearNotices()
 		session.commitMsg(userMsg)
 
 		const ctrl = new AbortController()

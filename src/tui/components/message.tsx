@@ -171,6 +171,13 @@ export const EventRenderer = memo(function EventRenderer({ event }: { event: Tim
 				</Box>
 			)
 
+		case "Notice":
+			return (
+				<Box flexDirection="column" paddingX={1} paddingBottom={1}>
+					<Text wrap="wrap">{event.content}</Text>
+				</Box>
+			)
+
 		case "UpdateAvailable":
 			return (
 				<Box flexDirection="column" marginBottom={1}>

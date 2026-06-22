@@ -93,6 +93,7 @@ function App({
 	const { mode, prompts, resolvePrompt } = usePrompts(policy)
 	const { committedEvents, liveEvents, contextTokens, tip } = useTuiTimeline({
 		messages: session.messages,
+		notices: session.notices,
 		contextTokens: session.contextTokens,
 		version,
 		skills,
@@ -120,10 +121,7 @@ function App({
 		if (picked !== "restricted" && picked !== "unrestricted") return
 		policy.setMode(picked)
 		setPermissionMode(picked)
-		session.commitMsg({
-			role: "assistant",
-			content: `✓ Permission mode set to ${picked}.`,
-		})
+		session.addNotice(`✓ Permission mode set to ${picked}.`)
 	}
 
 	const { exit } = useApp()

@@ -21,6 +21,9 @@ export function useSession(
 	const [sessionId, setSessionId] = useState(initialSessionId)
 	const [messages, setMessages] = useState<ModelMessage[]>(initialHistory)
 	const [contextTokens, setContextTokens] = useState(0)
+	// Ephemeral UI-only affordances (slash-command output, settings confirmations).
+	// Never persisted to the store nor fed to the model — not part of the session record.
+	const [notices, setNotices] = useState<string[]>([])
 
 	useEffect(() => {
 		async function fetchSession() {
@@ -34,7 +37,7 @@ export function useSession(
 		void fetchSession()
 	}, [store, initialSessionId])
 
-	// Commits a single message (e.g. user input query or slash command text results).
+	// Commits a single message (e.g. user input query or assistant turn output).
 	const commitMsg = useCallback(
 		(msg: ModelMessage) => {
 			setMessages((prev) => [...prev, msg])
@@ -45,6 +48,14 @@ export function useSession(
 		},
 		[agent, store, sessionId],
 	)
+
+	// Shows a transient UI notice (e.g. slash-command output, settings confirmation).
+	// Updates only React state for rendering — never reaches agent.messages or the store.
+	const addNotice = useCallback((text: string) => {
+		setNotices((prev) => [...prev, text])
+	}, [])
+
+	const clearNotices = useCallback(() => setNotices([]), [])
 
 	// Commits a block of delta messages (e.g. generated during assistant stream/thinking/tools).
 	const commitDelta = useCallback(
@@ -110,6 +121,7 @@ export function useSession(
 			agent.setMessages(activeMsgs)
 			setMessages(fullHistory)
 			setSessionId(newSessionId)
+			setNotices([])
 
 			if (model) setContextTokens(s.contextTokens)
 		},
@@ -130,6 +142,7 @@ export function useSession(
 		setMessages([])
 		setSessionId(session.id)
 		setContextTokens(0)
+		setNotices([])
 	}, [agent, store])
 
 	return {
@@ -141,5 +154,8 @@ export function useSession(
 		commitDelta,
 		switchSession,
 		newSession,
+		notices,
+		addNotice,
+		clearNotices,
 	}
 }
