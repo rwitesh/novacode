@@ -29,7 +29,7 @@ npm run clean        # remove node_modules, dist, and IDE dirs
 
 ```
 src/
-├── main.ts              # entry: CLI parse → onboarding → interactive mode
+├── main.ts              # entry: CLI parse → onboarding (via tui/onboarding) → interactive mode
 ├── types.ts             # NovaCode-specific types only (config, session, policy, CLI plumbing).
 │                        # AI message/tool/usage types come from the `ai` package — do NOT redeclare them.
 ├── providers.ts         # AI SDK provider factory + HIGH reasoning defaults
@@ -61,8 +61,6 @@ src/
 │   └── sessionStore.ts  # SessionStore class: stores/restores canonical ModelMessage[] as JSON
 ├── policy/
 │   └── engine.ts        # PolicyEngine — deterministic secret-block + risk classify + approver gate
-├── onboarding/
-│   └── wizard.ts        # first-run setup using Ink standalone prompts
 ├── commands/            # slash command handlers (/models, /providers, /compact, etc)
 │   ├── index.ts         # COMMANDS list + dispatch router
 │   ├── models.ts        # model switching logic
@@ -74,45 +72,40 @@ src/
 │   ├── index.ts         # dedupeSkills, discoverSkills, groupSkills exports
 │   └── discovery.ts     # SKILL.md scanner: .novacode/skills, .agents/skills, ~/.novacode/skills, ~/.agents/skills
 └── tui/
-    ├── app.tsx          # interactive TUI application using Ink (consumes streamText fullStream)
-    ├── prompts.tsx      # re-exports + Prompts interface (thin wrapper over prompts/ dir)
-    ├── deriveEvents.ts  # deriveEventsFromMessages: ModelMessage[] → TimelineEvent[]
+    ├── app.tsx          # thin Ink shell: composes hooks, renders Conversation + Composer + StatusBar + PromptOverlay
+    ├── prompts.tsx      # ALL prompt components + PromptOverlay + standalone runners (collapses former prompts/ dir)
+    ├── helpers.ts       # TUI pure helpers: deriveEventsFromMessages, buildSessionInfo, estimateActiveInputTokens
     ├── constants.ts     # TUI constants (spinner frames, tool colors, termination phrases)
     ├── types.ts         # UI-specific types: TimelineEvent, PromptMode, ActiveTool
     ├── theme/           # theme system (React context)
     │   ├── index.tsx    # ThemeProvider + useTheme hook, exports Theme type + defaults
     │   ├── types.ts     # Theme interface (palette: bg, fg, muted, primary, secondary, ...)
     │   └── default.ts   # defaultTheme singleton
+    ├── core/            # presentational primitives reused across prompts/overlay
+    │   ├── liveArea.tsx       # Spinner, Cursor (uses ink useAnimation)
+    │   ├── PromptFrame.tsx   # bordered frame wrapper for prompts
+    │   ├── scrollableList.tsx# virtual-scroll option list with scrollbar
+    │   └── Toggle.tsx        # yes/no toggle pill
     ├── markdown/        # markdown terminal renderer
     │   ├── index.ts     # exports: formatMarkdown, MarkdownRenderer, StreamingMarkdownRenderer
     │   ├── renderer.ts  # MarkdownRenderer class: fences, headers, bullets, code highlighting
     │   ├── stream.ts    # StreamingMarkdownRenderer: stable/unstable boundary tracking
     │   ├── syntax.ts    # keyword-based syntax highlighting for TS, PY, SH, GO, Rust, SQL, JSON, YAML
     │   └── richText.ts  # inline formatting: bold, italic, code, links
-    ├── hooks/
-    │   ├── useStreamBuffer.ts  # frame-rate-limited streaming text buffer hook (~60fps)
-    │   ├── useTip.ts           # random tip rotation during busy state
-    │   ├── useTurnRunner.ts    # manages agent prompt lifecycle + streaming + tool state
-    │   ├── useSession.ts       # session state: messages, commitDelta, switchSession, newSession
-    │   └── useScrollManager.ts # scroll offset tracking with auto-follow
-    ├── components/
-    │   ├── message.tsx       # EventRenderer: renders TimelineEvents (user/assistant/tool/thinking/warning)
-    │   ├── conversation.tsx  # scrollable timeline container (wraps ScrollableList + EventRenderer)
-    │   ├── composer.tsx      # input box with multiline editing, history, autocomplete
-    │   ├── liveArea.tsx      # Spinner, Cursor, active tool indicators
-    │   ├── statusBar.tsx     # footer: hints, token usage, model id, permission mode, suggestions
-    │   └── scrollableList.tsx # virtual-scroll list with keyboard navigation
-    └── prompts/          # individual prompt components + overlay + standalone wrappers
-        ├── PromptFrame.tsx    # shared frame for prompts
-        ├── SelectPrompt.tsx   # single-choice select
-        ├── SearchSelectPrompt.tsx # fuzzy-filtered select
-        ├── PasswordPrompt.tsx # masked input with validation
-        ├── ConfirmPrompt.tsx  # yes/no confirmation
-        ├── ApprovalPrompt.tsx # tool execution approval gates
-        ├── OptionList.tsx     # rendered option list with highlighting
-        ├── Toggle.tsx         # toggle switch component
-        ├── overlay.tsx        # overlay wrapper that renders prompt inline under timeline
-        └── standalone.tsx     # standalone prompt wrappers for onboarding (outside main TUI)
+    ├── hooks/           # all TUI business logic lives here; app.tsx is a thin composition root
+    │   ├── useAgentTurn.ts    # consumes agent.prompt fullStream: text/reasoning/tool deltas + 60fps buffered stream + usage/messages commit
+    │   ├── useTuiTimeline.ts  # merges historical TimelineEvents with live turn events; update check + tip rotation + usage estimate
+    │   ├── useInputHandler.ts # keyboard router: abort/exit, scroll, history, autocomplete, slash-cmd dispatch, prompt submit
+    │   ├── usePrompts.ts      # Promise-based Prompts/approver bridge between async commands and React overlay state
+    │   ├── useScroll.ts       # scroll offset + auto-follow-bottom semantics (offset grows upward from 0)
+    │   └── useSession.ts      # session/messages/outputTokens state + commitMsg/commitDelta/switchSession/newSession
+    ├── onboarding/
+    │   └── wizard.ts    # first-run setup using Ink standalone prompts (renders, so lives under tui/)
+    └── components/      # layout pieces driven purely by TimelineEvent props
+        ├── conversation.tsx  # scrollable timeline container (renders events, reports layout height to useScroll)
+        ├── message.tsx       # EventRenderer: renders TimelineEvents (user/assistant/tool/thinking/warning)
+        ├── composer.tsx      # input box with history + autocomplete suggestions
+        └── statusBar.tsx     # footer: activity label, token usage, model id, tip
 ```
 
 ## Agent Loop & API Flow
@@ -123,7 +116,7 @@ NovaCode is built on AI SDK primitives — there is no hand-rolled streaming, SS
 2. **Providers** – `src/providers.ts` maps a provider id to an AI SDK `LanguageModel` (`createOpenAI` for openai/glm/deepseek, `createAnthropic`, `createGoogleGenerativeAI`) and attaches HIGH reasoning `providerOptions` for reasoning-capable models. GLM/DeepSeek are OpenAI-compatible.
 3. **Tools** – `src/tools/` defines each tool with `tool({ description, inputSchema: z.object(...), execute, toModelOutput })`. Tools return a NovaCode `ToolResult`; `toToolResultOutput` (in `content.ts`) converts it to an AI SDK `ToolResultOutput`, preserving images and surfacing errors.
 4. **Approval** – `src/agent/approval.ts` `withApproval(tools, policy)` wraps each tool's `execute` so `PolicyEngine.check` runs first. A denial returns an error result the model sees — single-stream, no extra model round-trip. Policy is a separate concern from tool definitions.
-5. **Streaming UI** – `src/tui/app.tsx` consumes `result.fullStream` parts (`text-delta`, `reasoning-delta`, `tool-call`, `tool-result`, `error`) directly.
+5. **Streaming UI** – `src/tui/hooks/useAgentTurn.ts` consumes `result.fullStream` parts (`text-delta`, `reasoning-delta`, `tool-call`, `tool-result`, `error`) directly; `app.tsx` is a thin composition root over the hooks in `tui/hooks/`.
 6. **Persistence** – `ModelMessage[]` is the single canonical message format everywhere. `onStepFinish` appends each step's `response.messages` + usage to the store; on resume, stored `ModelMessage[]` flow straight back into `streamText({ messages })`. Tool calls, tool results, and reasoning round-trip losslessly.
 
 ## Tools
@@ -169,7 +162,7 @@ Interactive mode commands (type `/` then Tab to autocomplete):
 5. **No comments unless "why"** — code explains "what", comments explain "why". Do not add JSDoc to every function. Only add JSDoc when the function's purpose is non-obvious or has subtle behavior.
 6. **Short names** — `ProviderDef` not `ProviderDefinition`.
 7. **Private fields** — `#field` not `private field`. True encapsulation.
-8. **Single rendering context** — All interactive UI (chat, prompts, menus) runs inside one Ink app. Never unmount/remount Ink to switch between modes. Use state-based mode switching instead. Prompts (approval, select, confirm, password) must be rendered inline under the timeline instead of replacing the entire layout, ensuring the timeline history is preserved and stable. A persistent `working…` status indicator (or spinner with `active-working` event) must be shown at the bottom of the timeline while the turn loop is executing (`busy` state).
+8. **Single rendering context** — All interactive UI (chat, prompts, menus) runs inside one Ink app. Never unmount/remount Ink to switch between modes. Use state-based mode switching instead. Prompt overlays (approval, select, confirm, password) are driven by a `PromptMode` union in `usePrompts`; `app.tsx` renders `<PromptOverlay>` inline under the timeline (history preserved + stable). A persistent `working…` status indicator (or spinner via `active-working` event) must be shown at the bottom of the timeline while the turn loop is executing (`busy` state).
 9. **Synchronous Session Store** — The `SessionStore` class is backed by SQLite (`~/.novacode/state.db`) via `node:sqlite` (synchronous `DatabaseSync`). Store methods are `async` for API compatibility but execute synchronously internally. All store methods must be awaited.
 10. **Approval is separate from tools** — Tool definitions know nothing about policy. `withApproval(tools, policy)` (`src/agent/approval.ts`) gates execution at wiring time. The `PolicyEngine` is the single approval authority.
 11. **CLI vs Interactive Inputs** — Outside interactive TUI mode, use `--` flags exclusively (e.g. `nova --sessions ls`, `nova --sessions rm <id>`, `nova --resume`). Subcommand style (e.g., `nova sessions ls`) is not permitted. Inside interactive mode, use `/` commands exclusively (e.g. `/compact`, `/sessions`).
@@ -246,7 +239,7 @@ These rules prevent the most common mistakes AI agents make when editing this co
 - **`agent/`** — `agent.ts` wraps `streamText` and holds conversation state; `approval.ts` gates tool execution via `PolicyEngine`; `prompt.ts` builds the system prompt. No direct HTTP calls or file I/O (those live in tools).
 - **`policy/`** — the deterministic approval authority. No AI SDK dependency (operates on a local `PolicyCall` shape), no tool definitions.
 - **`commands/`** — slash command handlers. Receive a `Prompts` interface from the TUI for interactive menus. Never import Ink or render directly — use the injected `Prompts` object.
-- **`tui/`** — all rendering lives here. `app.tsx` owns the Ink app, consumes `streamText` `fullStream`, and exposes a `Prompts` implementation. `prompts.tsx` is a thin re-export layer over individual prompt components in `prompts/`. `deriveEvents.ts` converts stored `ModelMessage[]` to renderable `TimelineEvent[]`. `theme/` provides a React context-based theme system with a configurable palette. `hooks/` contain stateful logic extracted from components (`useTurnRunner`, `useSession`, `useScrollManager`).
+- **`tui/`** — all rendering lives here. `app.tsx` is a thin composition root that wires together the hooks in `tui/hooks/` (`useAgentTurn` consumes `streamText` `fullStream`, `useTuiTimeline`, `useInputHandler`, `usePrompts`, `useScroll`, `useSession`). `prompts.tsx` holds every prompt component + the `PromptOverlay` switcher + standalone runners (no `prompts/` subfolder). `helpers.ts` holds pure TUI helpers (`deriveEventsFromMessages`, `buildSessionInfo`, `estimateActiveInputTokens`). `core/` holds presentational primitives (Spinner, PromptFrame, ScrollableList, Toggle). `theme/` is a React-context theme system.
 - **Cross-module imports go one direction:** `main → agent → providers`, `main → tools`, `main → config`, `main → db`, `main → models`, `main → tui`, `compact → providers | db | models`. Never `tools → agent` or `providers → agent` or `commands → tui`.
 
 ## Before Every Commit

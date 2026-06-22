@@ -1,6 +1,6 @@
 import type { ModelMessage } from "ai"
 import { describe, expect, it } from "vitest"
-import { deriveEventsFromMessages } from "../src/tui/deriveEvents.ts"
+import { deriveEventsFromMessages } from "../src/tui/helpers.ts"
 
 describe("TUI deriveEventsFromMessages", () => {
 	it("should map UserMessage correctly", () => {

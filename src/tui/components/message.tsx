@@ -1,10 +1,10 @@
 import { Box, Text } from "ink"
 import BigText from "ink-big-text"
 import { memo } from "react"
+import { Spinner } from "../core/liveArea.tsx"
 import { formatMarkdown } from "../markdown/index.ts"
 import { useTheme } from "../theme/index.tsx"
 import type { TimelineEvent } from "../types.ts"
-import { Cursor, Spinner } from "./liveArea.tsx"
 
 const SplashView = memo(function SplashView({
 	content,
@@ -62,10 +62,9 @@ const AssistantMessageView = memo(function AssistantMessageView({
 	const theme = useTheme()
 	const text = isStreaming ? content : formatMarkdown(content)
 	return (
-		<Box flexDirection="column" marginBottom={1}>
+		<Box flexDirection="column" paddingX={1} paddingBottom={1}>
 			<Text color={theme.palette.fg} wrap="wrap">
 				{text}
-				{isStreaming && <Cursor />}
 			</Text>
 		</Box>
 	)
@@ -91,7 +90,7 @@ const ToolEventView = memo(function ToolEventView({ event }: { event: TimelineEv
 	const bullet = isRunning ? "○" : "●"
 
 	return (
-		<Box flexDirection="column" marginBottom={0}>
+		<Box flexDirection="column" paddingX={1} paddingBottom={1}>
 			<Box flexDirection="row">
 				<Text color={bulletColor}>{bullet} </Text>
 				<Text bold color={theme.palette.primary}>
@@ -117,7 +116,7 @@ const ToolEventView = memo(function ToolEventView({ event }: { event: TimelineEv
 const ThinkingView = memo(function ThinkingView({ label }: { label: string }) {
 	const theme = useTheme()
 	return (
-		<Box flexDirection="row" marginBottom={0}>
+		<Box flexDirection="row" paddingX={1} paddingBottom={1}>
 			<Box marginRight={1}>
 				<Spinner />
 			</Box>

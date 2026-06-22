@@ -1,9 +1,9 @@
 import chalk from "chalk"
-import { saveAuth, saveConfig } from "../config/store.ts"
-import { PROVIDERS } from "../models/catalog.ts"
-import { getModelsForProvider, getProvider } from "../models/lookup.ts"
-import { standalonePassword, standaloneSelect } from "../tui/prompts.tsx"
-import type { NovaConfig } from "../types.ts"
+import { saveAuth, saveConfig } from "../../config/store.ts"
+import { PROVIDERS } from "../../models/catalog.ts"
+import { getModelsForProvider, getProvider } from "../../models/lookup.ts"
+import type { NovaConfig } from "../../types.ts"
+import { standalonePassword, standaloneSelect } from "../prompts.tsx"
 
 export async function runOnboarding(): Promise<NovaConfig> {
 	console.log(chalk.bold.cyan("\n⚡ Nova — your coding companion\n"))

@@ -1,9 +1,9 @@
 import { Box, Text, useWindowSize } from "ink"
 import { memo } from "react"
 import type { Cmd } from "../../types.ts"
+import { Cursor } from "../core/liveArea.tsx"
+import { ScrollableList } from "../core/scrollableList.tsx"
 import { useTheme } from "../theme/index.tsx"
-import { Cursor } from "./liveArea.tsx"
-import { ScrollableList } from "./scrollableList.tsx"
 
 export const Composer = memo(function Composer({
 	input,

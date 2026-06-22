@@ -5,6 +5,13 @@ import { loadAuth } from "../../config/store.ts"
 import type { SessionStore } from "../../db/sessionStore.ts"
 import { getModel, getProvider } from "../../models/lookup.ts"
 
+/**
+ * Hook that manages the state of the active workspace session and history.
+ *
+ * It bridges state between the local React tree (so updates render instantly), the stateful
+ * Agent instance (which handles model interactions), and the persistent SQLite database store
+ * (restoring history on resume and saving new message lines).
+ */
 export function useSession(
 	agent: Agent,
 	store: SessionStore,
@@ -16,12 +23,20 @@ export function useSession(
 	const [outputTokens, setOutputTokens] = useState(0)
 	const systemPromptShown = useRef(initialHistory.length > 0)
 
+	// Fetch token counts on initial mount for status bar telemetry.
 	useEffect(() => {
-		store.get(initialSessionId).then((s) => {
-			if (s) setOutputTokens(s.outputTokens)
-		})
+		async function fetchSession() {
+			try {
+				const s = await store.get(initialSessionId)
+				if (s) setOutputTokens(s.outputTokens)
+			} catch (err) {
+				console.error("Failed to load initial session output tokens:", err)
+			}
+		}
+		void fetchSession()
 	}, [store, initialSessionId])
 
+	// Commits a single message (e.g. user input query or slash command text results).
 	const commitMsg = useCallback(
 		(msg: ModelMessage) => {
 			setMessages((prev) => [...prev, msg])
@@ -33,6 +48,7 @@ export function useSession(
 		[agent, store, sessionId],
 	)
 
+	// Commits a block of delta messages (e.g. generated during assistant stream/thinking/tools).
 	const commitDelta = useCallback(
 		async (delta: ModelMessage[]) => {
 			for (const msg of delta) {
@@ -42,6 +58,7 @@ export function useSession(
 			setMessages((prev) => [...prev, ...delta])
 			agent.appendMessages(delta)
 
+			// Scan the committed parts to update active tools state (pruning completed tools).
 			const committedToolCallIds = new Set<string>()
 			for (const msg of delta) {
 				if (msg.role === "assistant" && Array.isArray(msg.content)) {
@@ -69,11 +86,13 @@ export function useSession(
 		[agent, store, sessionId],
 	)
 
+	// Switches the active workspace session and loads its full historical lineage.
 	const switchSession = useCallback(
 		async (newSessionId: string) => {
 			const s = await store.get(newSessionId)
 			if (!s) return
 
+			// Adjust model config to match the stored session settings.
 			const provider = getProvider(s.provider)
 			const model = getModel(s.provider, s.model)
 			if (provider && model) {
@@ -93,6 +112,7 @@ export function useSession(
 		[agent, store],
 	)
 
+	// Initializes a clean workspace session.
 	const newSession = useCallback(async () => {
 		const m = agent.model
 		const session = await store.create(process.cwd(), m.id, m.provider)

@@ -1,7 +1,35 @@
 import type { ModelMessage, ToolResultPart } from "ai"
+import type { Agent } from "../agent/agent.ts"
 import { summarizeToolOutput } from "../content.ts"
 import { formatToolArgs } from "../format.ts"
+import { groupSkills } from "../skills/index.ts"
+import { estimateTokens } from "../tokens.ts"
+import type { PermissionMode, Skill } from "../types.ts"
 import type { TimelineEvent } from "./types.ts"
+
+export function estimateActiveInputTokens(agent: Agent, messages: ModelMessage[]): number {
+	return estimateTokens(agent.system) + estimateTokens(messages)
+}
+
+export function buildSessionInfo(
+	version: string,
+	skills: Skill[],
+	hasAgentsMd: boolean,
+	permissionMode: PermissionMode,
+): string {
+	const lines: string[] = [`  v${version}`]
+	if (hasAgentsMd) lines.push("  AGENTS.md detected")
+	lines.push(`  permission: ${permissionMode}`)
+	if (skills.length > 0) {
+		const groups = groupSkills(skills)
+		const names = groups.map((g) => {
+			const name = g[0]!.name
+			return g.length > 1 ? `${name} (duplicate)` : name
+		})
+		lines.push(`  skills: ${names.join(", ")}`)
+	}
+	return lines.join("\n")
+}
 
 export function deriveEventsFromMessages(msgs: ModelMessage[]): TimelineEvent[] {
 	const events: TimelineEvent[] = []
