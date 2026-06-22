@@ -29,7 +29,14 @@ export function StatusBar({
 	const theme = useTheme()
 
 	return (
-		<Box flexDirection="row" flexShrink={0} paddingX={1} backgroundColor={theme.palette.bg}>
+		<Box
+			flexDirection="row"
+			width="100%"
+			flexShrink={0}
+			paddingX={1}
+			paddingBottom={1}
+			backgroundColor={theme.palette.bg}
+		>
 			<Text color={activityColor}>{activity}</Text>
 			<Text color={theme.palette.muted}> • Tip: </Text>
 			<Text color={theme.palette.primary}>{tip}</Text>

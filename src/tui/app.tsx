@@ -1,5 +1,5 @@
 import type { ModelMessage } from "ai"
-import { Box, render, useApp, useWindowSize } from "ink"
+import { Box, render, useApp } from "ink"
 import { useMemo, useState } from "react"
 import type { Agent } from "../agent/agent.ts"
 import type { SessionStore } from "../db/sessionStore.ts"
@@ -12,7 +12,6 @@ import { StatusBar } from "./components/statusBar.tsx"
 import { useAgentTurn } from "./hooks/useAgentTurn.ts"
 import { useInputHandler } from "./hooks/useInputHandler.ts"
 import { usePrompts } from "./hooks/usePrompts.ts"
-import { useScroll } from "./hooks/useScroll.ts"
 import { useSession } from "./hooks/useSession.ts"
 import { useTuiTimeline } from "./hooks/useTuiTimeline.ts"
 import { PromptOverlay } from "./prompts.tsx"
@@ -77,10 +76,7 @@ function App({
 	hasAgentsMd: boolean
 }) {
 	const theme = useTheme()
-	const { rows } = useWindowSize()
-	const terminalRows = rows || 24
 
-	const scroll = useScroll()
 	const session = useSession(agent, store, initialSessionId, initialHistory)
 	const turn = useAgentTurn(
 		agent,
@@ -95,7 +91,7 @@ function App({
 
 	// Abstracted TUI business logic hooks
 	const { mode, prompts, resolvePrompt } = usePrompts(policy)
-	const { events, contextTokens, tip } = useTuiTimeline({
+	const { committedEvents, liveEvents, contextTokens, tip } = useTuiTimeline({
 		messages: session.messages,
 		contextTokens: session.contextTokens,
 		version,
@@ -141,8 +137,6 @@ function App({
 		mode,
 		exit,
 		handlePermissionSwitch,
-		terminalRows,
-		scroll,
 		skills,
 	})
 
@@ -157,8 +151,12 @@ function App({
 	const composerSuggestions = mode.type === "chat" ? suggestions : []
 
 	return (
-		<Box flexDirection="column" width="100%" height={terminalRows}>
-			<Conversation events={events} scrollOffset={scroll.scrollOffset} onLayout={scroll.onLayout} />
+		<Box flexDirection="column" width="100%">
+			<Conversation
+				key={session.sessionId}
+				committedEvents={committedEvents}
+				liveEvents={liveEvents}
+			/>
 			{mode.type !== "chat" && <PromptOverlay mode={mode} onResolve={resolvePrompt} />}
 			<Composer input={input} suggestions={composerSuggestions} selCmdIdx={selCmdIdx} />
 			<StatusBar

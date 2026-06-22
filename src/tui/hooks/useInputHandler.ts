@@ -26,8 +26,6 @@ export function useInputHandler({
 	mode,
 	exit,
 	handlePermissionSwitch,
-	terminalRows,
-	scroll,
 	skills,
 }: {
 	agent: Agent
@@ -48,13 +46,6 @@ export function useInputHandler({
 	mode: PromptMode
 	exit: () => void
 	handlePermissionSwitch: () => Promise<void>
-	terminalRows: number
-	scroll: {
-		scrollBy: (delta: number) => void
-		scrollToTop: () => void
-		scrollToBottom: () => void
-		heights: { viewport: number; content: number }
-	}
 	skills: Skill[]
 }) {
 	const [input, setInput] = useState("")
@@ -128,25 +119,7 @@ export function useInputHandler({
 			return
 		}
 
-		// --- 2. Scrolling Controls ---
-		if (key.pageUp) {
-			scroll.scrollBy(Math.max(1, (scroll.heights.viewport || terminalRows) - 1))
-			return
-		}
-		if (key.pageDown) {
-			scroll.scrollBy(-Math.max(1, (scroll.heights.viewport || terminalRows) - 1))
-			return
-		}
-		if (key.home) {
-			scroll.scrollToTop()
-			return
-		}
-		if (key.end) {
-			scroll.scrollToBottom()
-			return
-		}
-
-		// --- 3. Autocomplete / Suggestions / Command History recall ---
+		// --- 2. Autocomplete / Suggestions / Command History recall ---
 		if (key.upArrow) {
 			if (isTypingCmd && suggestions.length > 0) {
 				setSelCmdIdx((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1))
@@ -175,7 +148,7 @@ export function useInputHandler({
 			return
 		}
 
-		// --- 4. Text Modification & Accumulation ---
+		// --- 3. Text Modification & Accumulation ---
 		if (!key.return) {
 			setInput((prev) => {
 				if (key.backspace || key.delete) return prev.slice(0, -1)
@@ -200,7 +173,7 @@ export function useInputHandler({
 		history.current.unshift(line)
 		hIdx.current = -1
 
-		// --- 5. Action Dispatcher (Slash Commands vs. Prompt Submission) ---
+		// --- 4. Action Dispatcher (Slash Commands vs. Prompt Submission) ---
 		if (line.startsWith("/")) {
 			const cmdParts = line.slice(1).split(" ")
 			const cmdName = cmdParts[0]?.toLowerCase()

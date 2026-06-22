@@ -1,39 +1,25 @@
-import { Box, useBoxMetrics } from "ink"
-import { useEffect, useRef } from "react"
+import { Box, Static, useWindowSize } from "ink"
 import type { TimelineEvent } from "../types.ts"
 import { EventRenderer } from "./message.tsx"
 
 export function Conversation({
-	events,
-	scrollOffset,
-	onLayout,
+	committedEvents,
+	liveEvents,
 }: {
-	events: TimelineEvent[]
-	scrollOffset: number
-	onLayout?: (metrics: { viewport: number; content: number }) => void
+	committedEvents: TimelineEvent[]
+	liveEvents: TimelineEvent[]
 }) {
-	const viewportRef = useRef(null)
-	const contentRef = useRef(null)
-	const viewportMetrics = useBoxMetrics(viewportRef)
-	const contentMetrics = useBoxMetrics(contentRef)
-
-	useEffect(() => {
-		onLayout?.({
-			viewport: viewportMetrics.height,
-			content: contentMetrics.height,
-		})
-	}, [viewportMetrics.height, contentMetrics.height, onLayout])
-
-	const maxOffset = Math.max(0, contentMetrics.height - viewportMetrics.height)
-	const top = scrollOffset - maxOffset
+	const { columns } = useWindowSize()
+	const width = columns ?? 80
 
 	return (
-		<Box ref={viewportRef} flexGrow={1} flexDirection="column" overflow="hidden" paddingY={1}>
-			<Box ref={contentRef} flexDirection="column" position="relative" top={top}>
-				{events.map((event) => (
-					<EventRenderer key={event.id} event={event} />
-				))}
-			</Box>
+		<Box flexDirection="column" flexGrow={1}>
+			<Static items={committedEvents} style={{ width }}>
+				{(event) => <EventRenderer key={event.id} event={event} />}
+			</Static>
+			{liveEvents.map((event) => (
+				<EventRenderer key={event.id} event={event} />
+			))}
 		</Box>
 	)
 }

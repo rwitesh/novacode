@@ -13,7 +13,7 @@ const TIPS = [
 	"Use Tab for autocomplete.",
 	"Use Shift+Tab to move backwards.",
 	"Use Ctrl+C to stop execution.",
-	"Press Page Up / Page Down to scroll history.",
+	"Scroll terminal scrollback to review history.",
 	"Use /compact to shrink context when it gets long.",
 	"Use /models to switch providers and models.",
 	"Use /sessions to browse and resume past sessions.",
@@ -91,17 +91,21 @@ export function useTuiTimeline({
 
 	const tip = TIPS[tipIdx]!
 
-	// Processes historical messages and maps them to complete timeline items.
-	const completedEvents = useMemo<TimelineEvent[]>(() => {
-		const events: TimelineEvent[] = []
-		const hasMessages = messages.length > 0
+	// Committed history: rendered once via <Static> into terminal scrollback.
+	const committedEvents = useMemo<TimelineEvent[]>(
+		() => deriveEventsFromMessages(messages),
+		[messages],
+	)
 
-		if (!hasMessages) {
-			const info = buildSessionInfo(version, skills, hasAgentsMd, permissionMode)
+	// Live (non-persistent) events: splash, update banner, streaming, thinking, active tools.
+	const liveEvents = useMemo<TimelineEvent[]>(() => {
+		const events: TimelineEvent[] = []
+
+		if (messages.length === 0) {
 			events.push({
 				id: "splash",
 				type: "Splash",
-				content: info,
+				content: buildSessionInfo(version, skills, hasAgentsMd, permissionMode),
 				update: updateInfo?.hasUpdate
 					? { current: updateInfo.current, latest: updateInfo.latest }
 					: undefined,
@@ -114,14 +118,6 @@ export function useTuiTimeline({
 				latest: updateInfo.latest,
 			})
 		}
-
-		events.push(...deriveEventsFromMessages(messages))
-		return events
-	}, [messages, version, skills, hasAgentsMd, updateInfo, permissionMode])
-
-	// Computes dynamic active events (like thinking indicator or running tools) for the current turn.
-	const activeEvents = useMemo<TimelineEvent[]>(() => {
-		const events: TimelineEvent[] = []
 
 		if (turn.thinking) {
 			events.push({ id: "active-thinking", type: "Thinking" })
@@ -171,15 +167,22 @@ export function useTuiTimeline({
 		}
 
 		return events
-	}, [turn.thinking, turn.bufferedStream, turn.activeTools, turn.busy])
-
-	const allEvents = useMemo<TimelineEvent[]>(
-		() => [...completedEvents, ...activeEvents],
-		[completedEvents, activeEvents],
-	)
+	}, [
+		messages.length,
+		version,
+		skills,
+		hasAgentsMd,
+		permissionMode,
+		updateInfo,
+		turn.thinking,
+		turn.bufferedStream,
+		turn.activeTools,
+		turn.busy,
+	])
 
 	return {
-		events: allEvents,
+		committedEvents,
+		liveEvents,
 		contextTokens,
 		tip,
 	}

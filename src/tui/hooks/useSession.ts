@@ -101,6 +101,12 @@ export function useSession(
 
 			const activeMsgs = await store.messages(newSessionId)
 			const fullHistory = await store.history(newSessionId)
+
+			// Clear screen so <Static> remounts cleanly with the new session's history.
+			if (process.stdout.isTTY) {
+				process.stdout.write("\x1b[2J\x1b[3J\x1b[H")
+			}
+
 			agent.setMessages(activeMsgs)
 			setMessages(fullHistory)
 			setSessionId(newSessionId)
@@ -114,6 +120,12 @@ export function useSession(
 	const newSession = useCallback(async () => {
 		const m = agent.model
 		const session = await store.create(process.cwd(), m.id, m.provider)
+
+		// Clear screen so <Static> remounts cleanly with no prior history.
+		if (process.stdout.isTTY) {
+			process.stdout.write("\x1b[2J\x1b[3J\x1b[H")
+		}
+
 		agent.setMessages([])
 		setMessages([])
 		setSessionId(session.id)

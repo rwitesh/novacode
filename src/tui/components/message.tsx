@@ -44,10 +44,18 @@ const SplashView = memo(function SplashView({
 const UserMessageView = memo(function UserMessageView({ content }: { content: string }) {
 	const theme = useTheme()
 	return (
-		<Box flexDirection="column" paddingX={1} paddingY={1} backgroundColor={theme.palette.bg}>
-			<Text bold color={theme.palette.fg} wrap="wrap">
-				{content}
-			</Text>
+		<Box flexDirection="column" width="100%" marginBottom={1}>
+			<Box
+				flexDirection="column"
+				width="100%"
+				paddingX={1}
+				paddingY={1}
+				backgroundColor={theme.palette.bg}
+			>
+				<Text bold color={theme.palette.fg} wrap="wrap">
+					{content}
+				</Text>
+			</Box>
 		</Box>
 	)
 })

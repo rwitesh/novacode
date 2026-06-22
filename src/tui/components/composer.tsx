@@ -20,7 +20,14 @@ export const Composer = memo(function Composer({
 	const visibleCount = Math.max(3, Math.min(suggestions.length, terminalRows - 5))
 
 	return (
-		<Box flexDirection="column" flexShrink={0} backgroundColor={theme.palette.bg} paddingX={1}>
+		<Box
+			flexDirection="column"
+			width="100%"
+			flexShrink={0}
+			backgroundColor={theme.palette.bg}
+			paddingX={1}
+			paddingBottom={1}
+		>
 			{suggestions.length > 0 && (
 				<Box paddingTop={1}>
 					<ScrollableList
