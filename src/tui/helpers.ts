@@ -1,15 +1,9 @@
 import type { ModelMessage, ToolResultPart } from "ai"
-import type { Agent } from "../agent/agent.ts"
 import { summarizeToolOutput } from "../content.ts"
 import { formatToolArgs } from "../format.ts"
 import { groupSkills } from "../skills/index.ts"
-import { estimateTokens } from "../tokens.ts"
 import type { PermissionMode, Skill } from "../types.ts"
 import type { TimelineEvent } from "./types.ts"
-
-export function estimateActiveInputTokens(agent: Agent, messages: ModelMessage[]): number {
-	return estimateTokens(agent.system) + estimateTokens(messages)
-}
 
 export function buildSessionInfo(
 	version: string,

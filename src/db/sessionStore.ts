@@ -18,8 +18,7 @@ function rowToSession(row: Record<string, unknown>): Session {
 		endReason: (row.end_reason as string | null) ?? null,
 		created: row.created as number,
 		updated: row.updated as number,
-		inputTokens: (row.input_tokens as number) ?? 0,
-		outputTokens: (row.output_tokens as number) ?? 0,
+		contextTokens: (row.context_tokens as number) ?? 0,
 		messageCount: (row.message_count as number) ?? 0,
 	}
 }
@@ -42,8 +41,8 @@ export class SessionStore {
 
 		this.#db
 			.prepare(
-				`INSERT OR IGNORE INTO sessions (id, cwd, model, provider, title, parent_session_id, end_reason, created, updated, input_tokens, output_tokens, message_count)
-				 VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 0, 0, 0)`,
+				`INSERT OR IGNORE INTO sessions (id, cwd, model, provider, title, parent_session_id, end_reason, created, updated, context_tokens, message_count)
+				 VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 0, 0)`,
 			)
 			.run(
 				sessionId,
@@ -79,8 +78,7 @@ export class SessionStore {
 			endReason: null,
 			created: now,
 			updated: now,
-			inputTokens: 0,
-			outputTokens: 0,
+			contextTokens: 0,
 			messageCount: 0,
 		}
 	}
@@ -103,8 +101,7 @@ export class SessionStore {
 				endReason: null,
 				created: pending.created,
 				updated: pending.created,
-				inputTokens: 0,
-				outputTokens: 0,
+				contextTokens: 0,
 				messageCount: 0,
 			}
 		}
@@ -151,13 +148,11 @@ export class SessionStore {
 			.run(now, sessionId)
 	}
 
-	async addUsage(sessionId: string, inputTokens: number, outputTokens: number): Promise<void> {
+	async setContextTokens(sessionId: string, contextTokens: number): Promise<void> {
 		this.#ensurePersisted(sessionId)
 		this.#db
-			.prepare(
-				"UPDATE sessions SET input_tokens = input_tokens + ?, output_tokens = output_tokens + ?, updated = ? WHERE id = ?",
-			)
-			.run(inputTokens, outputTokens, Date.now(), sessionId)
+			.prepare("UPDATE sessions SET context_tokens = ?, updated = ? WHERE id = ?")
+			.run(contextTokens, Date.now(), sessionId)
 	}
 
 	async messages(sessionId: string): Promise<ModelMessage[]> {
@@ -235,8 +230,7 @@ export class SessionStore {
 			endReason: null,
 			created: now,
 			updated: now,
-			inputTokens: 0,
-			outputTokens: 0,
+			contextTokens: 0,
 			messageCount: 0,
 		}
 	}

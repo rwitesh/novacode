@@ -27,8 +27,10 @@ export async function compact(
 	apiKey: string,
 	cwd: string,
 ): Promise<CompactResult> {
-	const tokensBefore = estimateTokens(messages)
-
+	const stored = await store.get(sessionId)
+	// Fall back to a char/4 estimate when no turn has run yet (fresh session).
+	const tokensBefore =
+		stored && stored.contextTokens > 0 ? stored.contextTokens : estimateTokens(messages)
 	// Tail protection token budget: 10% of total context window, minimum 20,000 tokens
 	const tailTokenBudget = Math.max(20000, Math.round(model.contextWindow * 0.1))
 

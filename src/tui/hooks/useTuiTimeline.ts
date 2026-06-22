@@ -1,13 +1,8 @@
 import type { ModelMessage } from "ai"
 import { useEffect, useMemo, useState } from "react"
-import type { Agent } from "../../agent/agent.ts"
-import type { PermissionMode, Skill, Usage } from "../../types.ts"
+import type { PermissionMode, Skill } from "../../types.ts"
 import { checkForUpdate } from "../../update.ts"
-import {
-	buildSessionInfo,
-	deriveEventsFromMessages,
-	estimateActiveInputTokens,
-} from "../helpers.ts"
+import { buildSessionInfo, deriveEventsFromMessages } from "../helpers.ts"
 import type { TimelineEvent } from "../types.ts"
 
 const TIPS = [
@@ -35,20 +30,16 @@ const ROTATE_MS = 8000
  * It also manages background checks for CLI updates and cycles helpful tips.
  */
 export function useTuiTimeline({
-	agent,
 	messages,
-	systemPromptShown,
-	outputTokens,
+	contextTokens,
 	version,
 	skills,
 	hasAgentsMd,
 	permissionMode,
 	turn,
 }: {
-	agent: Agent
 	messages: ModelMessage[]
-	systemPromptShown: React.MutableRefObject<boolean>
-	outputTokens: number
+	contextTokens: number
 	version: string
 	skills: Skill[]
 	hasAgentsMd: boolean
@@ -99,14 +90,6 @@ export function useTuiTimeline({
 	}, [])
 
 	const tip = TIPS[tipIdx]!
-
-	// Estimates the current session token usage (inputs + outputs).
-	const usage = useMemo<Usage>(() => {
-		const inTokens = systemPromptShown.current
-			? estimateActiveInputTokens(agent, agent.messages)
-			: 0
-		return { in: inTokens, out: outputTokens }
-	}, [agent, outputTokens, systemPromptShown])
 
 	// Processes historical messages and maps them to complete timeline items.
 	const completedEvents = useMemo<TimelineEvent[]>(() => {
@@ -197,7 +180,7 @@ export function useTuiTimeline({
 
 	return {
 		events: allEvents,
-		usage,
+		contextTokens,
 		tip,
 	}
 }

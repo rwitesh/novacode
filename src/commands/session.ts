@@ -23,12 +23,12 @@ export async function handleSessionCommand(
 			return
 		}
 
-		console.log("ID".padEnd(25), "TITLE / UPDATED".padEnd(35), "TOKENS")
+		console.log("ID".padEnd(25), "TITLE / UPDATED".padEnd(35), "CONTEXT")
 		console.log("-".repeat(75))
 		for (const s of sessions) {
 			const relTime = formatRelativeTime(s.updated)
 			const titleOrUpdated = s.title ? `"${s.title}" (${relTime})` : relTime
-			const tokens = formatTokens(s.inputTokens + s.outputTokens)
+			const tokens = formatTokens(s.contextTokens)
 			console.log(s.id.padEnd(25), titleOrUpdated.padEnd(35), tokens)
 		}
 		return

@@ -74,7 +74,7 @@ src/
 └── tui/
     ├── app.tsx          # thin Ink shell: composes hooks, renders Conversation + Composer + StatusBar + PromptOverlay
     ├── prompts.tsx      # ALL prompt components + PromptOverlay + standalone runners (collapses former prompts/ dir)
-    ├── helpers.ts       # TUI pure helpers: deriveEventsFromMessages, buildSessionInfo, estimateActiveInputTokens
+    ├── helpers.ts       # TUI pure helpers: deriveEventsFromMessages, buildSessionInfo
     ├── constants.ts     # TUI constants (spinner frames, tool colors, termination phrases)
     ├── types.ts         # UI-specific types: TimelineEvent, PromptMode, ActiveTool
     ├── theme/           # theme system (React context)
@@ -93,8 +93,8 @@ src/
     │   ├── syntax.ts    # keyword-based syntax highlighting for TS, PY, SH, GO, Rust, SQL, JSON, YAML
     │   └── richText.ts  # inline formatting: bold, italic, code, links
     ├── hooks/           # all TUI business logic lives here; app.tsx is a thin composition root
-    │   ├── useAgentTurn.ts    # consumes agent.prompt fullStream: text/reasoning/tool deltas + 60fps buffered stream + usage/messages commit
-    │   ├── useTuiTimeline.ts  # merges historical TimelineEvents with live turn events; update check + tip rotation + usage estimate
+    │   ├── useAgentTurn.ts    # consumes agent.prompt fullStream: text/reasoning/tool deltas + 60fps buffered stream + context-token/messages commit
+    │   ├── useTuiTimeline.ts  # merges historical TimelineEvents with live turn events; update check + tip rotation + context-token display
     │   ├── useInputHandler.ts # keyboard router: abort/exit, scroll, history, autocomplete, slash-cmd dispatch, prompt submit
     │   ├── usePrompts.ts      # Promise-based Prompts/approver bridge between async commands and React overlay state
     │   ├── useScroll.ts       # scroll offset + auto-follow-bottom semantics (offset grows upward from 0)
@@ -239,7 +239,7 @@ These rules prevent the most common mistakes AI agents make when editing this co
 - **`agent/`** — `agent.ts` wraps `streamText` and holds conversation state; `approval.ts` gates tool execution via `PolicyEngine`; `prompt.ts` builds the system prompt. No direct HTTP calls or file I/O (those live in tools).
 - **`policy/`** — the deterministic approval authority. No AI SDK dependency (operates on a local `PolicyCall` shape), no tool definitions.
 - **`commands/`** — slash command handlers. Receive a `Prompts` interface from the TUI for interactive menus. Never import Ink or render directly — use the injected `Prompts` object.
-- **`tui/`** — all rendering lives here. `app.tsx` is a thin composition root that wires together the hooks in `tui/hooks/` (`useAgentTurn` consumes `streamText` `fullStream`, `useTuiTimeline`, `useInputHandler`, `usePrompts`, `useScroll`, `useSession`). `prompts.tsx` holds every prompt component + the `PromptOverlay` switcher + standalone runners (no `prompts/` subfolder). `helpers.ts` holds pure TUI helpers (`deriveEventsFromMessages`, `buildSessionInfo`, `estimateActiveInputTokens`). `core/` holds presentational primitives (Spinner, PromptFrame, ScrollableList, Toggle). `theme/` is a React-context theme system.
+- **`tui/`** — all rendering lives here. `app.tsx` is a thin composition root that wires together the hooks in `tui/hooks/` (`useAgentTurn` consumes `streamText` `fullStream`, `useTuiTimeline`, `useInputHandler`, `usePrompts`, `useScroll`, `useSession`). `prompts.tsx` holds every prompt component + the `PromptOverlay` switcher + standalone runners (no `prompts/` subfolder). `helpers.ts` holds pure TUI helpers (`deriveEventsFromMessages`, `buildSessionInfo`). `core/` holds presentational primitives (Spinner, PromptFrame, ScrollableList, Toggle). `theme/` is a React-context theme system.
 - **Cross-module imports go one direction:** `main → agent → providers`, `main → tools`, `main → config`, `main → db`, `main → models`, `main → tui`, `compact → providers | db | models`. Never `tools → agent` or `providers → agent` or `commands → tui`.
 
 ## Before Every Commit

@@ -86,7 +86,7 @@ function App({
 		agent,
 		store,
 		session.sessionId,
-		session.setOutputTokens,
+		session.setContextTokens,
 		session.commitMsg,
 		session.commitDelta,
 	)
@@ -95,11 +95,9 @@ function App({
 
 	// Abstracted TUI business logic hooks
 	const { mode, prompts, resolvePrompt } = usePrompts(policy)
-	const { events, usage, tip } = useTuiTimeline({
-		agent,
+	const { events, contextTokens, tip } = useTuiTimeline({
 		messages: session.messages,
-		systemPromptShown: session.systemPromptShown,
-		outputTokens: session.outputTokens,
+		contextTokens: session.contextTokens,
 		version,
 		skills,
 		hasAgentsMd,
@@ -167,7 +165,7 @@ function App({
 				activity={activity.label}
 				activityColor={activity.color}
 				model={agent.model}
-				usage={usage}
+				contextTokens={contextTokens}
 				tip={tip}
 			/>
 		</Box>

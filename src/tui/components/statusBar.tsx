@@ -1,5 +1,5 @@
 import { Box, Text } from "ink"
-import type { Model, Usage } from "../../types.ts"
+import type { Model } from "../../types.ts"
 import { useTheme } from "../theme/index.tsx"
 
 function fmtK(n: number): string {
@@ -17,13 +17,13 @@ export function StatusBar({
 	activity,
 	activityColor,
 	model,
-	usage,
+	contextTokens,
 	tip,
 }: {
 	activity: string
 	activityColor: string
 	model: Model
-	usage: Usage
+	contextTokens: number
 	tip: string
 }) {
 	const theme = useTheme()
@@ -34,7 +34,9 @@ export function StatusBar({
 			<Text color={theme.palette.muted}> • Tip: </Text>
 			<Text color={theme.palette.primary}>{tip}</Text>
 			<Box flexGrow={1} />
-			<Text color={theme.palette.muted}>{formatTokenUsage(usage.in, model.contextWindow)}</Text>
+			<Text color={theme.palette.muted}>
+				{formatTokenUsage(contextTokens, model.contextWindow)}
+			</Text>
 			<Text color={theme.palette.muted}> • </Text>
 			<Text bold color={theme.palette.fg}>
 				{model.id}

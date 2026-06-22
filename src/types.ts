@@ -29,13 +29,6 @@ export interface ToolResult {
 	isError: boolean
 }
 
-/** Token usage (mapped from AI SDK `LanguageModelUsage` for display) */
-
-export interface Usage {
-	in: number
-	out: number
-}
-
 /** Provider & model catalog */
 
 // Per-provider model entry, nested under ProviderDef. The provider id is
@@ -86,8 +79,7 @@ export interface Session {
 	endReason: string | null
 	created: number
 	updated: number
-	inputTokens: number
-	outputTokens: number
+	contextTokens: number
 	messageCount: number
 }
 

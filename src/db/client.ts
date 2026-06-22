@@ -16,8 +16,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     end_reason TEXT,
     created INTEGER NOT NULL,
     updated INTEGER NOT NULL,
-    input_tokens INTEGER DEFAULT 0,
-    output_tokens INTEGER DEFAULT 0,
+    context_tokens INTEGER DEFAULT 0,
     message_count INTEGER DEFAULT 0
 );
 

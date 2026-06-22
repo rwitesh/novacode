@@ -10,7 +10,7 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY, cwd TEXT NOT NULL, model TEXT NOT NULL, provider TEXT NOT NULL,
     title TEXT, parent_session_id TEXT, end_reason TEXT, created INTEGER NOT NULL,
-    updated INTEGER NOT NULL, input_tokens INTEGER DEFAULT 0, output_tokens INTEGER DEFAULT 0,
+    updated INTEGER NOT NULL, context_tokens INTEGER DEFAULT 0,
     message_count INTEGER DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS messages (
@@ -134,15 +134,15 @@ describe("SessionStore", () => {
 		}
 	})
 
-	it("tracks token usage via addUsage", async () => {
+	it("tracks context size via setContextTokens", async () => {
 		const { dir, store, db } = await createTempStore()
 		try {
 			const session = await store.create("/test/dir", "test-model", "test-provider")
-			await store.addUsage(session.id, 100, 50)
-			await store.addUsage(session.id, 30, 20)
+			await store.setContextTokens(session.id, 100)
+			await store.setContextTokens(session.id, 30)
 			const s = await store.get(session.id)
-			expect(s!.inputTokens).toBe(130)
-			expect(s!.outputTokens).toBe(70)
+			// Overwritten (current context size), not cumulative
+			expect(s!.contextTokens).toBe(30)
 		} finally {
 			db.close()
 			await rm(dir, { recursive: true, force: true })

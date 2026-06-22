@@ -1,5 +1,5 @@
 import type { ModelMessage } from "ai"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import type { Agent } from "../../agent/agent.ts"
 import { loadAuth } from "../../config/store.ts"
 import type { SessionStore } from "../../db/sessionStore.ts"
@@ -20,17 +20,15 @@ export function useSession(
 ) {
 	const [sessionId, setSessionId] = useState(initialSessionId)
 	const [messages, setMessages] = useState<ModelMessage[]>(initialHistory)
-	const [outputTokens, setOutputTokens] = useState(0)
-	const systemPromptShown = useRef(initialHistory.length > 0)
+	const [contextTokens, setContextTokens] = useState(0)
 
-	// Fetch token counts on initial mount for status bar telemetry.
 	useEffect(() => {
 		async function fetchSession() {
 			try {
 				const s = await store.get(initialSessionId)
-				if (s) setOutputTokens(s.outputTokens)
+				if (s) setContextTokens(s.contextTokens)
 			} catch (err) {
-				console.error("Failed to load initial session output tokens:", err)
+				console.error("Failed to load initial session context size:", err)
 			}
 		}
 		void fetchSession()
@@ -107,7 +105,7 @@ export function useSession(
 			setMessages(fullHistory)
 			setSessionId(newSessionId)
 
-			if (model) setOutputTokens(s.outputTokens)
+			if (model) setContextTokens(s.contextTokens)
 		},
 		[agent, store],
 	)
@@ -119,15 +117,14 @@ export function useSession(
 		agent.setMessages([])
 		setMessages([])
 		setSessionId(session.id)
-		setOutputTokens(0)
+		setContextTokens(0)
 	}, [agent, store])
 
 	return {
 		sessionId,
 		messages,
-		outputTokens,
-		systemPromptShown,
-		setOutputTokens,
+		contextTokens,
+		setContextTokens,
 		commitMsg,
 		commitDelta,
 		switchSession,

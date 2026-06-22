@@ -45,7 +45,7 @@ export function useAgentTurn(
 	agent: Agent,
 	store: SessionStore,
 	sessionId: string,
-	setOutputTokens: (updater: (prev: number) => number) => void,
+	setContextTokens: (updater: (prev: number) => number) => void,
 	commitMsg: (msg: ModelMessage) => void,
 	commitDelta: (
 		delta: ModelMessage[],
@@ -120,9 +120,10 @@ export function useAgentTurn(
 				// and database records as soon as each turn step (e.g. tool execution) completes.
 				const result = await agent.prompt(signal, async (event) => {
 					const u = event.usage
-					if (u) {
-						setOutputTokens((prev) => prev + (u.outputTokens ?? 0))
-						await store.addUsage(sessionId, u.inputTokens ?? 0, u.outputTokens ?? 0)
+					if (u && u.inputTokens != null) {
+						// Overwrite, not accumulate: inputTokens is the full context size of this step.
+						setContextTokens(() => u.inputTokens ?? 0)
+						await store.setContextTokens(sessionId, u.inputTokens ?? 0)
 					}
 					if (event.response?.messages?.length) {
 						const delta = event.response.messages.slice(committedRef.current)
@@ -220,7 +221,7 @@ export function useAgentTurn(
 				setActiveTools([])
 			}
 		},
-		[agent, store, sessionId, setOutputTokens, commitMsg, commitDelta, appendStream, resetStream],
+		[agent, store, sessionId, setContextTokens, commitMsg, commitDelta, appendStream, resetStream],
 	)
 
 	return { busy, thinking, activeTools, bufferedStream, run, abort, setBusy }
