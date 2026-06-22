@@ -193,10 +193,12 @@ export class SessionStore {
 	}
 
 	async setTitle(sessionId: string, title: string): Promise<void> {
+		const safeTitle = title.replace(/\s+/g, " ").trim().slice(0, 60)
+		if (!safeTitle) return
 		this.#ensurePersisted(sessionId)
 		this.#db
 			.prepare("UPDATE sessions SET title = ?, updated = ? WHERE id = ?")
-			.run(title, Date.now(), sessionId)
+			.run(safeTitle, Date.now(), sessionId)
 	}
 
 	async endSession(id: string, reason: string): Promise<void> {

@@ -133,5 +133,12 @@ export async function generateSessionTitle(
 		providerOptions: model.reasoning ? reasoningOpts(provider.id) : undefined,
 	})
 
-	return text.trim().replace(/^["']|["']$/g, "") || null
+	return (
+		text
+			.replace(/\s+/g, " ")
+			.trim()
+			.replace(/^["']|["']$/g, "")
+			.slice(0, 60)
+			.trim() || null
+	)
 }
