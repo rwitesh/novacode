@@ -27,6 +27,7 @@ export const Composer = memo(function Composer({
 			backgroundColor={theme.palette.bg}
 			paddingX={1}
 			paddingBottom={1}
+			marginTop={1}
 		>
 			{suggestions.length > 0 && (
 				<Box paddingTop={1}>
