@@ -116,7 +116,7 @@ export function useAgentTurn(
 
 			try {
 				// The agent.prompt call initiates the AI SDK stream loop.
-				// We supply an onStepFinish handler to checkpoint generated messages
+				// We supply an onStepEnd handler to checkpoint generated messages
 				// and database records as soon as each turn step (e.g. tool execution) completes.
 				const result = await agent.prompt(signal, async (event) => {
 					const u = event.usage

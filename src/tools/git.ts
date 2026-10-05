@@ -27,7 +27,7 @@ export const gitTool = (cwd: string) =>
 			const allowed = new Set(["status", "diff", "log", "add", "commit"])
 			if (!allowed.has(action)) {
 				return {
-					content: [{ type: "text", text: `Error: Git action '${action}' is not supported.` }],
+					content: [`Error: Git action '${action}' is not supported.`],
 					isError: true,
 				}
 			}
@@ -77,12 +77,12 @@ export const gitTool = (cwd: string) =>
 				if (out.length >= MAX) out += "\n…truncated"
 
 				return {
-					content: [{ type: "text", text: out || "(no output)" }],
+					content: [out || "(no output)"],
 					isError: exitCode !== 0,
 				}
 			} catch (e) {
 				return {
-					content: [{ type: "text", text: `Error running git: ${(e as Error).message}` }],
+					content: [`Error running git: ${(e as Error).message}`],
 					isError: true,
 				}
 			}

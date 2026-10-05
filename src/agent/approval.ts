@@ -8,7 +8,6 @@
  * round-trip, unlike the native two-phase approval flow).
  */
 import type { ToolSet } from "ai"
-import { textPart } from "../content.ts"
 import type { PolicyEngine } from "../policy/engine.ts"
 import type { ToolResult } from "../types.ts"
 
@@ -28,7 +27,7 @@ export function withApproval(tools: ToolSet, policy: PolicyEngine | null): ToolS
 			execute: async (input: any, opts: any): Promise<ToolResult> => {
 				const decision = await policy.check({ name, args: input })
 				if (!decision.allow) {
-					return { content: [textPart(decision.reason ?? "Blocked")], isError: true }
+					return { content: [decision.reason ?? "Blocked"], isError: true }
 				}
 				return original(input, opts)
 			},

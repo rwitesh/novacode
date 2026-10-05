@@ -73,10 +73,10 @@ export const bashTool = (cwd: string) =>
 				if (killed) out += `\n[timeout after ${timeoutMs / 1000}s]`
 				out += `\n[exit ${exitCode}]`
 
-				return { content: [{ type: "text", text: out }], isError: exitCode !== 0 || killed }
+				return { content: [out], isError: exitCode !== 0 || killed }
 			} catch (e) {
 				return {
-					content: [{ type: "text", text: `Error: ${(e as Error).message}` }],
+					content: [`Error: ${(e as Error).message}`],
 					isError: true,
 				}
 			}

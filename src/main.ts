@@ -9,10 +9,10 @@ import { Agent } from "./agent/agent.ts"
 import { buildSystemPrompt } from "./agent/prompt.ts"
 import { loadResources } from "./bootstrap.ts"
 import { handleSessionCommand } from "./commands/session.ts"
-import { configExists, loadAuth, loadConfig } from "./config/store.ts"
+import { configExists, loadAuth, loadConfig, saveConfig } from "./config/store.ts"
 import { getSessionStore } from "./db/sessionStore.ts"
 import { PROVIDERS } from "./models/catalog.ts"
-import { getModel, getModelById, getModelsForProvider, getProvider } from "./models/lookup.ts"
+import { getDefaultModel, getModel, getModelById, getProvider } from "./models/lookup.ts"
 import { PolicyEngine } from "./policy/engine.ts"
 import { dedupeSkills } from "./skills/index.ts"
 import { getAllTools } from "./tools/index.ts"
@@ -179,14 +179,21 @@ Options:
 		process.exit(1)
 	}
 
-	const model = findModel(modelId, providerId)
+	// A stale saved model (removed from the catalog in a newer release) heals to the
+	// provider's current default instead of failing startup.
+	let model = findModel(modelId, providerId)
 	if (!model) {
-		console.error(`Unknown model: ${modelId}`)
-		console.error("Available models:")
-		for (const m of getModelsForProvider(providerId)) {
-			console.error(`  ${m.id}`)
+		const fallback = getDefaultModel(providerId)
+		if (!fallback) {
+			console.error(`No models available for provider: ${providerId}`)
+			process.exit(1)
 		}
-		process.exit(1)
+		console.error(`Model ${modelId} is no longer available — switching to ${fallback.id}.`)
+		model = fallback
+		if (!flags.model) {
+			config.model = fallback.id
+			await saveConfig(config)
+		}
 	}
 
 	const cwd = process.cwd()

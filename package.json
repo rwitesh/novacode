@@ -42,30 +42,30 @@
 		"url": "https://github.com/rwitesh/novacode.git"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.4.15",
-		"@types/node": "^24.5.2",
-		"@types/react": "^19.2.14",
-		"@types/semver": "^7.7.1",
-		"lefthook": "^2.1.6",
-		"tsdown": "^0.22.0",
-		"tsx": "^4.19.4",
-		"typescript": "^6.0.3",
-		"vitest": "^4.1.7"
+		"@biomejs/biome": "^2.5.15",
+		"@types/node": "^24.19.1",
+		"@types/react": "^19.3.0",
+		"@types/semver": "^7.8.0",
+		"lefthook": "^2.1.16",
+		"tsdown": "^0.23.0",
+		"tsx": "^4.23.15",
+		"typescript": "^7.0.2",
+		"vitest": "^5.0.3"
 	},
 	"engines": {
 		"node": ">=24"
 	},
 	"dependencies": {
-		"@ai-sdk/anthropic": "^3.0.85",
-		"@ai-sdk/google": "^3.0.83",
-		"@ai-sdk/openai": "^3.0.73",
-		"ai": "^6.0.208",
-		"chalk": "^5.6.2",
+		"@ai-sdk/anthropic": "^4.0.71",
+		"@ai-sdk/google": "^4.0.87",
+		"@ai-sdk/openai": "^4.0.83",
+		"ai": "^7.0.127",
+		"chalk": "^6.0.1",
 		"glob": "^13.0.6",
-		"ink": "^7.0.3",
+		"ink": "^8.0.0",
 		"ink-big-text": "^2.0.0",
-		"react": "^19.2.6",
-		"semver": "^7.8.0",
-		"zod": "^4.4.3"
+		"react": "^19.3.0",
+		"semver": "^7.8.5",
+		"zod": "^4.6.5"
 	}
 }

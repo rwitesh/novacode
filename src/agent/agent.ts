@@ -6,7 +6,7 @@
  * streamText directly with a no-op onError to suppress the default console.error
  * that dumps full RetryError/APICallError objects to stderr.
  */
-import type { ModelMessage, OnStepFinishEvent, ToolSet } from "ai"
+import type { GenerateTextStepEndEvent, ModelMessage, ToolSet } from "ai"
 import { stepCountIs, streamText } from "ai"
 import type { PolicyEngine } from "../policy/engine.ts"
 import { createModel, reasoningOpts } from "../providers.ts"
@@ -17,7 +17,7 @@ import { preparePrompt } from "./prompt.ts"
 // Safety cap so a misbehaving model can't loop forever
 const MAX_TURNS = 50
 
-export type StepFinishHandler = (event: OnStepFinishEvent<ToolSet>) => void | Promise<void>
+export type StepEndHandler = (event: GenerateTextStepEndEvent<ToolSet>) => void | Promise<void>
 
 export class Agent {
 	#provider: string
@@ -92,18 +92,18 @@ export class Agent {
 		this.#model = model
 	}
 
-	async prompt(signal?: AbortSignal, onStepFinish?: StepFinishHandler) {
+	async prompt(signal?: AbortSignal, onStepEnd?: StepEndHandler) {
 		const { instructions, messages: messagesToStream } = preparePrompt(this.#system, this.#messages)
 
 		return streamText({
 			model: createModel(this.#provider, this.#model.id, this.#apiKey),
-			system: instructions,
+			instructions,
 			tools: withApproval(this.#tools, this.#policy),
 			stopWhen: stepCountIs(MAX_TURNS),
 			providerOptions: this.#model.reasoning ? reasoningOpts(this.#provider) : undefined,
 			messages: messagesToStream,
 			abortSignal: signal,
-			onStepFinish,
+			onStepEnd,
 			onError: () => undefined,
 		})
 	}

@@ -1,31 +1,11 @@
 import type { ToolResultOutput } from "@ai-sdk/provider-utils"
-import type { ContentPart, TextPart, ToolResult } from "./types.ts"
-
-export function textPart(s: string): TextPart {
-	return { type: "text", text: s }
-}
-
-function partText(c: ContentPart): string {
-	return c.type === "text" ? c.text : ""
-}
+import type { ToolResult } from "./types.ts"
 
 // Single boundary between NovaCode tool results and AI SDK model output.
-// Preserves images (read tool) and surfaces errors to the model.
+// Surfaces errors to the model as error-text so the loop continues.
 export function toToolResultOutput(r: ToolResult): ToolResultOutput {
-	if (r.isError) {
-		return { type: "error-text", value: r.content.map(partText).join("\n") }
-	}
-	if (r.content.some((c) => c.type === "image")) {
-		return {
-			type: "content",
-			value: r.content.map((c) =>
-				c.type === "image"
-					? { type: "media", data: c.data, mediaType: c.mime }
-					: { type: "text", text: c.text },
-			),
-		}
-	}
-	return { type: "text", value: r.content.map(partText).join("\n") }
+	const value = r.content.join("\n")
+	return r.isError ? { type: "error-text", value } : { type: "text", value }
 }
 
 // Flatten an AI SDK tool-result output back to display text + error flag (for the TUI).
@@ -41,13 +21,6 @@ export function summarizeToolOutput(output: ToolResultOutput): { text: string; i
 			return { text: output.reason ?? "execution denied", isError: true }
 		case "json":
 			return { text: JSON.stringify(output.value), isError: false }
-		case "content":
-			return {
-				text: output.value
-					.map((p) => (p.type === "text" ? p.text : p.type === "media" ? "[image]" : ""))
-					.join("\n"),
-				isError: false,
-			}
 		default:
 			return { text: "", isError: false }
 	}

@@ -19,7 +19,7 @@ const mkdtemp = async () => {
 // Tools return Promise<ToolResult>; await and narrow away the AsyncIterable union.
 // biome-ignore lint/suspicious/noExplicitAny: tool input types vary across tools; the helper is generic
 async function run(tool: Tool<any, ToolResult>, input: unknown): Promise<ToolResult> {
-	const out = await tool.execute!(input as never, { toolCallId: "test", messages: [] })
+	const out = await tool.execute!(input as never, { toolCallId: "test", messages: [], context: {} })
 	return out as ToolResult
 }
 
@@ -32,12 +32,9 @@ describe("read tool", () => {
 		const result = await run(read, { path: "a.txt" })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
-		expect(t.type).toBe("text")
-		if (t.type === "text") {
-			expect(t.text).toContain("line1")
-			expect(t.text).toContain("line2")
-			expect(t.text).toContain("line3")
-		}
+		expect(t).toContain("line1")
+		expect(t).toContain("line2")
+		expect(t).toContain("line3")
 		await rm(cwd, { recursive: true })
 	})
 
@@ -49,11 +46,9 @@ describe("read tool", () => {
 		const result = await run(read, { path: "b.txt", offset: 2, limit: 2 })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
-		if (t.type === "text") {
-			expect(t.text).toContain("b")
-			expect(t.text).toContain("c")
-			expect(t.text).not.toContain("a")
-		}
+		expect(t).toContain("b")
+		expect(t).toContain("c")
+		expect(t).not.toContain("a")
 		await rm(cwd, { recursive: true })
 	})
 
@@ -66,9 +61,7 @@ describe("read tool", () => {
 		const result = await run(read, { path: "c.txt", limit: 5 })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
-		if (t.type === "text") {
-			expect(t.text).toContain("more lines")
-		}
+		expect(t).toContain("more lines")
 		await rm(cwd, { recursive: true })
 	})
 
@@ -97,10 +90,8 @@ describe("edit tool", () => {
 		const read = readTool(cwd)
 		const after = await run(read, { path: "edit.txt" })
 		const t = after.content[0]!
-		if (t.type === "text") {
-			expect(t.text).toContain("goodbye world")
-			expect(t.text).not.toContain("hello")
-		}
+		expect(t).toContain("goodbye world")
+		expect(t).not.toContain("hello")
 		await rm(cwd, { recursive: true })
 	})
 
@@ -122,9 +113,7 @@ describe("edit tool", () => {
 		const read = readTool(cwd)
 		const after = await run(read, { path: "multi.txt" })
 		const t = after.content[0]!
-		if (t.type === "text") {
-			expect(t.text).toContain("one bar three")
-		}
+		expect(t).toContain("one bar three")
 		await rm(cwd, { recursive: true })
 	})
 
@@ -164,10 +153,8 @@ describe("bash tool", () => {
 		const result = await run(bash, { command: "echo hello" })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
-		if (t.type === "text") {
-			expect(t.text).toContain("hello")
-			expect(t.text).toContain("[exit 0]")
-		}
+		expect(t).toContain("hello")
+		expect(t).toContain("[exit 0]")
 		await rm(cwd, { recursive: true })
 	})
 
@@ -177,10 +164,8 @@ describe("bash tool", () => {
 		const result = await run(bash, { command: "echo err >&2 && exit 1" })
 		expect(result.isError).toBe(true)
 		const t = result.content[0]!
-		if (t.type === "text") {
-			expect(t.text).toContain("err")
-			expect(t.text).toContain("[exit 1]")
-		}
+		expect(t).toContain("err")
+		expect(t).toContain("[exit 1]")
 		await rm(cwd, { recursive: true })
 	})
 
@@ -190,9 +175,7 @@ describe("bash tool", () => {
 		const result = await run(bash, { command: "sleep 10", timeout: 1 })
 		expect(result.isError).toBe(true)
 		const t = result.content[0]!
-		if (t.type === "text") {
-			expect(t.text).toContain("timeout")
-		}
+		expect(t).toContain("timeout")
 		await rm(cwd, { recursive: true })
 	})
 })
@@ -209,11 +192,9 @@ describe("glob tool", () => {
 		const result = await run(glob, { pattern: "**/*.ts" })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
-		if (t.type === "text") {
-			expect(t.text).toContain("a.ts")
-			expect(t.text).toContain("b.ts")
-			expect(t.text).not.toContain("c.js")
-		}
+		expect(t).toContain("a.ts")
+		expect(t).toContain("b.ts")
+		expect(t).not.toContain("c.js")
 		await rm(cwd, { recursive: true })
 	})
 })
@@ -228,9 +209,7 @@ describe("grep tool", () => {
 		const result = await run(grep, { pattern: "hello" })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
-		if (t.type === "text") {
-			expect(t.text).toContain("hello")
-		}
+		expect(t).toContain("hello")
 		await rm(cwd, { recursive: true })
 	})
 })
@@ -247,11 +226,9 @@ describe("ls tool", () => {
 		const result = await run(ls, { path: "." })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
-		if (t.type === "text") {
-			expect(t.text).toContain("file1.txt")
-			expect(t.text).toContain("file2.txt")
-			expect(t.text).toContain("subdir/")
-		}
+		expect(t).toContain("file1.txt")
+		expect(t).toContain("file2.txt")
+		expect(t).toContain("subdir/")
 		await rm(cwd, { recursive: true })
 	})
 })
@@ -272,13 +249,11 @@ describe("tree tool", () => {
 		const result = await run(tree, { path: "." })
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
-		if (t.type === "text") {
-			expect(t.text).toContain("file.txt")
-			expect(t.text).toContain("folder/")
-			expect(t.text).toContain("subfile.txt")
-			expect(t.text).not.toContain("node_modules")
-			expect(t.text).not.toContain("dep.js")
-		}
+		expect(t).toContain("file.txt")
+		expect(t).toContain("folder/")
+		expect(t).toContain("subfile.txt")
+		expect(t).not.toContain("node_modules")
+		expect(t).not.toContain("dep.js")
 		await rm(cwd, { recursive: true })
 	})
 })
@@ -295,9 +270,7 @@ describe("git tool", () => {
 
 		expect(result.isError).toBe(false)
 		const t = result.content[0]!
-		if (t.type === "text") {
-			expect(t.text).toContain("On branch")
-		}
+		expect(t).toContain("On branch")
 		await rm(cwd, { recursive: true })
 	})
 
@@ -308,9 +281,7 @@ describe("git tool", () => {
 
 		expect(result.isError).toBe(true)
 		const t = result.content[0]!
-		if (t.type === "text") {
-			expect(t.text).toContain("not supported")
-		}
+		expect(t).toContain("not supported")
 		await rm(cwd, { recursive: true })
 	})
 })

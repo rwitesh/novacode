@@ -101,7 +101,7 @@ async function generateSummary(
 
 	const { text } = await generateText({
 		model: createModel(provider.id, model.id, apiKey),
-		system:
+		instructions:
 			"Summarize this coding session concisely. Cover: what was asked, files touched, what was done, key decisions. Keep it under 300 words.",
 		prompt: convo,
 		providerOptions: model.reasoning ? reasoningOpts(provider.id) : undefined,
@@ -129,7 +129,7 @@ export async function generateSessionTitle(
 
 	const { text } = await generateText({
 		model: createModel(provider.id, model.id, apiKey),
-		system:
+		instructions:
 			"Generate a very short, descriptive, and concise title for this coding conversation. Do not use quotes or prefixes like 'Title:'. Max 6 words.",
 		prompt: convo,
 		providerOptions: model.reasoning ? reasoningOpts(provider.id) : undefined,

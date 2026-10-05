@@ -9,23 +9,10 @@
  * and CLI/TUI plumbing that has no AI SDK equivalent.
  */
 
-/** Tool content (local shape used inside tool `execute` + converted to AI SDK parts) */
-
-export interface TextPart {
-	type: "text"
-	text: string
-}
-
-export interface ImagePart {
-	type: "image"
-	data: string // base64
-	mime: string
-}
-
-export type ContentPart = TextPart | ImagePart
+/** Tool result (local shape inside tool `execute`, converted to AI SDK output in content.ts) */
 
 export interface ToolResult {
-	content: ContentPart[]
+	content: string[]
 	isError: boolean
 }
 

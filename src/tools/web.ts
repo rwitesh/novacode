@@ -74,7 +74,7 @@ export const webSearchTool = () =>
 		execute: async (args, { abortSignal }): Promise<ToolResult> => {
 			const query = args.query
 			if (!query.trim()) {
-				return { content: [{ type: "text", text: "Error: empty search query" }], isError: true }
+				return { content: ["Error: empty search query"], isError: true }
 			}
 
 			try {
@@ -86,7 +86,7 @@ export const webSearchTool = () =>
 
 				if (!resp.ok) {
 					return {
-						content: [{ type: "text", text: `Search failed: HTTP ${resp.status}` }],
+						content: [`Search failed: HTTP ${resp.status}`],
 						isError: true,
 					}
 				}
@@ -144,17 +144,17 @@ export const webSearchTool = () =>
 				}
 
 				if (results.length === 0) {
-					return { content: [{ type: "text", text: "No results found." }], isError: false }
+					return { content: ["No results found."], isError: false }
 				}
 
-				return { content: [{ type: "text", text: results.join("\n\n") }], isError: false }
+				return { content: [results.join("\n\n")], isError: false }
 			} catch (e) {
 				const msg = (e as Error).message
 				if (msg.includes("abort")) {
-					return { content: [{ type: "text", text: "Search aborted." }], isError: true }
+					return { content: ["Search aborted."], isError: true }
 				}
 				return {
-					content: [{ type: "text", text: `Search error: ${msg}` }],
+					content: [`Search error: ${msg}`],
 					isError: true,
 				}
 			}
@@ -172,13 +172,13 @@ export const webFetchTool = () =>
 		execute: async (args, { abortSignal }): Promise<ToolResult> => {
 			const url = args.url
 			if (!url.trim()) {
-				return { content: [{ type: "text", text: "Error: empty URL" }], isError: true }
+				return { content: ["Error: empty URL"], isError: true }
 			}
 
 			try {
 				new URL(url)
 			} catch {
-				return { content: [{ type: "text", text: `Error: invalid URL: ${url}` }], isError: true }
+				return { content: [`Error: invalid URL: ${url}`], isError: true }
 			}
 
 			try {
@@ -193,9 +193,7 @@ export const webFetchTool = () =>
 
 				if (!resp.ok) {
 					return {
-						content: [
-							{ type: "text", text: `Fetch failed: HTTP ${resp.status} ${resp.statusText}` },
-						],
+						content: [`Fetch failed: HTTP ${resp.status} ${resp.statusText}`],
 						isError: true,
 					}
 				}
@@ -211,20 +209,20 @@ export const webFetchTool = () =>
 					body.trim().toLowerCase().startsWith("<html")
 
 				if (isHtml) {
-					return { content: [{ type: "text", text: htmlToText(body) }], isError: false }
+					return { content: [htmlToText(body)], isError: false }
 				}
 
 				// For plain text, JSON, etc. return as-is (truncated if needed)
 				const truncated =
 					body.length > MAX_CONTENT ? `${body.slice(0, MAX_CONTENT)}\n…truncated` : body
-				return { content: [{ type: "text", text: truncated }], isError: false }
+				return { content: [truncated], isError: false }
 			} catch (e) {
 				const msg = (e as Error).message
 				if (msg.includes("abort")) {
-					return { content: [{ type: "text", text: "Fetch aborted." }], isError: true }
+					return { content: ["Fetch aborted."], isError: true }
 				}
 				return {
-					content: [{ type: "text", text: `Fetch error: ${msg}` }],
+					content: [`Fetch error: ${msg}`],
 					isError: true,
 				}
 			}

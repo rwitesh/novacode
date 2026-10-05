@@ -29,10 +29,10 @@ export const globTool = (cwd: string) =>
 				const prefix = relSearchPath ? `${relSearchPath}/` : ""
 				const relFiles = sliced.map((f) => prefix + f)
 				const out = relFiles.length > 0 ? relFiles.join("\n") : "No files found"
-				return { content: [{ type: "text", text: out }], isError: false }
+				return { content: [out], isError: false }
 			} catch (e) {
 				return {
-					content: [{ type: "text", text: `Error: ${(e as Error).message}` }],
+					content: [`Error: ${(e as Error).message}`],
 					isError: true,
 				}
 			}
@@ -90,7 +90,7 @@ export const grepTool = (cwd: string) =>
 
 					if (exitCode === 0) {
 						const lines = stdout.split("\n").slice(0, 200).join("\n")
-						return { content: [{ type: "text", text: lines || "No matches" }], isError: false }
+						return { content: [lines || "No matches"], isError: false }
 					}
 				} catch {
 					// rg not available, fall through
@@ -118,12 +118,12 @@ export const grepTool = (cwd: string) =>
 					}
 				}
 				return {
-					content: [{ type: "text", text: matches.join("\n") || "No matches" }],
+					content: [matches.join("\n") || "No matches"],
 					isError: false,
 				}
 			} catch (e) {
 				return {
-					content: [{ type: "text", text: `Error: ${(e as Error).message}` }],
+					content: [`Error: ${(e as Error).message}`],
 					isError: true,
 				}
 			}
@@ -145,10 +145,10 @@ export const lsTool = (cwd: string) =>
 					const suffix = e.isDirectory() ? "/" : e.isSymbolicLink() ? "@" : ""
 					return `${e.name}${suffix}`
 				})
-				return { content: [{ type: "text", text: lines.join("\n") || "(empty)" }], isError: false }
+				return { content: [lines.join("\n") || "(empty)"], isError: false }
 			} catch (e) {
 				return {
-					content: [{ type: "text", text: `Error: ${(e as Error).message}` }],
+					content: [`Error: ${(e as Error).message}`],
 					isError: true,
 				}
 			}
@@ -210,10 +210,10 @@ export const treeTool = (cwd: string) =>
 				}
 
 				const treeText = await walk(startDir, 1, "")
-				return { content: [{ type: "text", text: treeText || "(empty)" }], isError: false }
+				return { content: [treeText || "(empty)"], isError: false }
 			} catch (e) {
 				return {
-					content: [{ type: "text", text: `Error: ${(e as Error).message}` }],
+					content: [`Error: ${(e as Error).message}`],
 					isError: true,
 				}
 			}

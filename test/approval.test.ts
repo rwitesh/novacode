@@ -14,13 +14,13 @@ function makeTool(ran: () => void) {
 		inputSchema: z.object({ command: z.string().optional(), path: z.string().optional() }),
 		execute: async (): Promise<ToolResult> => {
 			ran()
-			return { content: [{ type: "text", text: "ran" }], isError: false }
+			return { content: ["ran"], isError: false }
 		},
 	})
 }
 
 async function run(t: ReturnType<typeof makeTool>, input: unknown): Promise<ToolResult> {
-	const out = await t.execute!(input as never, { toolCallId: "1", messages: [] })
+	const out = await t.execute!(input as never, { toolCallId: "1", messages: [], context: {} })
 	return out as ToolResult
 }
 

@@ -34,7 +34,7 @@ src/
 │                        # AI message/tool/usage types come from the `ai` package — do NOT redeclare them.
 ├── providers.ts         # AI SDK provider factory + HIGH reasoning defaults
 ├── bootstrap.ts         # startup resource loader (skills discovery + AGENTS.md)
-├── content.ts           # tool-result ↔ AI SDK ToolResultOutput converters + textPart helper
+├── content.ts           # tool-result ↔ AI SDK ToolResultOutput converters + TUI summarizer
 ├── paths.ts             # path relativization helpers (getRelativeIfInside, makeRelative, shortenPath)
 ├── format.ts            # display formatters (formatToolArgs, formatRelativeTime)
 ├── tokens.ts            # estimateTokens — rough token estimation over ModelMessage[]
@@ -112,12 +112,12 @@ src/
 
 NovaCode is built on AI SDK primitives — there is no hand-rolled streaming, SSE parser, tool dispatcher, or agent loop:
 
-1. **streamText** – `src/agent/agent.ts` wraps `streamText` directly (`model`, `system` as `instructions`, `tools`, `stopWhen: stepCountIs(50)`, `providerOptions`, `messages`, `abortSignal`, `onStepFinish`, `onError`). The SDK runs the multi-step tool loop itself.
+1. **streamText** – `src/agent/agent.ts` wraps `streamText` directly (`model`, `instructions`, `tools`, `stopWhen: stepCountIs(50)`, `providerOptions`, `messages`, `abortSignal`, `onStepEnd`, `onError`). The SDK runs the multi-step tool loop itself.
 2. **Providers** – `src/providers.ts` maps a provider id to an AI SDK `LanguageModel` (`createOpenAI` for openai/glm/deepseek, `createAnthropic`, `createGoogleGenerativeAI`) and attaches HIGH reasoning `providerOptions` for reasoning-capable models. GLM/DeepSeek are OpenAI-compatible.
 3. **Tools** – `src/tools/` defines each tool with `tool({ description, inputSchema: z.object(...), execute, toModelOutput })`. Tools return a NovaCode `ToolResult`; `toToolResultOutput` (in `content.ts`) converts it to an AI SDK `ToolResultOutput`, preserving images and surfacing errors.
 4. **Approval** – `src/agent/approval.ts` `withApproval(tools, policy)` wraps each tool's `execute` so `PolicyEngine.check` runs first. A denial returns an error result the model sees — single-stream, no extra model round-trip. Policy is a separate concern from tool definitions.
 5. **Streaming UI** – `src/tui/hooks/useAgentTurn.ts` consumes `result.fullStream` parts (`text-delta`, `reasoning-delta`, `tool-call`, `tool-result`, `error`) directly; `app.tsx` is a thin composition root over the hooks in `tui/hooks/`.
-6. **Persistence** – `ModelMessage[]` is the single canonical message format everywhere. `onStepFinish` appends each step's `response.messages` + usage to the store; on resume, stored `ModelMessage[]` flow straight back into `streamText({ messages })`. Tool calls, tool results, and reasoning round-trip losslessly.
+6. **Persistence** – `ModelMessage[]` is the single canonical message format everywhere. `onStepEnd` appends each step's `response.messages` + usage to the store; on resume, stored `ModelMessage[]` flow straight back into `streamText({ messages })`. Tool calls, tool results, and reasoning round-trip losslessly.
 
 ## Tools
 
@@ -125,7 +125,7 @@ The agent has 10 built-in tools:
 
 | Tool | Risk | Description |
 |------|------|-------------|
-| `read` | safe | Read file contents (text or images: jpg, png, gif, webp). Supports offset/limit. |
+| `read` | safe | Read file contents (text). Supports offset/limit. Image files return an error. |
 | `write` | write | Write content to a file. Creates parent directories. |
 | `edit` | write | Exact text replacement. Validates uniqueness before applying. |
 | `bash` | execution | Execute shell commands with timeout (default 120s). Output truncated at 50KB. |
