@@ -37,10 +37,10 @@ describe("catalog: defaults", () => {
 })
 
 describe("catalog: anthropic ordering", () => {
-	it("lists claude-fable-5 first and defaults to claude-opus-4-8", () => {
+	it("lists claude-fable-5-1 first and defaults to claude-opus-5-5", () => {
 		const models = getModelsForProvider("anthropic")
-		expect(models[0]?.id).toBe("claude-fable-5")
-		expect(getDefaultModel("anthropic")?.id).toBe("claude-opus-4-8")
+		expect(models[0]?.id).toBe("claude-fable-5-1")
+		expect(getDefaultModel("anthropic")?.id).toBe("claude-opus-5-5")
 	})
 })
 
