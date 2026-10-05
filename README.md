@@ -1,63 +1,31 @@
 # NovaCode
 
-Open-source, multi-provider coding agent.
+An open-source coding agent for your terminal. Ask questions, edit files, and run commands with your choice of AI provider.
 
-> **Currently in early development (v0.x). Breaking changes may occur.**
+> Early development (v0.x). Breaking changes may occur.
 
 <img width="1155" height="851" alt="image" src="https://github.com/user-attachments/assets/3b761728-ebfc-4827-b95b-1ec6ccd76870" />
 
 ## Install
 
-**Requires Node.js >= 24.**
+Requires **Node.js 24 or later**.
 
 ```bash
 npm install -g novacode
 ```
 
-Then use it anywhere:
+## Get started
+
+Launch NovaCode in your project directory:
 
 ```bash
 nova
 ```
 
-## Quick Start
+On first launch, choose a provider, enter your API key, and select a model. Then describe what you want to build or fix.
 
-### 1. Launch nova
+Use `/help` inside NovaCode for commands, or `nova --help` for CLI options.
 
-```bash
-nova
-```
+## Supported providers
 
-### 2. First-run setup
-
-On first launch, nova walks you through a quick setup:
-1. **Pick a provider**
-2. **Enter your API key**
-3. **Pick a default model**
-
-That's it. You're ready to go.
-
-### 3. Start chatting
-
-Just run `nova` to start chatting. You'll get a prompt where you can ask questions, give coding tasks, and use `/help` for available commands.
-
-### 4. CLI Flags
-
-Run `nova --help` to see all available flags and commands.
-
-### Supported Providers
-
-Anthropic, DeepSeek, Gemini (Google), GLM (Z.AI), OpenAI
-
-## Development
-
-```bash
-npm install          # install dependencies
-npm run dev          # dev with watch
-npm test             # run tests
-npm run lint         # biome lint check
-npm run lint:fix     # biome lint + auto-fix
-npm run format       # biome format
-npm run typecheck    # tsc --noEmit
-npm run check        # typecheck + lint + test (run this before committing)
-```
+OpenAI, Anthropic, Google Gemini, DeepSeek, and GLM (Z.AI).
