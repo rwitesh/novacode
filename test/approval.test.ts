@@ -87,6 +87,28 @@ describe("withApproval", () => {
 		expect(ran).toBe(true)
 	})
 
+	it("does not execute an approved tool after its turn was aborted", async () => {
+		const ctrl = new AbortController()
+		const policy = new PolicyEngine("restricted", cwd)
+		policy.setApprover({
+			request: async () => {
+				ctrl.abort()
+				return true
+			},
+		})
+		let ran = false
+		const wrapped = withApproval({ bash: makeTool(() => (ran = true)) }, policy)
+		const execute = wrapped.bash?.execute
+		if (!execute) throw new Error("Missing test tool")
+		await expect(
+			execute(
+				{ command: "echo hi" },
+				{ toolCallId: "1", messages: [], context: {}, abortSignal: ctrl.signal },
+			),
+		).rejects.toThrow()
+		expect(ran).toBe(false)
+	})
+
 	it("is a no-op without a policy", async () => {
 		let ran = false
 		const wrapped = withApproval({ bash: makeTool(() => (ran = true)) }, null)

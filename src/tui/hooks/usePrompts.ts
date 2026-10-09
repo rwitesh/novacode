@@ -1,77 +1,82 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { PolicyEngine } from "../../policy/engine.ts"
 import type { ApprovalRequest, PolicyApprover, Prompts } from "../../types.ts"
 import type { PromptMode } from "../types.ts"
 
-/**
- * Hook that manages interactive prompt screens and hooks them up to the agent policy engine.
- *
- * It acts as a bridge between the asynchronous command/policy validation loop (which expects
- * Promise-based inputs) and the React rendering tree. Calling any prompt method (like select or
- * confirm) returns a Promise, updates the React state to render the prompt overlay, and stores
- * the resolver callback in a ref to be resolved once user input is captured.
- */
+type PendingPrompt = { mode: PromptMode; resolve: (value: unknown) => void; id: number }
+
 export function usePrompts(policy: PolicyEngine) {
 	const [mode, setMode] = useState<PromptMode>({ type: "chat" })
-	// Stores the active prompt's Promise resolver.
-	// Since commands run sequentially, we only ever have a single active prompt at a time.
-	const resolveRef = useRef<((v: unknown) => void) | null>(null)
+	const [promptId, setPromptId] = useState(0)
+	const pending = useRef<PendingPrompt[]>([])
+	const nextId = useRef(0)
+
+	const show = useCallback((prompt?: PendingPrompt) => {
+		setMode(prompt?.mode ?? { type: "chat" })
+		setPromptId(prompt?.id ?? 0)
+	}, [])
+
+	const request = useCallback(
+		(mode: PromptMode, resolve: (value: unknown) => void) => {
+			const prompt = { mode, resolve, id: ++nextId.current }
+			pending.current.push(prompt)
+			if (pending.current.length === 1) show(prompt)
+		},
+		[show],
+	)
 
 	const prompts = useMemo<Prompts>(
 		() => ({
 			select: (config) =>
 				new Promise<string | null>((resolve) => {
-					resolveRef.current = resolve as (v: unknown) => void
-					setMode({ type: "select", ...config })
+					request({ type: "select", ...config }, resolve as (v: unknown) => void)
 				}),
 			searchSelect: (config) =>
 				new Promise<string | null>((resolve) => {
-					resolveRef.current = resolve as (v: unknown) => void
-					setMode({ type: "searchSelect", ...config })
+					request({ type: "searchSelect", ...config }, resolve as (v: unknown) => void)
 				}),
 			password: (config) =>
 				new Promise<string | null>((resolve) => {
-					resolveRef.current = resolve as (v: unknown) => void
-					setMode({ type: "password", ...config })
+					request({ type: "password", ...config }, resolve as (v: unknown) => void)
 				}),
 			confirm: (config) =>
 				new Promise<boolean | null>((resolve) => {
-					resolveRef.current = resolve as (v: unknown) => void
-					setMode({ type: "confirm", ...config })
+					request({ type: "confirm", ...config }, resolve as (v: unknown) => void)
 				}),
 		}),
-		[],
+		[request],
 	)
 
 	const approver = useMemo<PolicyApprover>(
 		() => ({
 			request: (req: ApprovalRequest) =>
 				new Promise<boolean>((resolve) => {
-					resolveRef.current = (v: unknown) => resolve(v === true)
-					setMode({ type: "approval", req })
+					request({ type: "approval", req }, (value) => resolve(value === true))
 				}),
 		}),
-		[],
+		[request],
 	)
 
-	// Automatically registers this TUI component's modal handler with the policy engine.
-	// This intercepts unsafe tool calls and shows approval prompts inline within the TUI.
+	const cancelPrompts = useCallback(() => {
+		const canceled = pending.current.splice(0)
+		show()
+		for (const prompt of canceled) prompt.resolve(null)
+	}, [show])
+
 	useEffect(() => {
 		policy.setApprover(approver)
-		return () => policy.setApprover(null)
+		return () => {
+			policy.setApprover(null)
+			for (const prompt of pending.current.splice(0)) prompt.resolve(null)
+		}
 	}, [policy, approver])
 
 	const resolvePrompt = (value: unknown) => {
-		const fn = resolveRef.current
-		resolveRef.current = null
-		setMode({ type: "chat" })
-		fn?.(value)
+		if (pending.current[0]?.id !== promptId) return
+		const prompt = pending.current.shift()
+		show(pending.current[0])
+		prompt?.resolve(value)
 	}
 
-	return {
-		mode,
-		setMode,
-		prompts,
-		resolvePrompt,
-	}
+	return { mode, promptId, prompts, resolvePrompt, cancelPrompts }
 }

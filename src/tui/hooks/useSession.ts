@@ -26,25 +26,27 @@ export function useSession(
 	const [notices, setNotices] = useState<string[]>([])
 
 	useEffect(() => {
+		let canceled = false
 		async function fetchSession() {
 			try {
-				const s = await store.get(initialSessionId)
-				if (s) setContextTokens(s.contextTokens)
+				const s = await store.get(sessionId)
+				if (s && !canceled) setContextTokens(s.contextTokens)
 			} catch (err) {
 				console.error("Failed to load initial session context size:", err)
 			}
 		}
 		void fetchSession()
-	}, [store, initialSessionId])
+		return () => {
+			canceled = true
+		}
+	}, [store, sessionId])
 
 	// Commits a single message (e.g. user input query or assistant turn output).
 	const commitMsg = useCallback(
-		(msg: ModelMessage) => {
+		async (msg: ModelMessage) => {
+			await store.append(sessionId, msg)
 			setMessages((prev) => [...prev, msg])
 			agent.appendMessages([msg])
-			store.append(sessionId, msg).catch((err) => {
-				console.error("Error appending message to session store:", err)
-			})
 		},
 		[agent, store, sessionId],
 	)
@@ -123,7 +125,7 @@ export function useSession(
 			setSessionId(newSessionId)
 			setNotices([])
 
-			if (model) setContextTokens(s.contextTokens)
+			setContextTokens(s.contextTokens)
 		},
 		[agent, store],
 	)

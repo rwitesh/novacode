@@ -1,10 +1,11 @@
-import { Box, render, Text, useInput, useWindowSize } from "ink"
-import { useMemo, useState } from "react"
+import { Box, type DOMElement, render, Text, useBoxMetrics, useInput, useWindowSize } from "ink"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type { ApprovalRequest } from "../types.ts"
+import { PromptFrame } from "./core/layout.tsx"
 import { Cursor } from "./core/liveArea.tsx"
-import { PromptFrame } from "./core/PromptFrame.tsx"
 import { ScrollableList } from "./core/scrollableList.tsx"
 import { Toggle } from "./core/Toggle.tsx"
+import { deleteLastGrapheme, sanitizeText } from "./helpers.ts"
 import { useTheme } from "./theme/index.tsx"
 import type { PromptMode } from "./types.ts"
 
@@ -17,27 +18,27 @@ interface SelectOption {
 // Sub-component: OptionList
 function OptionList({ options, selectedIdx }: { options: SelectOption[]; selectedIdx: number }) {
 	const theme = useTheme()
-	const { rows } = useWindowSize()
-	const terminalRows = rows || 24
-	const visibleCount = Math.max(3, Math.min(options.length, terminalRows - 6))
 
 	return (
 		<ScrollableList
 			items={options}
 			selectedIndex={selectedIdx}
-			visibleCount={visibleCount}
+			visibleCount={options.length}
 			keyExtractor={(opt) => opt.value}
 			renderItem={(opt, _idx, isSelected) => (
 				<Box flexDirection="row">
 					<Text
+						wrap="truncate-end"
 						bold={isSelected}
 						color={isSelected ? theme.palette.bg : theme.palette.fg}
 						backgroundColor={isSelected ? theme.palette.primary : undefined}
 					>
 						{isSelected ? "❯ " : "  "}
-						{opt.label}
+						{sanitizeText(opt.label)}
 					</Text>
-					{opt.hint && isSelected && <Text color={theme.palette.muted}> {opt.hint}</Text>}
+					{opt.hint && isSelected && (
+						<Text color={theme.palette.muted}> {sanitizeText(opt.hint)}</Text>
+					)}
 				</Box>
 			)}
 		/>
@@ -72,7 +73,7 @@ export function ConfirmPrompt({
 		<PromptFrame>
 			<Box marginBottom={1}>
 				<Text bold color={useTheme().palette.muted}>
-					{message}
+					{sanitizeText(message)}
 				</Text>
 			</Box>
 			<Toggle yesLabel="Yes" noLabel="No" selected={yes ? "yes" : "no"} />
@@ -87,8 +88,8 @@ export function ConfirmPrompt({
 export function SelectPrompt({
 	message,
 	options,
-	header,
-	footer,
+	header: rawHeader,
+	footer: rawFooter,
 	onSelect,
 }: {
 	message: string
@@ -98,6 +99,8 @@ export function SelectPrompt({
 	onSelect: (value: string | null) => void
 }) {
 	const theme = useTheme()
+	const header = rawHeader && sanitizeText(rawHeader)
+	const footer = rawFooter && sanitizeText(rawFooter)
 	const [idx, setIdx] = useState(0)
 
 	useInput((_, key) => {
@@ -127,7 +130,7 @@ export function SelectPrompt({
 			)}
 			<Box marginBottom={1}>
 				<Text bold color={theme.palette.muted}>
-					{message}
+					{sanitizeText(message)}
 				</Text>
 			</Box>
 			<OptionList options={options} selectedIdx={idx} />
@@ -147,8 +150,8 @@ export function SelectPrompt({
 export function SearchSelectPrompt({
 	message,
 	options,
-	header,
-	footer,
+	header: rawHeader,
+	footer: rawFooter,
 	onSelect,
 }: {
 	message: string
@@ -158,6 +161,8 @@ export function SearchSelectPrompt({
 	onSelect: (value: string | null) => void
 }) {
 	const theme = useTheme()
+	const header = rawHeader && sanitizeText(rawHeader)
+	const footer = rawFooter && sanitizeText(rawFooter)
 	const [query, setQuery] = useState("")
 	const [selectedIdx, setSelectedIdx] = useState(0)
 
@@ -191,7 +196,7 @@ export function SearchSelectPrompt({
 			return
 		}
 		if (key.backspace || key.delete) {
-			setQuery((prev) => prev.slice(0, -1))
+			setQuery((prev) => deleteLastGrapheme(prev))
 			setSelectedIdx(0)
 			return
 		}
@@ -210,12 +215,12 @@ export function SearchSelectPrompt({
 			)}
 			<Box marginBottom={1}>
 				<Text bold color={theme.palette.muted}>
-					{message}
+					{sanitizeText(message)}
 				</Text>
 			</Box>
 			<Box flexDirection="row" marginBottom={1}>
 				<Text color={theme.palette.muted}>Search: </Text>
-				<Text color={theme.palette.fg}>{query}</Text>
+				<Text color={theme.palette.fg}>{sanitizeText(query)}</Text>
 				<Cursor />
 			</Box>
 			{filtered.length === 0 ? (
@@ -268,11 +273,11 @@ export function PasswordPrompt({
 			return
 		}
 		if (key.backspace || key.delete) {
-			setValue((v) => v.slice(0, -1))
+			setValue((v) => deleteLastGrapheme(v))
 			setError("")
 			return
 		}
-		if (ch) {
+		if (ch && !key.ctrl && !key.meta) {
 			setValue((v) => v + ch)
 			setError("")
 		}
@@ -282,7 +287,7 @@ export function PasswordPrompt({
 		<PromptFrame>
 			<Box marginBottom={1}>
 				<Text bold color={theme.palette.muted}>
-					{message}
+					{sanitizeText(message)}
 				</Text>
 			</Box>
 			<Box flexDirection="row">
@@ -295,7 +300,7 @@ export function PasswordPrompt({
 			{error && (
 				<Box marginTop={1}>
 					<Text bold color={theme.palette.error}>
-						✗ {error}
+						✗ {sanitizeText(error)}
 					</Text>
 				</Box>
 			)}
@@ -307,6 +312,63 @@ export function PasswordPrompt({
 }
 
 // Prompt: ApprovalPrompt
+function ApprovalSummary({
+	text,
+	onEndChange,
+}: {
+	text: string
+	onEndChange: (atEnd: boolean) => void
+}) {
+	const theme = useTheme()
+	const { rows } = useWindowSize()
+	const viewportRef = useRef<DOMElement>(null)
+	const contentRef = useRef<DOMElement>(null)
+	const viewport = useBoxMetrics(viewportRef)
+	const content = useBoxMetrics(contentRef)
+	const [offset, setOffset] = useState(0)
+	const height = Math.max(1, Math.floor(viewport.height))
+	const maxOffset = Math.max(0, Math.ceil(content.height) - height)
+	const scrollOffset = Math.min(offset, maxOffset)
+	const atEnd = viewport.hasMeasured && content.hasMeasured && scrollOffset === maxOffset
+
+	useEffect(() => {
+		onEndChange(atEnd)
+	}, [atEnd, onEndChange])
+
+	useInput((_, key) => {
+		if (key.upArrow) setOffset(Math.max(0, scrollOffset - 1))
+		else if (key.downArrow) setOffset(Math.min(maxOffset, scrollOffset + 1))
+		else if (key.pageUp) setOffset(Math.max(0, scrollOffset - height))
+		else if (key.pageDown) setOffset(Math.min(maxOffset, scrollOffset + height))
+		else if (key.home) setOffset(0)
+		else if (key.end) setOffset(maxOffset)
+	})
+
+	return (
+		<Box flexDirection="column" flexShrink={1} minHeight={2}>
+			<Box
+				ref={viewportRef}
+				flexDirection="column"
+				height={Math.min(rows, content.height || text.split("\n").length)}
+				minHeight={1}
+				flexShrink={1}
+				overflowY="hidden"
+			>
+				<Box ref={contentRef} flexDirection="column" flexShrink={0} marginTop={-scrollOffset}>
+					<Text color={theme.palette.fg}>{text}</Text>
+				</Box>
+			</Box>
+			<Box flexShrink={0}>
+				<Text color={theme.palette.muted} wrap="truncate-end">
+					{maxOffset > 0
+						? `↑↓ / PgUp/PgDn scroll · ${scrollOffset + 1}–${Math.min(scrollOffset + height, content.height)}/${content.height}${atEnd ? " · end" : " · more below"}`
+						: ""}
+				</Text>
+			</Box>
+		</Box>
+	)
+}
+
 export function ApprovalPrompt({
 	req,
 	onResolve,
@@ -315,20 +377,19 @@ export function ApprovalPrompt({
 	onResolve: (allow: boolean | null) => void
 }) {
 	const theme = useTheme()
-	const [allow, setAllow] = useState(true)
+	const [allow, setAllow] = useState(false)
+	const [canApprove, setCanApprove] = useState(false)
 
 	useInput((_, key) => {
 		if (key.escape) {
 			onResolve(null)
 			return
 		}
-		if (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow || key.tab) {
-			setAllow((a) => !a)
+		if (key.leftArrow || key.rightArrow || key.tab) {
+			if (canApprove) setAllow((a) => !a)
 			return
 		}
-		if (key.return) {
-			onResolve(allow)
-		}
+		if (key.return) onResolve(allow && canApprove)
 	})
 
 	return (
@@ -336,19 +397,30 @@ export function ApprovalPrompt({
 			{req.warning && (
 				<Box marginBottom={1}>
 					<Text bold color={theme.palette.warning}>
-						{req.warning}
+						{sanitizeText(req.warning)}
 					</Text>
 				</Box>
 			)}
-			<Box flexDirection="row" marginBottom={1}>
+			<Box flexDirection="row" flexShrink={0}>
 				<Text bold color={theme.palette.warning}>
 					Approve?{" "}
 				</Text>
-				<Text color={theme.palette.muted}>{req.summary}</Text>
+				<Text color={theme.palette.muted}>{sanitizeText(req.tool)}</Text>
 			</Box>
-			<Toggle yesLabel="Allow once" noLabel="Deny" selected={allow ? "yes" : "no"} />
-			<Box marginTop={1}>
-				<Text color={theme.palette.muted}>←→ toggle · Enter confirm · Esc deny</Text>
+			<ApprovalSummary text={sanitizeText(req.summary)} onEndChange={setCanApprove} />
+			<Box flexShrink={0}>
+				<Toggle
+					yesLabel="Allow once"
+					noLabel="Deny"
+					selected={allow && canApprove ? "yes" : "no"}
+				/>
+			</Box>
+			<Box flexShrink={0}>
+				<Text color={theme.palette.muted}>
+					{canApprove
+						? "←→ toggle · Enter confirm · Esc deny"
+						: "Scroll to end to enable Allow · Esc deny"}
+				</Text>
 			</Box>
 		</PromptFrame>
 	)

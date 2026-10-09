@@ -1,5 +1,5 @@
 import type { ModelMessage } from "ai"
-import { Box, render, useApp } from "ink"
+import { render, useApp } from "ink"
 import { useMemo, useState } from "react"
 import type { Agent } from "../agent/agent.ts"
 import type { SessionStore } from "../db/sessionStore.ts"
@@ -9,6 +9,7 @@ import { getCurrentVersion } from "../update.ts"
 import { Composer } from "./components/composer.tsx"
 import { Conversation } from "./components/conversation.tsx"
 import { StatusBar } from "./components/statusBar.tsx"
+import { Viewport } from "./core/layout.tsx"
 import { useAgentTurn } from "./hooks/useAgentTurn.ts"
 import { useInputHandler } from "./hooks/useInputHandler.ts"
 import { usePrompts } from "./hooks/usePrompts.ts"
@@ -25,7 +26,6 @@ export async function interactive(
 	hasAgentsMd = false,
 	policy: PolicyEngine,
 ): Promise<void> {
-	process.stdout.write("\x1B[?25l")
 	const version = await getCurrentVersion()
 	const initialHistory: ModelMessage[] = await store.history(sessionId)
 
@@ -34,6 +34,7 @@ export async function interactive(
 	}
 
 	try {
+		if (process.stdout.isTTY) process.stdout.write("\x1B[?25l")
 		const { waitUntilExit } = render(
 			<ThemeProvider>
 				<App
@@ -51,7 +52,7 @@ export async function interactive(
 		)
 		await waitUntilExit()
 	} finally {
-		process.stdout.write("\x1B[?25h")
+		if (process.stdout.isTTY) process.stdout.write("\x1B[?25h")
 		await store.prune()
 	}
 }
@@ -90,17 +91,7 @@ function App({
 	const [permissionMode, setPermissionMode] = useState<PermissionMode>(policy.mode)
 
 	// Abstracted TUI business logic hooks
-	const { mode, prompts, resolvePrompt } = usePrompts(policy)
-	const { committedEvents, liveEvents, contextTokens, tip } = useTuiTimeline({
-		messages: session.messages,
-		notices: session.notices,
-		contextTokens: session.contextTokens,
-		version,
-		skills,
-		hasAgentsMd,
-		permissionMode,
-		turn,
-	})
+	const { mode, promptId, prompts, resolvePrompt, cancelPrompts } = usePrompts(policy)
 
 	const handlePermissionSwitch = async () => {
 		const picked = await prompts.select({
@@ -126,16 +117,33 @@ function App({
 
 	const { exit } = useApp()
 
-	const { input, suggestions, selCmdIdx, exitConfirmKey } = useInputHandler({
+	const { input, commandBusy, suggestions, selCmdIdx, exitConfirmKey } = useInputHandler({
 		agent,
 		store,
 		session,
-		turn,
+		turn: {
+			...turn,
+			abort: () => {
+				turn.abort()
+				cancelPrompts()
+			},
+		},
 		prompts,
 		mode,
 		exit,
 		handlePermissionSwitch,
 		skills,
+	})
+
+	const { committedEvents, liveEvents, contextTokens, tip } = useTuiTimeline({
+		messages: session.messages,
+		notices: session.notices,
+		contextTokens: session.contextTokens,
+		version,
+		skills,
+		hasAgentsMd,
+		permissionMode,
+		turn: { ...turn, busy: turn.busy || commandBusy },
 	})
 
 	const activity = useMemo(() => {
@@ -149,14 +157,17 @@ function App({
 	const composerSuggestions = mode.type === "chat" ? suggestions : []
 
 	return (
-		<Box flexDirection="column" width="100%">
+		<Viewport>
 			<Conversation
 				key={session.sessionId}
 				committedEvents={committedEvents}
 				liveEvents={liveEvents}
 			/>
-			{mode.type !== "chat" && <PromptOverlay mode={mode} onResolve={resolvePrompt} />}
-			<Composer input={input} suggestions={composerSuggestions} selCmdIdx={selCmdIdx} />
+			{mode.type !== "chat" ? (
+				<PromptOverlay key={promptId} mode={mode} onResolve={resolvePrompt} />
+			) : (
+				<Composer input={input} suggestions={composerSuggestions} selCmdIdx={selCmdIdx} />
+			)}
 			<StatusBar
 				activity={activity.label}
 				activityColor={activity.color}
@@ -164,6 +175,6 @@ function App({
 				contextTokens={contextTokens}
 				tip={tip}
 			/>
-		</Box>
+		</Viewport>
 	)
 }

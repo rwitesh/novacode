@@ -1,11 +1,12 @@
-import type { ToolResultOutput } from "@ai-sdk/provider-utils"
 import type { ModelMessage } from "ai"
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { Agent } from "../../agent/agent.ts"
 import { generateSessionTitle } from "../../compact.ts"
-import { summarizeToolOutput } from "../../content.ts"
+import { summarizeToolOutput, toToolResultOutput } from "../../content.ts"
 import type { SessionStore } from "../../db/sessionStore.ts"
 import { formatToolArgs } from "../../format.ts"
+import type { ToolResult } from "../../types.ts"
+import { countGrepMatches } from "../helpers.ts"
 import { StreamingMarkdownRenderer } from "../markdown/index.ts"
 import type { ActiveTool } from "../types.ts"
 
@@ -23,7 +24,9 @@ function errorMessage(err: unknown): string {
 			try {
 				const parsed = JSON.parse(body) as { error?: { message?: string }; message?: string }
 				return parsed.error?.message ?? parsed.message ?? err.message
-			} catch {}
+			} catch {
+				return err.message
+			}
 		}
 		return err.message
 	}
@@ -46,7 +49,7 @@ export function useAgentTurn(
 	store: SessionStore,
 	sessionId: string,
 	setContextTokens: (updater: (prev: number) => number) => void,
-	commitMsg: (msg: ModelMessage) => void,
+	commitMsg: (msg: ModelMessage) => Promise<void>,
 	commitDelta: (
 		delta: ModelMessage[],
 	) => Promise<{ committedToolCallIds: Set<string>; committedText: boolean }>,
@@ -55,7 +58,6 @@ export function useAgentTurn(
 	const [thinking, setThinking] = useState(false)
 	const [activeTools, setActiveTools] = useState<ActiveTool[]>([])
 	const abortRef = useRef<AbortController | null>(null)
-	const committedRef = useRef(0)
 
 	// Stream buffering states & refs
 	const [bufferedStream, setBufferedStream] = useState("")
@@ -100,18 +102,25 @@ export function useAgentTurn(
 
 	const abort = useCallback(() => {
 		abortRef.current?.abort()
-		abortRef.current = null
 	}, [])
+
+	useEffect(
+		() => () => {
+			abortRef.current?.abort()
+			if (flushTimer.current) clearTimeout(flushTimer.current)
+		},
+		[],
+	)
 
 	const run = useCallback(
 		async (ctrl: AbortController) => {
+			if (abortRef.current) return
 			const signal = ctrl.signal
 			abortRef.current = ctrl
 			setBusy(true)
 			resetStream()
 			setThinking(false)
 			setActiveTools([])
-			committedRef.current = 0
 			let streamError: unknown
 
 			try {
@@ -126,11 +135,9 @@ export function useAgentTurn(
 						await store.setContextTokens(sessionId, u.inputTokens ?? 0)
 					}
 					if (event.response?.messages?.length) {
-						const delta = event.response.messages.slice(committedRef.current)
-						if (delta.length === 0) return
-						committedRef.current = event.response.messages.length
-
-						const { committedToolCallIds, committedText } = await commitDelta(delta)
+						const { committedToolCallIds, committedText } = await commitDelta(
+							event.response.messages,
+						)
 
 						if (committedToolCallIds.size > 0) {
 							setActiveTools((prev) => prev.filter((t) => !committedToolCallIds.has(t.id)))
@@ -165,7 +172,9 @@ export function useAgentTurn(
 							break
 						}
 						case "tool-result": {
-							const { text, isError } = summarizeToolOutput(part.output as ToolResultOutput)
+							const { text, isError } = summarizeToolOutput(
+								toToolResultOutput(part.output as ToolResult),
+							)
 							setActiveTools((prev) =>
 								prev.map((t) => {
 									if (t.id !== part.toolCallId) return t
@@ -175,22 +184,35 @@ export function useAgentTurn(
 									let lineCount: number | undefined
 									let matchCount: number | undefined
 									if (t.name === "read") lineCount = text.split("\n").length
-									else if (t.name === "grep") matchCount = text.split("\n").filter(Boolean).length
+									else if (t.name === "grep") matchCount = countGrepMatches(text)
 									return { ...t, status: "success" as const, lineCount, matchCount }
 								}),
 							)
 							break
 						}
+						case "tool-error":
+							setActiveTools((prev) =>
+								prev.map((t) =>
+									t.id === part.toolCallId
+										? { ...t, status: "failure", error: errorMessage(part.error) }
+										: t,
+								),
+							)
+							break
+						case "finish-step":
+							resetStream()
+							setThinking(false)
+							break
 						case "error":
 							streamError = part.error
 							break
 					}
 				}
 
-				// Complete any uncommitted messages remaining at the end of the stream.
-				const resp = await result.response
-				const finalDelta = resp.messages.slice(committedRef.current)
-				if (finalDelta.length > 0) await commitDelta(finalDelta)
+				// Step callbacks own persistence, including the final step.
+				await result.steps
+				if (signal.aborted) throw signal.reason
+				if (streamError != null) throw streamError
 
 				// Automatically generate a session title if this is the first interaction turn.
 				try {
@@ -206,9 +228,9 @@ export function useAgentTurn(
 				}
 			} catch (err) {
 				if (signal.aborted) {
-					commitMsg({ role: "assistant", content: "(aborted)" })
+					await commitMsg({ role: "assistant", content: "(aborted)" })
 				} else {
-					commitMsg({
+					await commitMsg({
 						role: "assistant",
 						content: `Error: ${errorMessage(streamError ?? err)}`,
 					})
@@ -224,5 +246,5 @@ export function useAgentTurn(
 		[agent, store, sessionId, setContextTokens, commitMsg, commitDelta, appendStream, resetStream],
 	)
 
-	return { busy, thinking, activeTools, bufferedStream, run, abort, setBusy }
+	return { busy, thinking, activeTools, bufferedStream, run, abort }
 }

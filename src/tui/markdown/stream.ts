@@ -1,19 +1,21 @@
-import { type FenceState, MarkdownRenderer } from "./renderer.ts"
+import { sanitizeText } from "../helpers.ts"
+import { EMPTY_FENCE, type FenceState, MarkdownRenderer, parseFence } from "./renderer.ts"
 
 export class StreamingMarkdownRenderer {
 	#stableText = ""
 	#stableOutput = ""
-	#stableFenceState: FenceState = { inCodeBlock: false, codeBlockLang: "" }
+	#stableFenceState: FenceState = EMPTY_FENCE
 	#lastFullText = ""
 	#lastFullOutput = ""
 
-	update(fullText: string): string {
+	update(text: string): string {
+		const fullText = sanitizeText(text)
 		if (fullText === this.#lastFullText) return this.#lastFullOutput
 
 		if (this.#stableText && !fullText.startsWith(this.#stableText)) {
 			this.#stableText = ""
 			this.#stableOutput = ""
-			this.#stableFenceState = { inCodeBlock: false, codeBlockLang: "" }
+			this.#stableFenceState = EMPTY_FENCE
 		}
 
 		const boundary = findStableBoundary(fullText, this.#stableText.length, this.#stableFenceState)
@@ -39,30 +41,16 @@ export class StreamingMarkdownRenderer {
 	reset(): void {
 		this.#stableText = ""
 		this.#stableOutput = ""
-		this.#stableFenceState = { inCodeBlock: false, codeBlockLang: "" }
+		this.#stableFenceState = EMPTY_FENCE
 		this.#lastFullText = ""
 		this.#lastFullOutput = ""
 	}
 }
 
 function getFenceStateFromSeed(seed: FenceState, text: string): FenceState {
-	let inCodeBlock = seed.inCodeBlock
-	let codeBlockLang = seed.codeBlockLang
-
-	for (const line of text.split("\n")) {
-		const trimmed = line.trim()
-		if (/^(?:`{3,}|~{3,})/.test(trimmed)) {
-			if (inCodeBlock) {
-				inCodeBlock = false
-				codeBlockLang = ""
-			} else {
-				inCodeBlock = true
-				codeBlockLang = trimmed.slice(3).trim()
-			}
-		}
-	}
-
-	return { inCodeBlock, codeBlockLang }
+	let state = seed
+	for (const line of text.split("\n")) state = parseFence(line, state) ?? state
+	return state
 }
 
 function findStableBoundary(text: string, minIndex: number, stableFenceState: FenceState): number {

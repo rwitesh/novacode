@@ -1,4 +1,5 @@
-import { Box, Text } from "ink"
+import { Box, type DOMElement, Text, useBoxMetrics } from "ink"
+import { useRef } from "react"
 import { useTheme } from "../theme/index.tsx"
 
 export interface ScrollableListProps<T> {
@@ -19,6 +20,10 @@ export function ScrollableList<T>({
 	emptyMessage,
 }: ScrollableListProps<T>) {
 	const theme = useTheme()
+	const ref = useRef<DOMElement>(null)
+	const { height, hasMeasured } = useBoxMetrics(ref)
+	const capacity = Math.max(1, Math.min(items.length, visibleCount))
+	const count = hasMeasured ? Math.max(1, Math.min(capacity, Math.floor(height))) : capacity
 
 	if (items.length === 0) {
 		return (
@@ -28,22 +33,28 @@ export function ScrollableList<T>({
 		)
 	}
 
-	const maxOffset = Math.max(0, items.length - visibleCount)
+	const maxOffset = Math.max(0, items.length - count)
 	const scrollOffset = Math.max(0, Math.min(selectedIndex, maxOffset))
-	const visibleItems = items.slice(scrollOffset, scrollOffset + visibleCount)
-	const showScrollbar = items.length > visibleCount
-	const scrollbarThumb = Math.round(
-		(scrollOffset / (items.length - visibleCount)) * (visibleCount - 1),
-	)
+	const visibleItems = items.slice(scrollOffset, scrollOffset + count)
+	const showScrollbar = items.length > count
+	const scrollbarThumb = Math.round((scrollOffset / (items.length - count)) * (count - 1))
 
 	return (
-		<Box flexDirection="row" width="100%">
-			<Box flexDirection="column" flexGrow={1}>
+		<Box
+			ref={ref}
+			flexDirection="row"
+			width="100%"
+			height={capacity}
+			minHeight={1}
+			flexShrink={1}
+			overflow="hidden"
+		>
+			<Box flexDirection="column" flexGrow={1} flexShrink={1}>
 				{visibleItems.map((item, i) => {
 					const actualIndex = scrollOffset + i
 					const isSelected = actualIndex === selectedIndex
 					return (
-						<Box key={keyExtractor(item, actualIndex)}>
+						<Box key={keyExtractor(item, actualIndex)} height={1} flexShrink={0}>
 							{renderItem(item, actualIndex, isSelected)}
 						</Box>
 					)
@@ -51,15 +62,15 @@ export function ScrollableList<T>({
 			</Box>
 			{showScrollbar && (
 				<Box flexDirection="column" marginLeft={1}>
-					<Text color={theme.palette.muted}>
-						{scrollbarThumb > 0 ? "░\n".repeat(scrollbarThumb).slice(0, -1) : ""}
-					</Text>
+					{scrollbarThumb > 0 && (
+						<Text color={theme.palette.muted}>{"░\n".repeat(scrollbarThumb).slice(0, -1)}</Text>
+					)}
 					<Text color={theme.palette.primary}>█</Text>
-					<Text color={theme.palette.muted}>
-						{visibleCount - scrollbarThumb - 1 > 0
-							? "░\n".repeat(visibleCount - scrollbarThumb - 1).slice(0, -1)
-							: ""}
-					</Text>
+					{count - scrollbarThumb - 1 > 0 && (
+						<Text color={theme.palette.muted}>
+							{"░\n".repeat(count - scrollbarThumb - 1).slice(0, -1)}
+						</Text>
+					)}
 				</Box>
 			)}
 		</Box>

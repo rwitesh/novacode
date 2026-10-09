@@ -1,48 +1,64 @@
 import chalk from "chalk"
+import { sanitizeText } from "../helpers.ts"
 import { formatRichText } from "./richText.ts"
 import { highlightCode, isHighlightable } from "./syntax.ts"
 
-export type FenceState = { inCodeBlock: boolean; codeBlockLang: string }
+export type FenceState = {
+	inCodeBlock: boolean
+	codeBlockLang: string
+	marker: string
+	length: number
+}
+
+export const EMPTY_FENCE: FenceState = {
+	inCodeBlock: false,
+	codeBlockLang: "",
+	marker: "",
+	length: 0,
+}
+
+export function parseFence(line: string, state: FenceState): FenceState | null {
+	const match = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/)
+	if (!match?.[1]) return null
+	const marker = match[1][0] ?? ""
+	const suffix = (match[2] ?? "").trim()
+	if (state.inCodeBlock) {
+		return marker === state.marker && match[1].length >= state.length && !suffix
+			? EMPTY_FENCE
+			: null
+	}
+	if (marker === "`" && suffix.includes("`")) return null
+	return { inCodeBlock: true, codeBlockLang: suffix, marker, length: match[1].length }
+}
 
 export class MarkdownRenderer {
-	#inCodeBlock = false
-	#codeBlockLang = ""
+	#state = EMPTY_FENCE
 
 	constructor(seed?: FenceState) {
-		if (seed) {
-			this.#inCodeBlock = seed.inCodeBlock
-			this.#codeBlockLang = seed.codeBlockLang
-		}
+		if (seed) this.#state = { ...seed }
 	}
 
 	getState(): FenceState {
-		return {
-			inCodeBlock: this.#inCodeBlock,
-			codeBlockLang: this.#codeBlockLang,
-		}
+		return { ...this.#state }
 	}
 
 	renderChunk(text: string): string {
-		return text
-			.split("\n")
-			.map((line) => this.renderLine(line))
-			.join("\n")
+		const safe = sanitizeText(text)
+		const lines = safe.split("\n")
+		const trailingNewline = safe.endsWith("\n")
+		if (trailingNewline) lines.pop()
+		return lines.map((line) => this.renderLine(line)).join("\n") + (trailingNewline ? "\n" : "")
 	}
 
 	renderLine(line: string): string {
-		const fence = line.match(/^\s*(`{3,}|~{3,})(.*)$/)
+		const fence = parseFence(line, this.#state)
 		if (fence) {
-			if (this.#inCodeBlock) {
-				this.#inCodeBlock = false
-				return ""
-			}
-			this.#inCodeBlock = true
-			this.#codeBlockLang = (fence[2] ?? "").trim()
-			return this.#codeBlockLang ? chalk.gray(`─ ${this.#codeBlockLang}`) : ""
+			this.#state = fence
+			return fence.codeBlockLang ? chalk.gray(`─ ${fence.codeBlockLang}`) : ""
 		}
 
-		if (this.#inCodeBlock) {
-			const lang = this.#codeBlockLang
+		if (this.#state.inCodeBlock) {
+			const lang = this.#state.codeBlockLang
 			const code = isHighlightable(lang) ? highlightCode(line, lang) : chalk.dim(line)
 			return `  ${code}`
 		}

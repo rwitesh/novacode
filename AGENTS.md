@@ -74,8 +74,8 @@ src/
 └── tui/
     ├── app.tsx          # thin Ink shell: composes hooks, renders Conversation + Composer + StatusBar + PromptOverlay
     ├── prompts.tsx      # ALL prompt components + PromptOverlay + standalone runners (collapses former prompts/ dir)
-    ├── helpers.ts       # TUI pure helpers: deriveEventsFromMessages, buildSessionInfo
-    ├── constants.ts     # TUI constants (spinner frames, tool colors, termination phrases)
+    ├── helpers.ts       # pure text safety/input helpers + timeline/session helpers
+    ├── constants.ts     # spinner frames
     ├── types.ts         # UI-specific types: TimelineEvent, PromptMode, ActiveTool
     ├── theme/           # theme system (React context)
     │   ├── index.tsx    # ThemeProvider + useTheme hook, exports Theme type + defaults
@@ -83,7 +83,7 @@ src/
     │   └── default.ts   # defaultTheme singleton
     ├── core/            # presentational primitives reused across prompts/overlay
     │   ├── liveArea.tsx       # Spinner, Cursor (uses ink useAnimation)
-    │   ├── PromptFrame.tsx   # bordered frame wrapper for prompts
+    │   ├── layout.tsx       # bounded chat viewport + bordered prompt frame
     │   ├── scrollableList.tsx# virtual-scroll option list with scrollbar
     │   └── Toggle.tsx        # yes/no toggle pill
     ├── markdown/        # markdown terminal renderer

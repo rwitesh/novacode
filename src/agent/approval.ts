@@ -25,7 +25,9 @@ export function withApproval(tools: ToolSet, policy: PolicyEngine | null): ToolS
 			...t,
 			// biome-ignore lint/suspicious/noExplicitAny: tool inputs/outputs are heterogeneous across a ToolSet; a generic wrapper cannot preserve per-tool generics
 			execute: async (input: any, opts: any): Promise<ToolResult> => {
+				opts.abortSignal?.throwIfAborted()
 				const decision = await policy.check({ name, args: input })
+				opts.abortSignal?.throwIfAborted()
 				if (!decision.allow) {
 					return { content: [decision.reason ?? "Blocked"], isError: true }
 				}

@@ -2,6 +2,7 @@ import { Box, Text } from "ink"
 import BigText from "ink-big-text"
 import { memo } from "react"
 import { Spinner } from "../core/liveArea.tsx"
+import { sanitizeText } from "../helpers.ts"
 import { formatMarkdown } from "../markdown/index.ts"
 import { useTheme } from "../theme/index.tsx"
 import type { TimelineEvent } from "../types.ts"
@@ -14,7 +15,7 @@ const SplashView = memo(function SplashView({
 	update?: { current: string; latest: string }
 }) {
 	const theme = useTheme()
-	const lines = content.split("\n")
+	const lines = sanitizeText(content).split("\n")
 	return (
 		<Box flexDirection="column" marginBottom={0}>
 			<BigText
@@ -32,7 +33,7 @@ const SplashView = memo(function SplashView({
 			{update && (
 				<Box marginTop={1}>
 					<Text color={theme.palette.success} bold>
-						⬆ v{update.current} → v{update.latest}
+						⬆ v{sanitizeText(update.current)} → v{sanitizeText(update.latest)}
 					</Text>
 					<Text color={theme.palette.muted}> Run /update to upgrade</Text>
 				</Box>
@@ -53,7 +54,7 @@ const UserMessageView = memo(function UserMessageView({ content }: { content: st
 				backgroundColor={theme.palette.bg}
 			>
 				<Text bold color={theme.palette.fg} wrap="wrap">
-					{content}
+					{sanitizeText(content)}
 				</Text>
 			</Box>
 		</Box>
@@ -102,9 +103,9 @@ const ToolEventView = memo(function ToolEventView({ event }: { event: TimelineEv
 			<Box flexDirection="row">
 				<Text color={bulletColor}>{bullet} </Text>
 				<Text bold color={theme.palette.primary}>
-					{event.toolName}
+					{sanitizeText(event.toolName)}
 				</Text>
-				<Text color={theme.palette.muted}> {event.args}</Text>
+				<Text color={theme.palette.muted}> {sanitizeText(event.args)}</Text>
 				{event.type === "ToolCompleted" && event.resultLineCount !== undefined && (
 					<Text color={theme.palette.muted}> ({event.resultLineCount} lines)</Text>
 				)}
@@ -114,7 +115,7 @@ const ToolEventView = memo(function ToolEventView({ event }: { event: TimelineEv
 			</Box>
 			{isFailure && (
 				<Box marginLeft={2}>
-					<Text color={theme.palette.error}>{event.error}</Text>
+					<Text color={theme.palette.error}>{sanitizeText(event.error)}</Text>
 				</Box>
 			)}
 		</Box>
@@ -160,21 +161,21 @@ export const EventRenderer = memo(function EventRenderer({ event }: { event: Tim
 		case "Warning":
 			return (
 				<Box flexDirection="row" marginBottom={0}>
-					<Text color={theme.palette.warning}>⚠ {event.content}</Text>
+					<Text color={theme.palette.warning}>⚠ {sanitizeText(event.content)}</Text>
 				</Box>
 			)
 
 		case "SystemMessage":
 			return (
 				<Box flexDirection="row" marginBottom={0}>
-					<Text color={theme.palette.primary}>ℹ {event.content}</Text>
+					<Text color={theme.palette.primary}>ℹ {sanitizeText(event.content)}</Text>
 				</Box>
 			)
 
 		case "Notice":
 			return (
 				<Box flexDirection="column" paddingX={1} paddingBottom={1}>
-					<Text wrap="wrap">{event.content}</Text>
+					<Text wrap="wrap">{sanitizeText(event.content)}</Text>
 				</Box>
 			)
 
@@ -183,7 +184,7 @@ export const EventRenderer = memo(function EventRenderer({ event }: { event: Tim
 				<Box flexDirection="column" marginBottom={1}>
 					<Box flexDirection="row">
 						<Text color={theme.palette.success} bold>
-							⬆ v{event.current} → v{event.latest}
+							⬆ v{sanitizeText(event.current)} → v{sanitizeText(event.latest)}
 						</Text>
 					</Box>
 					<Box marginLeft={2}>

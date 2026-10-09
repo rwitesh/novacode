@@ -1,9 +1,29 @@
 import type { ModelMessage, ToolResultPart } from "ai"
+import stripAnsi from "strip-ansi"
 import { summarizeToolOutput } from "../content.ts"
 import { formatToolArgs } from "../format.ts"
 import { groupSkills } from "../skills/index.ts"
 import type { PermissionMode, Skill } from "../types.ts"
 import type { TimelineEvent } from "./types.ts"
+
+const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+
+export function deleteLastGrapheme(text: string): string {
+	let end = 0
+	for (const segment of segmenter.segment(text)) end = segment.index
+	return text.slice(0, end)
+}
+
+export function sanitizeText(text: string): string {
+	// Preserve layout whitespace, but never forward terminal commands from model/tool content.
+	return stripAnsi(text)
+		.replace(/\r\n/g, "\n")
+		.replace(
+			// biome-ignore lint/suspicious/noControlCharactersInRegex: removes untrusted terminal controls
+			/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g,
+			"",
+		)
+}
 
 export function buildSessionInfo(
 	version: string,
@@ -23,6 +43,10 @@ export function buildSessionInfo(
 		lines.push(`  skills: ${names.join(", ")}`)
 	}
 	return lines.join("\n")
+}
+
+export function countGrepMatches(text: string): number {
+	return text === "No matches" ? 0 : text.split("\n").filter(Boolean).length
 }
 
 export function deriveEventsFromMessages(msgs: ModelMessage[]): TimelineEvent[] {
@@ -98,7 +122,7 @@ export function deriveEventsFromMessages(msgs: ModelMessage[]): TimelineEvent[] 
 							if (part.toolName === "read") {
 								completedEvent.resultLineCount = text.split("\n").length
 							} else if (part.toolName === "grep") {
-								completedEvent.resultMatchCount = text.split("\n").filter(Boolean).length
+								completedEvent.resultMatchCount = countGrepMatches(text)
 							}
 							events.push(completedEvent)
 						}

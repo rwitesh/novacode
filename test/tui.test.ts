@@ -1,6 +1,12 @@
 import type { ModelMessage } from "ai"
 import { describe, expect, it } from "vitest"
-import { deriveEventsFromMessages } from "../src/tui/helpers.ts"
+import { deleteLastGrapheme, deriveEventsFromMessages } from "../src/tui/helpers.ts"
+
+describe("TUI text helpers", () => {
+	it.each(["😀", "𐐀", "é", "👩‍💻"])("deletes a complete grapheme: %s", (text) => {
+		expect(deleteLastGrapheme(`abc${text}`)).toBe("abc")
+	})
+})
 
 describe("TUI deriveEventsFromMessages", () => {
 	it("should map UserMessage correctly", () => {
@@ -66,6 +72,32 @@ describe("TUI deriveEventsFromMessages", () => {
 			args: "path: README.md",
 			resultLineCount: 2,
 		})
+	})
+
+	it.each([
+		["No matches", 0],
+		["", 0],
+		["file.ts:1:match", 1],
+		["a:1:x\nb:2:y", 2],
+	])("counts grep results: %s", (text, count) => {
+		const events = deriveEventsFromMessages([
+			{
+				role: "assistant",
+				content: [{ type: "tool-call", toolCallId: "grep-1", toolName: "grep", input: {} }],
+			},
+			{
+				role: "tool",
+				content: [
+					{
+						type: "tool-result",
+						toolCallId: "grep-1",
+						toolName: "grep",
+						output: { type: "text", value: text },
+					},
+				],
+			},
+		])
+		expect(events[0]).toMatchObject({ type: "ToolCompleted", resultMatchCount: count })
 	})
 
 	it("should map failed tool calls", () => {

@@ -17,9 +17,13 @@ export function Conversation({
 			<Static items={committedEvents} style={{ width }}>
 				{(event) => <EventRenderer key={event.id} event={event} />}
 			</Static>
-			{liveEvents.map((event) => (
-				<EventRenderer key={event.id} event={event} />
-			))}
+			<Box flexDirection="column" flexShrink={1} overflowY="hidden" justifyContent="flex-end">
+				<Box flexDirection="column" flexShrink={0}>
+					{liveEvents.map((event) => (
+						<EventRenderer key={event.id} event={event} />
+					))}
+				</Box>
+			</Box>
 		</Box>
 	)
 }

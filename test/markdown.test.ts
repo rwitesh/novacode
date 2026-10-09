@@ -60,6 +60,7 @@ describe("MarkdownRenderer — code blocks", () => {
 		expect(visible).toContain("  const a = 1")
 		expect(visible).toContain("  const b = 2")
 		expect(cont.getState().inCodeBlock).toBe(false)
+		expect(first + second).toBe(formatMarkdown("```ts\nconst a = 1\nconst b = 2\n```\n"))
 	})
 })
 
@@ -78,10 +79,18 @@ describe("MarkdownRenderer — code syntax highlighting", () => {
 })
 
 describe("MarkdownRenderer — inline formatting", () => {
-	it("keeps inline code visible", () => {
-		const out = strip(formatMarkdown("use `readFile` here"))
-		expect(out).toContain("readFile")
-		expect(out).not.toContain("`readFile`")
+	it.each(["foo_bar_baz", "**literal**", "[x](url)"])(
+		"preserves literal syntax in inline code: %s",
+		(code) => {
+			expect(strip(formatMarkdown(`use \`${code}\` here`))).toBe(`use ${code} here`)
+		},
+	)
+	it.each([
+		["**bold and _italic_**", "bold and italic"],
+		["*use `foo_bar_baz`*", "use foo_bar_baz"],
+		["[**docs**](https://example.com/foo_bar_baz)", "docs (https://example.com/foo_bar_baz)"],
+	])("renders nested inline formatting without reparsing styled output", (markdown, visible) => {
+		expect(strip(formatMarkdown(markdown))).toBe(visible)
 	})
 
 	it("keeps bold and italic markers off the visible text", () => {
@@ -124,6 +133,23 @@ describe("MarkdownRenderer — tables are not specially rendered", () => {
 		expect(visible).not.toContain("┬")
 		expect(visible).not.toContain("┼")
 		expect(visible).not.toContain("┤")
+	})
+})
+
+describe("MarkdownRenderer — fence delimiters", () => {
+	it.each([
+		["```text\n~~~\n**literal**\n```\nAfter", "  ~~~\n  **literal**\n\nAfter"],
+		["````text\n```\n**literal**\n````\nAfter", "  ```\n  **literal**\n\nAfter"],
+		[
+			"```text\n```not a close\n**literal**\n```\nAfter",
+			"  ```not a close\n  **literal**\n\nAfter",
+		],
+	])("only closes matching fences", (text, expected) => {
+		expect(strip(formatMarkdown(text))).toContain(expected)
+		const stream = new StreamingMarkdownRenderer()
+		for (let i = 1; i <= text.length; i++) {
+			expect(strip(stream.update(text.slice(0, i)))).toBe(strip(formatMarkdown(text.slice(0, i))))
+		}
 	})
 })
 

@@ -168,7 +168,7 @@ export function useTuiTimeline({
 			}
 		}
 
-		if (turn.busy && !turn.thinking && !turn.bufferedStream) {
+		if (turn.busy && !turn.thinking) {
 			events.push({ id: "active-working", type: "Thinking" })
 		}
 

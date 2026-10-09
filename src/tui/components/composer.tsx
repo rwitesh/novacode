@@ -3,6 +3,7 @@ import { memo } from "react"
 import type { Cmd } from "../../types.ts"
 import { Cursor } from "../core/liveArea.tsx"
 import { ScrollableList } from "../core/scrollableList.tsx"
+import { sanitizeText } from "../helpers.ts"
 import { useTheme } from "../theme/index.tsx"
 
 export const Composer = memo(function Composer({
@@ -24,6 +25,8 @@ export const Composer = memo(function Composer({
 			flexDirection="column"
 			width="100%"
 			flexShrink={0}
+			maxHeight={Math.max(3, terminalRows - 6)}
+			overflowY="hidden"
 			backgroundColor={theme.palette.bg}
 			paddingX={1}
 			paddingBottom={1}
@@ -57,11 +60,19 @@ export const Composer = memo(function Composer({
 						{"❯"}
 					</Text>
 				</Box>
-				<Box flexGrow={1} flexShrink={1}>
-					<Text color={theme.palette.fg} wrap="wrap">
-						{input}
-						<Cursor />
-					</Text>
+				<Box
+					flexGrow={1}
+					flexShrink={1}
+					flexDirection="column"
+					justifyContent="flex-end"
+					overflowY="hidden"
+				>
+					<Box flexShrink={0}>
+						<Text color={theme.palette.fg} wrap="wrap">
+							{sanitizeText(input)}
+							<Cursor />
+						</Text>
+					</Box>
 				</Box>
 			</Box>
 		</Box>

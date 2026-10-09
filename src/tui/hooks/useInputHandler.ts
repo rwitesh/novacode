@@ -5,6 +5,7 @@ import type { Agent } from "../../agent/agent.ts"
 import { COMMANDS, dispatch } from "../../commands/index.ts"
 import type { SessionStore } from "../../db/sessionStore.ts"
 import type { Prompts, Skill } from "../../types.ts"
+import { deleteLastGrapheme } from "../helpers.ts"
 import type { PromptMode } from "../types.ts"
 
 /**
@@ -32,7 +33,7 @@ export function useInputHandler({
 	store: SessionStore
 	session: {
 		sessionId: string
-		commitMsg: (msg: ModelMessage) => void
+		commitMsg: (msg: ModelMessage) => Promise<void>
 		switchSession: (id: string) => Promise<void>
 		newSession: () => Promise<void>
 		addNotice: (text: string) => void
@@ -40,7 +41,6 @@ export function useInputHandler({
 	}
 	turn: {
 		busy: boolean
-		setBusy: (b: boolean) => void
 		run: (ctrl: AbortController) => Promise<void>
 		abort: () => void
 	}
@@ -57,6 +57,18 @@ export function useInputHandler({
 	const lastExitPress = useRef<{ key: "C"; ts: number } | null>(null)
 	const history = useRef<string[]>([])
 	const hIdx = useRef(-1)
+	const submitting = useRef(false)
+	const submissionCtrl = useRef<AbortController | null>(null)
+	const [commandBusy, setCommandBusy] = useState(false)
+	const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+	useEffect(
+		() => () => {
+			submissionCtrl.current?.abort()
+			if (exitTimer.current) clearTimeout(exitTimer.current)
+		},
+		[],
+	)
 
 	// Reset command suggestion selection when input query changes.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reset selection on input change
@@ -78,10 +90,14 @@ export function useInputHandler({
 	useInput((ch, key) => {
 		// --- 1. System Keys (Exit and Abort Control) ---
 		if (key.ctrl && (ch === "c" || ch === "d")) {
-			if (turn.busy) {
-				if (ch === "c") turn.abort()
+			if (turn.busy || submissionCtrl.current) {
+				if (ch === "c") {
+					submissionCtrl.current?.abort()
+					turn.abort()
+				}
 				return
 			}
+			if (submitting.current && ch === "c") turn.abort()
 			if (ch === "d") {
 				exit()
 				return
@@ -98,7 +114,8 @@ export function useInputHandler({
 			} else {
 				lastExitPress.current = { key: "C", ts: now }
 				setExitConfirmKey("C")
-				setTimeout(() => {
+				if (exitTimer.current) clearTimeout(exitTimer.current)
+				exitTimer.current = setTimeout(() => {
 					if (lastExitPress.current?.key === "C" && Date.now() - lastExitPress.current.ts >= 2000) {
 						lastExitPress.current = null
 						setExitConfirmKey(null)
@@ -113,7 +130,8 @@ export function useInputHandler({
 		if (mode.type !== "chat") return
 
 		if (key.escape) {
-			if (turn.busy) {
+			if (turn.busy || submissionCtrl.current) {
+				submissionCtrl.current?.abort()
 				turn.abort()
 			} else if (input) {
 				setInput("")
@@ -153,14 +171,15 @@ export function useInputHandler({
 		// --- 3. Text Modification & Accumulation ---
 		if (!key.return) {
 			setInput((prev) => {
-				if (key.backspace || key.delete) return prev.slice(0, -1)
+				if (key.backspace || key.delete) return deleteLastGrapheme(prev)
+				if (key.ctrl || key.meta) return prev
 				return prev + (ch || "")
 			})
 			return
 		}
 
 		// Do not process text submissions if the agent turn loop is actively running.
-		if (turn.busy) return
+		if (turn.busy || submitting.current) return
 
 		let line = input.trim()
 		if (!line) return
@@ -171,6 +190,7 @@ export function useInputHandler({
 			if (match) line = `/${match.name}`
 		}
 
+		submitting.current = true
 		setInput("")
 		history.current.unshift(line)
 		hIdx.current = -1
@@ -183,16 +203,13 @@ export function useInputHandler({
 				(c) => c.name === cmdName || c.aliases?.includes(cmdName ?? ""),
 			)
 
-			if (matchedCmd?.name === "permission") {
-				void handlePermissionSwitch()
-				return
-			}
-
+			setCommandBusy(true)
 			const runDispatch = async () => {
-				if (line === "/compact") {
-					turn.setBusy(true)
-				}
 				try {
+					if (matchedCmd?.name === "permission") {
+						await handlePermissionSwitch()
+						return
+					}
 					const r = await dispatch(
 						line,
 						agent,
@@ -210,7 +227,8 @@ export function useInputHandler({
 				} catch (err) {
 					console.error(`Command dispatch error for "${line}":`, err)
 				} finally {
-					turn.setBusy(false)
+					submitting.current = false
+					setCommandBusy(false)
 				}
 			}
 			void runDispatch()
@@ -220,15 +238,25 @@ export function useInputHandler({
 		// Standard prompt query submission to LLM.
 		const userMsg: ModelMessage = { role: "user", content: line }
 		session.clearNotices()
-		session.commitMsg(userMsg)
-
 		const ctrl = new AbortController()
-		void turn.run(ctrl)
+		submissionCtrl.current = ctrl
+		const submit = async () => {
+			try {
+				await session.commitMsg(userMsg)
+				if (!ctrl.signal.aborted) await turn.run(ctrl)
+			} catch (err) {
+				console.error("Failed to persist or run the agent turn:", err)
+			} finally {
+				submissionCtrl.current = null
+				submitting.current = false
+			}
+		}
+		void submit()
 	})
 
 	return {
 		input,
-		setInput,
+		commandBusy,
 		suggestions,
 		selCmdIdx,
 		exitConfirmKey,
