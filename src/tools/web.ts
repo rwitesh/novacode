@@ -24,18 +24,10 @@ function htmlToText(html: string): string {
 	let text = html
 	// Remove HTML comments (loop to handle nested/re-introduced patterns)
 	text = stripRepeatedly(text, /<!--[\s\S]*?-->/g, "")
-	// Remove script blocks (loop + tolerate whitespace in close tag like </script >)
-	text = stripRepeatedly(text, /<script[\s\S]*?<\/script[^>]*>/gi, "")
-	// Remove style blocks
-	text = stripRepeatedly(text, /<style[\s\S]*?<\/style[^>]*>/gi, "")
+	// Decode entities BEFORE stripping tags: encoded markup like &lt;script&gt;
+	// must be stripped like real tags, not re-formed as literal tags afterwards.
+	// &amp; decodes LAST to avoid double-unescaping.
 	text = text
-		// Keep link hrefs visible (supports single, double, or no quotes)
-		.replace(/<a[^>]*href=["']?([^"'>\s]*)["']?[^>]*>([\s\S]*?)<\/a>/gi, "[$2]($1)")
-		// Block-level tags → newlines
-		.replace(/<\/?(p|div|br|h[1-6]|li|tr|blockquote|pre|hr)[^>]*>/gi, "\n")
-		// Remove remaining tags
-		.replace(/<[^>]+>/g, "")
-		// Decode common HTML entities — decode &amp; LAST to avoid double-unescaping
 		.replace(/&lt;/g, "<")
 		.replace(/&gt;/g, ">")
 		.replace(/&quot;/g, '"')
@@ -50,6 +42,22 @@ function htmlToText(html: string): string {
 		.replace(/&rsquo;/g, "'")
 		.replace(/&nbsp;/g, " ")
 		.replace(/&amp;/g, "&")
+	// Remove script blocks (loop + tolerate whitespace in close tag like </script >)
+	text = stripRepeatedly(text, /<script[\s\S]*?<\/script[^>]*>/gi, "")
+	// Remove style blocks
+	text = stripRepeatedly(text, /<style[\s\S]*?<\/style[^>]*>/gi, "")
+	text = text
+		// Keep link hrefs visible (supports single, double, or no quotes)
+		.replace(/<a[^>]*href=["']?([^"'>\s]*)["']?[^>]*>([\s\S]*?)<\/a>/gi, "[$2]($1)")
+		// Block-level tags → newlines
+		.replace(/<\/?(p|div|br|h[1-6]|li|tr|blockquote|pre|hr)[^>]*>/gi, "\n")
+	// Remove remaining tags (loop so split-apart tags can't re-form);
+	// require a tag-like opener so decoded prose like "5 < 6" survives
+	text = stripRepeatedly(text, /<\/?[a-zA-Z!][^>]*>/g, "")
+	text = text
+		// Escape any residual angle bracket (e.g. a truncated "<script" with no
+		// closing '>') so markup can never survive into tool output
+		.replace(/</g, "&lt;")
 		// Collapse whitespace but keep paragraph breaks
 		.replace(/[ \t]+/g, " ")
 		.replace(/\n{3,}/g, "\n\n")
@@ -126,7 +134,8 @@ export const webSearchTool = () =>
 					const snippetMatch = snippetRegex.exec(block)
 					const snippet = snippetMatch ? htmlToText(snippetMatch[1]!) : ""
 
-					// DuckDuckGo wraps URLs through a redirect; extract the actual URL
+					// DuckDuckGo wraps URLs through a redirect; accept only absolute
+					// http(s) targets so encoded markup can't be smuggled into output
 					let cleanUrl = rawUrl
 					try {
 						const urlToParse = rawUrl.startsWith("//")
@@ -135,7 +144,12 @@ export const webSearchTool = () =>
 								? `https://duckduckgo.com${rawUrl}`
 								: rawUrl
 						const param = new URL(urlToParse).searchParams.get("uddg")
-						if (param) cleanUrl = param
+						if (param) {
+							const decoded = new URL(param)
+							if (decoded.protocol === "http:" || decoded.protocol === "https:") {
+								cleanUrl = decoded.toString()
+							}
+						}
 					} catch {
 						// Not a redirect URL, use as-is
 					}

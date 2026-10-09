@@ -61,6 +61,43 @@ describe("web_search tool", () => {
 		}
 	})
 
+	it("rejects markup and non-http payloads smuggled through redirect URLs", async () => {
+		const mockHtml = `
+			<div class="links_main links_deep result__body">
+				<h2 class="result__title">
+					<a class="result__a" href="//duckduckgo.com/l/?uddg=%3Cscript%3Ealert%28%29%3C%2Fscript%3E">Evil</a>
+				</h2>
+				<a class="result__snippet">snippet</a>
+			</div>
+			<div class="links_main links_deep result__body">
+				<h2 class="result__title">
+					<a class="result__a" href="//duckduckgo.com/l/?uddg=javascript%3Aalert%281%29">JS scheme</a>
+				</h2>
+				<a class="result__snippet">snippet</a>
+			</div>
+		`
+		const restore = mockFetch(async () => {
+			return new Response(mockHtml, {
+				status: 200,
+				headers: { "Content-Type": "text/html" },
+			})
+		})
+
+		try {
+			const search = webSearchTool()
+			const result = await run(search, { query: "evil" })
+			expect(result.isError).toBe(false)
+
+			const text = result.content[0]!
+			expect(text).not.toContain("<script")
+			expect(text).not.toContain("javascript:")
+			// Keeps the encoded DuckDuckGo redirect URL instead of the payload
+			expect(text).toContain("duckduckgo.com/l/?uddg=")
+		} finally {
+			restore()
+		}
+	})
+
 	it("returns informative message when no results are found", async () => {
 		const restore = mockFetch(async () => {
 			return new Response("<body>No results found</body>", { status: 200 })
@@ -146,6 +183,40 @@ describe("web_fetch tool", () => {
 			// Entities should be decoded
 			expect(text).toContain("Second & final line")
 			expect(text).toContain("with entities like 'quote'")
+		} finally {
+			restore()
+		}
+	})
+
+	it("strips entity-encoded and split-apart script tags from output", async () => {
+		const mockHtml = `
+			<div>
+				<p>Safe &lt;script&gt;evil()&lt;/script&gt; text</p>
+				<p>text</p><script
+				<p>a</p><scr<script>ipt>x</scr</script>ipt><p>b</p>
+				<p>5 &lt; 6 comparison stays readable</p>
+			</div>
+		`
+		const restore = mockFetch(async () => {
+			return new Response(mockHtml, {
+				status: 200,
+				headers: { "Content-Type": "text/html" },
+			})
+		})
+
+		try {
+			const fetchTool = webFetchTool()
+			const result = await run(fetchTool, { url: "https://example.com/evil" })
+			expect(result.isError).toBe(false)
+
+			const text = result.content[0]!
+			expect(text).not.toContain("<script")
+			expect(text).not.toContain("evil()")
+			expect(text).toContain("Safe text")
+			expect(text).toContain("text")
+			expect(text).toContain("a")
+			expect(text).toContain("b")
+			expect(text).toContain("5 &lt; 6 comparison stays readable")
 		} finally {
 			restore()
 		}
