@@ -29,8 +29,6 @@ export const Composer = memo(function Composer({
 			overflowY="hidden"
 			backgroundColor={theme.colors.background}
 			paddingX={1}
-			paddingBottom={1}
-			marginTop={1}
 		>
 			{suggestions.length > 0 && (
 				<Box paddingTop={1}>
@@ -54,7 +52,13 @@ export const Composer = memo(function Composer({
 					/>
 				</Box>
 			)}
-			<Box flexDirection="row" paddingY={1}>
+			<Box
+				flexDirection="row"
+				borderStyle="single"
+				borderLeft={false}
+				borderRight={false}
+				borderColor={theme.colors.info}
+			>
 				<Box flexShrink={0} marginRight={1}>
 					<Text bold color={theme.colors.muted}>
 						{"❯"}

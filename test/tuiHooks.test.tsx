@@ -19,6 +19,7 @@ import { Conversation } from "../src/tui/components/conversation.tsx"
 import { EventRenderer } from "../src/tui/components/message.tsx"
 import { StatusBar } from "../src/tui/components/statusBar.tsx"
 import { Viewport } from "../src/tui/core/layout.tsx"
+import { sanitizeText } from "../src/tui/helpers.ts"
 import { useAgentTurn } from "../src/tui/hooks/useAgentTurn.ts"
 import { useInputHandler } from "../src/tui/hooks/useInputHandler.ts"
 import { usePrompts } from "../src/tui/hooks/usePrompts.ts"
@@ -463,6 +464,26 @@ describe("TUI live viewport", () => {
 })
 
 describe("TUI composer layout", () => {
+	it("places blue separators directly above and below the input", async () => {
+		const previousLevel = chalk.level
+		chalk.level = 3
+		try {
+			const view = await mount(<Composer input="npm test" suggestions={[]} selCmdIdx={0} />)
+			const output = view.frames.at(-1)?.output ?? ""
+			const lines = sanitizeText(output)
+				.trim()
+				.split("\n")
+				.map((line) => line.trim())
+			expect(lines).toHaveLength(3)
+			expect(lines[0]).toMatch(/^─+$/)
+			expect(lines[1]).toContain("❯ npm test")
+			expect(lines[2]).toMatch(/^─+$/)
+			expect(output).toContain("\x1b[38;2;96;165;250m")
+		} finally {
+			chalk.level = previousLevel
+		}
+	})
+
 	it("keeps the input tail, working indicator and footer visible for long input", async () => {
 		const input = Array.from({ length: 60 }, (_, i) => `input-${i}`).join("\n")
 		const view = await mount(
