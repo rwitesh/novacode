@@ -2,7 +2,7 @@ import { Box, Text } from "ink"
 import BigText from "ink-big-text"
 import { memo } from "react"
 import { Spinner } from "../core/liveArea.tsx"
-import { sanitizeText } from "../helpers.ts"
+import { isErrorMessage, sanitizeText } from "../helpers.ts"
 import { formatMarkdown } from "../markdown/index.ts"
 import { useTheme } from "../theme/index.tsx"
 import type { TimelineEvent } from "../types.ts"
@@ -26,16 +26,16 @@ const SplashView = memo(function SplashView({
 				lineHeight={0}
 			/>
 			{lines.map((line) => (
-				<Text key={line} color={theme.palette.muted}>
+				<Text key={line} color={theme.colors.muted}>
 					{line}
 				</Text>
 			))}
 			{update && (
 				<Box marginTop={1}>
-					<Text color={theme.palette.success} bold>
+					<Text color={theme.colors.success} bold>
 						⬆ v{sanitizeText(update.current)} → v{sanitizeText(update.latest)}
 					</Text>
-					<Text color={theme.palette.muted}> Run /update to upgrade</Text>
+					<Text color={theme.colors.muted}> Run /update to upgrade</Text>
 				</Box>
 			)}
 		</Box>
@@ -51,9 +51,9 @@ const UserMessageView = memo(function UserMessageView({ content }: { content: st
 				width="100%"
 				paddingX={1}
 				paddingY={1}
-				backgroundColor={theme.palette.bg}
+				backgroundColor={theme.colors.user.background}
 			>
-				<Text bold color={theme.palette.fg} wrap="wrap">
+				<Text bold color={theme.colors.user.text} wrap="wrap">
 					{sanitizeText(content)}
 				</Text>
 			</Box>
@@ -69,10 +69,11 @@ const AssistantMessageView = memo(function AssistantMessageView({
 	isStreaming?: boolean
 }) {
 	const theme = useTheme()
-	const text = isStreaming ? content : formatMarkdown(content)
+	const isError = isErrorMessage(content)
+	const text = isError ? sanitizeText(content) : isStreaming ? content : formatMarkdown(content)
 	return (
 		<Box flexDirection="column" paddingX={1} paddingBottom={1}>
-			<Text color={theme.palette.fg} wrap="wrap">
+			<Text color={isError ? theme.colors.error : theme.colors.assistant} wrap="wrap">
 				{text}
 			</Text>
 		</Box>
@@ -92,30 +93,33 @@ const ToolEventView = memo(function ToolEventView({ event }: { event: TimelineEv
 	const isRunning = event.type === "ToolStarted"
 	const isFailure = event.type === "ToolFailed"
 	const bulletColor = isRunning
-		? theme.palette.warning
+		? theme.colors.warning
 		: isFailure
-			? theme.palette.error
-			: theme.palette.success
+			? theme.colors.error
+			: theme.colors.success
 	const bullet = isRunning ? "○" : "●"
 
 	return (
 		<Box flexDirection="column" paddingX={1} paddingBottom={1}>
 			<Box flexDirection="row">
 				<Text color={bulletColor}>{bullet} </Text>
-				<Text bold color={theme.palette.primary}>
+				<Text bold color={isFailure ? theme.colors.error : theme.colors.tool}>
 					{sanitizeText(event.toolName)}
 				</Text>
-				<Text color={theme.palette.muted}> {sanitizeText(event.args)}</Text>
+				<Text color={isFailure ? theme.colors.error : theme.colors.muted}>
+					{" "}
+					{sanitizeText(event.args)}
+				</Text>
 				{event.type === "ToolCompleted" && event.resultLineCount !== undefined && (
-					<Text color={theme.palette.muted}> ({event.resultLineCount} lines)</Text>
+					<Text color={theme.colors.muted}> ({event.resultLineCount} lines)</Text>
 				)}
 				{event.type === "ToolCompleted" && event.resultMatchCount !== undefined && (
-					<Text color={theme.palette.muted}> ({event.resultMatchCount} matches)</Text>
+					<Text color={theme.colors.muted}> ({event.resultMatchCount} matches)</Text>
 				)}
 			</Box>
 			{isFailure && (
 				<Box marginLeft={2}>
-					<Text color={theme.palette.error}>{sanitizeText(event.error)}</Text>
+					<Text color={theme.colors.error}>{sanitizeText(event.error)}</Text>
 				</Box>
 			)}
 		</Box>
@@ -129,7 +133,7 @@ const ThinkingView = memo(function ThinkingView({ label }: { label: string }) {
 			<Box marginRight={1}>
 				<Spinner />
 			</Box>
-			<Text color={theme.palette.warning}>{label}</Text>
+			<Text color={theme.colors.reasoning}>{label}</Text>
 		</Box>
 	)
 })
@@ -161,21 +165,26 @@ export const EventRenderer = memo(function EventRenderer({ event }: { event: Tim
 		case "Warning":
 			return (
 				<Box flexDirection="row" marginBottom={0}>
-					<Text color={theme.palette.warning}>⚠ {sanitizeText(event.content)}</Text>
+					<Text color={theme.colors.warning}>⚠ {sanitizeText(event.content)}</Text>
 				</Box>
 			)
 
 		case "SystemMessage":
 			return (
 				<Box flexDirection="row" marginBottom={0}>
-					<Text color={theme.palette.primary}>ℹ {sanitizeText(event.content)}</Text>
+					<Text color={theme.colors.info}>ℹ {sanitizeText(event.content)}</Text>
 				</Box>
 			)
 
 		case "Notice":
 			return (
 				<Box flexDirection="column" paddingX={1} paddingBottom={1}>
-					<Text wrap="wrap">{sanitizeText(event.content)}</Text>
+					<Text
+						color={isErrorMessage(event.content) ? theme.colors.error : theme.colors.text}
+						wrap="wrap"
+					>
+						{sanitizeText(event.content)}
+					</Text>
 				</Box>
 			)
 
@@ -183,12 +192,12 @@ export const EventRenderer = memo(function EventRenderer({ event }: { event: Tim
 			return (
 				<Box flexDirection="column" marginBottom={1}>
 					<Box flexDirection="row">
-						<Text color={theme.palette.success} bold>
+						<Text color={theme.colors.success} bold>
 							⬆ v{sanitizeText(event.current)} → v{sanitizeText(event.latest)}
 						</Text>
 					</Box>
 					<Box marginLeft={2}>
-						<Text color={theme.palette.muted}>Run /update to upgrade</Text>
+						<Text color={theme.colors.muted}>Run /update to upgrade</Text>
 					</Box>
 				</Box>
 			)

@@ -30,14 +30,14 @@ function OptionList({ options, selectedIdx }: { options: SelectOption[]; selecte
 					<Text
 						wrap="truncate-end"
 						bold={isSelected}
-						color={isSelected ? theme.palette.bg : theme.palette.fg}
-						backgroundColor={isSelected ? theme.palette.primary : undefined}
+						color={isSelected ? theme.colors.selection.text : theme.colors.text}
+						backgroundColor={isSelected ? theme.colors.selection.background : undefined}
 					>
 						{isSelected ? "❯ " : "  "}
 						{sanitizeText(opt.label)}
 					</Text>
 					{opt.hint && isSelected && (
-						<Text color={theme.palette.muted}> {sanitizeText(opt.hint)}</Text>
+						<Text color={theme.colors.muted}> {sanitizeText(opt.hint)}</Text>
 					)}
 				</Box>
 			)}
@@ -72,13 +72,13 @@ export function ConfirmPrompt({
 	return (
 		<PromptFrame>
 			<Box marginBottom={1}>
-				<Text bold color={useTheme().palette.muted}>
+				<Text bold color={useTheme().colors.muted}>
 					{sanitizeText(message)}
 				</Text>
 			</Box>
 			<Toggle yesLabel="Yes" noLabel="No" selected={yes ? "yes" : "no"} />
 			<Box marginTop={1}>
-				<Text color={useTheme().palette.muted}>←→ toggle · Enter confirm · Esc cancel</Text>
+				<Text color={useTheme().colors.muted}>←→ toggle · Enter confirm · Esc cancel</Text>
 			</Box>
 		</PromptFrame>
 	)
@@ -125,21 +125,21 @@ export function SelectPrompt({
 		<PromptFrame>
 			{header && (
 				<Box marginBottom={1}>
-					<Text color={theme.palette.muted}>{header}</Text>
+					<Text color={theme.colors.muted}>{header}</Text>
 				</Box>
 			)}
 			<Box marginBottom={1}>
-				<Text bold color={theme.palette.muted}>
+				<Text bold color={theme.colors.muted}>
 					{sanitizeText(message)}
 				</Text>
 			</Box>
 			<OptionList options={options} selectedIdx={idx} />
 			<Box marginTop={1}>
-				<Text color={theme.palette.muted}>↑↓ navigate · Enter select · Esc cancel</Text>
+				<Text color={theme.colors.muted}>↑↓ navigate · Enter select · Esc cancel</Text>
 			</Box>
 			{footer && (
 				<Box marginTop={1}>
-					<Text color={theme.palette.muted}>{footer}</Text>
+					<Text color={theme.colors.muted}>{footer}</Text>
 				</Box>
 			)}
 		</PromptFrame>
@@ -210,34 +210,34 @@ export function SearchSelectPrompt({
 		<PromptFrame>
 			{header && (
 				<Box marginBottom={1}>
-					<Text color={theme.palette.muted}>{header}</Text>
+					<Text color={theme.colors.muted}>{header}</Text>
 				</Box>
 			)}
 			<Box marginBottom={1}>
-				<Text bold color={theme.palette.muted}>
+				<Text bold color={theme.colors.muted}>
 					{sanitizeText(message)}
 				</Text>
 			</Box>
 			<Box flexDirection="row" marginBottom={1}>
-				<Text color={theme.palette.muted}>Search: </Text>
-				<Text color={theme.palette.fg}>{sanitizeText(query)}</Text>
+				<Text color={theme.colors.muted}>Search: </Text>
+				<Text color={theme.colors.text}>{sanitizeText(query)}</Text>
 				<Cursor />
 			</Box>
 			{filtered.length === 0 ? (
 				<Box>
-					<Text color={theme.palette.muted}>No matches</Text>
+					<Text color={theme.colors.muted}>No matches</Text>
 				</Box>
 			) : (
 				<OptionList options={filtered} selectedIdx={sel} />
 			)}
 			<Box marginTop={1}>
-				<Text color={theme.palette.muted}>
+				<Text color={theme.colors.muted}>
 					type to filter · ↑↓ navigate · Enter select · Esc cancel
 				</Text>
 			</Box>
 			{footer && (
 				<Box marginTop={1}>
-					<Text color={theme.palette.muted}>{footer}</Text>
+					<Text color={theme.colors.muted}>{footer}</Text>
 				</Box>
 			)}
 		</PromptFrame>
@@ -286,26 +286,26 @@ export function PasswordPrompt({
 	return (
 		<PromptFrame>
 			<Box marginBottom={1}>
-				<Text bold color={theme.palette.muted}>
+				<Text bold color={theme.colors.muted}>
 					{sanitizeText(message)}
 				</Text>
 			</Box>
 			<Box flexDirection="row">
-				<Text color={theme.palette.muted}>│ </Text>
-				<Text bold color={theme.palette.fg}>
+				<Text color={theme.colors.muted}>│ </Text>
+				<Text bold color={theme.colors.text}>
 					{"*".repeat(value.length)}
 				</Text>
-				<Text color={theme.palette.muted}>│</Text>
+				<Text color={theme.colors.muted}>│</Text>
 			</Box>
 			{error && (
 				<Box marginTop={1}>
-					<Text bold color={theme.palette.error}>
+					<Text bold color={theme.colors.error}>
 						✗ {sanitizeText(error)}
 					</Text>
 				</Box>
 			)}
 			<Box marginTop={1}>
-				<Text color={theme.palette.muted}>Enter submit · Esc cancel</Text>
+				<Text color={theme.colors.muted}>Enter submit · Esc cancel</Text>
 			</Box>
 		</PromptFrame>
 	)
@@ -355,11 +355,11 @@ function ApprovalSummary({
 				overflowY="hidden"
 			>
 				<Box ref={contentRef} flexDirection="column" flexShrink={0} marginTop={-scrollOffset}>
-					<Text color={theme.palette.fg}>{text}</Text>
+					<Text color={theme.colors.text}>{text}</Text>
 				</Box>
 			</Box>
 			<Box flexShrink={0}>
-				<Text color={theme.palette.muted} wrap="truncate-end">
+				<Text color={theme.colors.muted} wrap="truncate-end">
 					{maxOffset > 0
 						? `↑↓ / PgUp/PgDn scroll · ${scrollOffset + 1}–${Math.min(scrollOffset + height, content.height)}/${content.height}${atEnd ? " · end" : " · more below"}`
 						: ""}
@@ -396,16 +396,16 @@ export function ApprovalPrompt({
 		<PromptFrame>
 			{req.warning && (
 				<Box marginBottom={1}>
-					<Text bold color={theme.palette.warning}>
+					<Text bold color={theme.colors.warning}>
 						{sanitizeText(req.warning)}
 					</Text>
 				</Box>
 			)}
 			<Box flexDirection="row" flexShrink={0}>
-				<Text bold color={theme.palette.warning}>
+				<Text bold color={theme.colors.warning}>
 					Approve?{" "}
 				</Text>
-				<Text color={theme.palette.muted}>{sanitizeText(req.tool)}</Text>
+				<Text color={theme.colors.muted}>{sanitizeText(req.tool)}</Text>
 			</Box>
 			<ApprovalSummary text={sanitizeText(req.summary)} onEndChange={setCanApprove} />
 			<Box flexShrink={0}>
@@ -416,7 +416,7 @@ export function ApprovalPrompt({
 				/>
 			</Box>
 			<Box flexShrink={0}>
-				<Text color={theme.palette.muted}>
+				<Text color={theme.colors.muted}>
 					{canApprove
 						? "←→ toggle · Enter confirm · Esc deny"
 						: "Scroll to end to enable Allow · Esc deny"}

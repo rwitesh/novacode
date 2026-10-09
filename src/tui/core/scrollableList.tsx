@@ -28,7 +28,7 @@ export function ScrollableList<T>({
 	if (items.length === 0) {
 		return (
 			<Box>
-				<Text color={theme.palette.muted}>{emptyMessage ?? "No items"}</Text>
+				<Text color={theme.colors.muted}>{emptyMessage ?? "No items"}</Text>
 			</Box>
 		)
 	}
@@ -63,11 +63,11 @@ export function ScrollableList<T>({
 			{showScrollbar && (
 				<Box flexDirection="column" marginLeft={1}>
 					{scrollbarThumb > 0 && (
-						<Text color={theme.palette.muted}>{"░\n".repeat(scrollbarThumb).slice(0, -1)}</Text>
+						<Text color={theme.colors.muted}>{"░\n".repeat(scrollbarThumb).slice(0, -1)}</Text>
 					)}
-					<Text color={theme.palette.primary}>█</Text>
+					<Text color={theme.colors.selection.background}>█</Text>
 					{count - scrollbarThumb - 1 > 0 && (
-						<Text color={theme.palette.muted}>
+						<Text color={theme.colors.muted}>
 							{"░\n".repeat(count - scrollbarThumb - 1).slice(0, -1)}
 						</Text>
 					)}

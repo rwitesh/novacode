@@ -3,6 +3,7 @@ import { setImmediate } from "node:timers/promises"
 import type { LanguageModelV4StreamPart } from "@ai-sdk/provider"
 import { simulateReadableStream, tool } from "ai"
 import { MockLanguageModelV4 } from "ai/test"
+import chalk from "chalk"
 import { Box, render, Text } from "ink"
 import { act } from "react"
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
@@ -24,6 +25,9 @@ import { usePrompts } from "../src/tui/hooks/usePrompts.ts"
 import { useSession } from "../src/tui/hooks/useSession.ts"
 import { StreamingMarkdownRenderer } from "../src/tui/markdown/index.ts"
 import { ApprovalPrompt, PasswordPrompt, SearchSelectPrompt } from "../src/tui/prompts.tsx"
+import { defaultTheme } from "../src/tui/theme/default.ts"
+import { ThemeProvider } from "../src/tui/theme/index.tsx"
+import type { TimelineEvent } from "../src/tui/types.ts"
 import type { ToolResult } from "../src/types.ts"
 
 const { createModel, dispatch } = vi.hoisted(() => ({ createModel: vi.fn(), dispatch: vi.fn() }))
@@ -289,6 +293,82 @@ describe("TUI submission cancellation", () => {
 			expect(run).not.toHaveBeenCalled()
 		},
 	)
+})
+
+describe("TUI semantic colors", () => {
+	it.each([
+		["user", 37],
+		["assistant", 36],
+		["tool", 34],
+		["reasoning", 33],
+		["error", 31],
+		["success", 90],
+	] as const)("uses the provided %s color", async (role, code) => {
+		const theme = {
+			...defaultTheme,
+			colors: {
+				...defaultTheme.colors,
+				user: { text: "white", background: "blue" },
+				assistant: "cyan",
+				tool: "blue",
+				reasoning: "yellow",
+				error: "red",
+				success: "gray",
+			},
+		}
+		const events: Record<typeof role, TimelineEvent> = {
+			user: { id: "user", type: "UserMessage", content: "Question" },
+			assistant: { id: "ai", type: "AssistantMessage", content: "Answer" },
+			tool: { id: "tool", type: "ToolStarted", toolCallId: "read", toolName: "read", args: "" },
+			reasoning: { id: "thinking", type: "Thinking" },
+			error: { id: "error", type: "AssistantMessage", content: "(aborted)" },
+			success: { id: "update", type: "UpdateAvailable", current: "1", latest: "2" },
+		}
+		const previousLevel = chalk.level
+		chalk.level = 3
+		try {
+			const view = await mount(
+				<ThemeProvider theme={theme}>
+					<EventRenderer event={events[role]} />
+				</ThemeProvider>,
+			)
+			const output = view.frames.map((frame) => frame.output).join("")
+			expect(output).toContain(`\x1b[${code}m`)
+			if (role === "user") expect(output).toContain("\x1b[44m")
+		} finally {
+			chalk.level = previousLevel
+		}
+	})
+})
+
+describe("TUI error colors", () => {
+	it.each<TimelineEvent>([
+		{ id: "error", type: "AssistantMessage", content: "Error: **Provider** failed" },
+		{ id: "abort", type: "AssistantMessage", content: "(aborted)" },
+		{ id: "notice", type: "Notice", content: "\x1b[31mError: Model not found\x1b[39m" },
+		{ id: "cancel", type: "Notice", content: "Session selection cancelled." },
+		{ id: "update", type: "Notice", content: "✗ Update failed." },
+		{
+			id: "tool",
+			type: "ToolFailed",
+			toolCallId: "read-1",
+			toolName: "read",
+			args: "path: missing.ts",
+			error: "File not found",
+		},
+	])("renders $id in red", async (event) => {
+		const previousLevel = chalk.level
+		chalk.level = 3
+		try {
+			const view = await mount(<EventRenderer event={event} />)
+			const output = view.frames.map((frame) => frame.output).join("")
+			expect(output).toContain("\x1b[38;2;248;113;113m")
+			expect(output).not.toContain("\x1b[38;2;229;229;229m")
+			expect(output).not.toContain("\x1b[38;2;96;165;250m")
+		} finally {
+			chalk.level = previousLevel
+		}
+	})
 })
 
 describe("TUI terminal safety", () => {

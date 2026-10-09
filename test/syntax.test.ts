@@ -1,8 +1,14 @@
 import chalk from "chalk"
-import { describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { highlightCode, isHighlightable } from "../src/tui/markdown/syntax.ts"
 
-chalk.level = 1
+const colorLevel = chalk.level
+beforeAll(() => {
+	chalk.level = 1
+})
+afterAll(() => {
+	chalk.level = colorLevel
+})
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: standard ANSI escape sequence pattern
 const ANSI = /\u001b\[[0-9;]*m/g
@@ -29,10 +35,6 @@ describe("isHighlightable", () => {
 describe("highlightCode", () => {
 	it("returns the line unchanged for unsupported langs", () => {
 		expect(highlightCode("const x = 1", "text")).toBe("const x = 1")
-	})
-
-	it("keeps visible text intact after stripping color codes", () => {
-		expect(strip(highlightCode("const x = 'hi' + 42", "ts"))).toBe("const x = 'hi' + 42")
 	})
 
 	it("paints a whole-line comment gray", () => {

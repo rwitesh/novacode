@@ -35,17 +35,15 @@ export function StatusBar({
 			flexShrink={0}
 			paddingX={1}
 			paddingBottom={1}
-			backgroundColor={theme.palette.bg}
+			backgroundColor={theme.colors.background}
 		>
 			<Text color={activityColor}>{activity}</Text>
-			<Text color={theme.palette.muted}> • Tip: </Text>
-			<Text color={theme.palette.primary}>{tip}</Text>
+			<Text color={theme.colors.muted}> • Tip: </Text>
+			<Text color={theme.colors.info}>{tip}</Text>
 			<Box flexGrow={1} />
-			<Text color={theme.palette.muted}>
-				{formatTokenUsage(contextTokens, model.contextWindow)}
-			</Text>
-			<Text color={theme.palette.muted}> • </Text>
-			<Text bold color={theme.palette.fg}>
+			<Text color={theme.colors.muted}>{formatTokenUsage(contextTokens, model.contextWindow)}</Text>
+			<Text color={theme.colors.muted}> • </Text>
+			<Text bold color={theme.colors.text}>
 				{model.id}
 			</Text>
 		</Box>

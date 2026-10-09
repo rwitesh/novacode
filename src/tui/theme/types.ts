@@ -1,13 +1,23 @@
 export interface Theme {
 	name: string
-	palette: {
-		bg: string
-		fg: string
+	colors: {
+		background: string
+		text: string
 		muted: string
-		primary: string
-		secondary: string
-		success: string
-		warning: string
+		selection: {
+			text: string
+			background: string
+		}
+		user: {
+			text: string
+			background: string
+		}
+		assistant: string
+		tool: string
+		reasoning: string
 		error: string
+		warning: string
+		info: string
+		success: string
 	}
 }

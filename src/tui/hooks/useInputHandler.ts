@@ -5,7 +5,7 @@ import type { Agent } from "../../agent/agent.ts"
 import { COMMANDS, dispatch } from "../../commands/index.ts"
 import type { SessionStore } from "../../db/sessionStore.ts"
 import type { Prompts, Skill } from "../../types.ts"
-import { deleteLastGrapheme } from "../helpers.ts"
+import { deleteLastGrapheme, formatError } from "../helpers.ts"
 import type { PromptMode } from "../types.ts"
 
 /**
@@ -225,7 +225,7 @@ export function useInputHandler({
 						session.addNotice(r)
 					}
 				} catch (err) {
-					console.error(`Command dispatch error for "${line}":`, err)
+					console.error(formatError(`Command dispatch error for "${line}"`, err))
 				} finally {
 					submitting.current = false
 					setCommandBusy(false)
@@ -245,7 +245,7 @@ export function useInputHandler({
 				await session.commitMsg(userMsg)
 				if (!ctrl.signal.aborted) await turn.run(ctrl)
 			} catch (err) {
-				console.error("Failed to persist or run the agent turn:", err)
+				console.error(formatError("Failed to persist or run the agent turn", err))
 			} finally {
 				submissionCtrl.current = null
 				submitting.current = false

@@ -79,7 +79,7 @@ src/
     ├── types.ts         # UI-specific types: TimelineEvent, PromptMode, ActiveTool
     ├── theme/           # theme system (React context)
     │   ├── index.tsx    # ThemeProvider + useTheme hook, exports Theme type + defaults
-    │   ├── types.ts     # Theme interface (palette: bg, fg, muted, primary, secondary, ...)
+    │   ├── types.ts     # Theme colors: interface, user/assistant, tools, reasoning, status
     │   └── default.ts   # defaultTheme singleton
     ├── core/            # presentational primitives reused across prompts/overlay
     │   ├── liveArea.tsx       # Spinner, Cursor (uses ink useAnimation)

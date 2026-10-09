@@ -2,7 +2,7 @@ import type { ModelMessage } from "ai"
 import { useEffect, useMemo, useState } from "react"
 import type { PermissionMode, Skill } from "../../types.ts"
 import { checkForUpdate } from "../../update.ts"
-import { buildSessionInfo, deriveEventsFromMessages } from "../helpers.ts"
+import { buildSessionInfo, deriveEventsFromMessages, formatError } from "../helpers.ts"
 import type { TimelineEvent } from "../types.ts"
 
 const TIPS = [
@@ -77,7 +77,7 @@ export function useTuiTimeline({
 					setUpdateInfo({ hasUpdate: true, current: info.current, latest: info.latest })
 				}
 			} catch (err) {
-				console.error("Failed to check for updates:", err)
+				console.error(formatError("Failed to check for updates", err))
 			}
 		}
 		void checkUpdate()

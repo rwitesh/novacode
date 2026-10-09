@@ -4,6 +4,7 @@ import type { Agent } from "../../agent/agent.ts"
 import { loadAuth } from "../../config/store.ts"
 import type { SessionStore } from "../../db/sessionStore.ts"
 import { getModel, getProvider } from "../../models/lookup.ts"
+import { formatError } from "../helpers.ts"
 
 /**
  * Hook that manages the state of the active workspace session and history.
@@ -32,7 +33,7 @@ export function useSession(
 				const s = await store.get(sessionId)
 				if (s && !canceled) setContextTokens(s.contextTokens)
 			} catch (err) {
-				console.error("Failed to load initial session context size:", err)
+				console.error(formatError("Failed to load initial session context size", err))
 			}
 		}
 		void fetchSession()

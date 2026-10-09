@@ -1,8 +1,35 @@
 import type { ModelMessage } from "ai"
 import { describe, expect, it } from "vitest"
-import { deleteLastGrapheme, deriveEventsFromMessages } from "../src/tui/helpers.ts"
+import {
+	deleteLastGrapheme,
+	deriveEventsFromMessages,
+	formatError,
+	isErrorMessage,
+	sanitizeText,
+} from "../src/tui/helpers.ts"
 
 describe("TUI text helpers", () => {
+	it.each([
+		["Error: Provider failed", true],
+		["(aborted)", true],
+		["AbortError: Request stopped", true],
+		["Session selection cancelled.", true],
+		["Reset canceled.", true],
+		["Failed to delete /tmp/file", true],
+		["✗ Update failed.", true],
+		["\x1b[31mError: Model not found\x1b[39m", true],
+		["Here is how to fix an error.", false],
+		["Update installed successfully.", false],
+	])("recognizes error/abort messages: %s", (text, expected) => {
+		expect(isErrorMessage(text)).toBe(expected)
+	})
+
+	it("sanitizes error diagnostics before applying color", () => {
+		expect(sanitizeText(formatError("Failed to open", "bad \x1b]52;c;payload\x07"))).toBe(
+			"Failed to open: bad ",
+		)
+	})
+
 	it.each(["😀", "𐐀", "é", "👩‍💻"])("deletes a complete grapheme: %s", (text) => {
 		expect(deleteLastGrapheme(`abc${text}`)).toBe("abc")
 	})

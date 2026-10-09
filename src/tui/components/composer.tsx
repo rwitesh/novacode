@@ -27,7 +27,7 @@ export const Composer = memo(function Composer({
 			flexShrink={0}
 			maxHeight={Math.max(3, terminalRows - 6)}
 			overflowY="hidden"
-			backgroundColor={theme.palette.bg}
+			backgroundColor={theme.colors.background}
 			paddingX={1}
 			paddingBottom={1}
 			marginTop={1}
@@ -42,13 +42,13 @@ export const Composer = memo(function Composer({
 						renderItem={(cmd, _idx, isSelected) => (
 							<Box flexDirection="row">
 								<Text
-									backgroundColor={isSelected ? theme.palette.primary : undefined}
-									color={isSelected ? theme.palette.bg : theme.palette.fg}
+									backgroundColor={isSelected ? theme.colors.selection.background : undefined}
+									color={isSelected ? theme.colors.selection.text : theme.colors.text}
 									wrap="truncate-end"
 								>
 									/{cmd.name.padEnd(12)}
 								</Text>
-								<Text color={theme.palette.muted}> {cmd.desc}</Text>
+								<Text color={theme.colors.muted}> {cmd.desc}</Text>
 							</Box>
 						)}
 					/>
@@ -56,7 +56,7 @@ export const Composer = memo(function Composer({
 			)}
 			<Box flexDirection="row" paddingY={1}>
 				<Box flexShrink={0} marginRight={1}>
-					<Text bold color={theme.palette.muted}>
+					<Text bold color={theme.colors.muted}>
 						{"❯"}
 					</Text>
 				</Box>
@@ -68,7 +68,7 @@ export const Composer = memo(function Composer({
 					overflowY="hidden"
 				>
 					<Box flexShrink={0}>
-						<Text color={theme.palette.fg} wrap="wrap">
+						<Text color={theme.colors.text} wrap="wrap">
 							{sanitizeText(input)}
 							<Cursor />
 						</Text>

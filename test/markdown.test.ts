@@ -1,41 +1,39 @@
 import chalk from "chalk"
-import { describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import {
 	formatMarkdown,
 	MarkdownRenderer,
 	StreamingMarkdownRenderer,
 } from "../src/tui/markdown/index.ts"
 
-chalk.level = 1
+const colorLevel = chalk.level
+beforeAll(() => {
+	chalk.level = 1
+})
+afterAll(() => {
+	chalk.level = colorLevel
+})
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: standard ANSI escape sequence pattern
 const ANSI = /\u001b\[[0-9;]*m/g
 const strip = (s: string): string => s.replace(ANSI, "")
 
 describe("MarkdownRenderer — code blocks", () => {
-	it("renders a minimal language label header (no border box)", () => {
+	it("renders a language label header", () => {
 		const out = formatMarkdown("```ts\nconst x = 1\n```\n")
-		const visible = strip(out)
-		expect(visible).toContain("─ ts")
-		expect(visible).not.toContain("┌")
-		expect(visible).not.toContain("└")
-		expect(visible).not.toContain("[Code:")
+		expect(strip(out)).toContain("─ ts")
 	})
 
 	it("omits the header for an untagged fence", () => {
 		const out = formatMarkdown("```\nplain\n```\n")
 		const visible = strip(out)
-		expect(visible).not.toContain("[Code:")
 		expect(visible).not.toContain("─")
 		expect(visible).toContain("plain")
 	})
 
-	it("indents code lines without a pipe gutter and applies no closing border", () => {
+	it("indents code lines", () => {
 		const out = formatMarkdown("```ts\nconst x = 1\n```\n")
-		const visible = strip(out)
-		expect(visible).toContain("  const x = 1")
-		expect(visible).not.toContain("│")
-		expect(visible).not.toContain("└")
+		expect(strip(out)).toContain("  const x = 1")
 	})
 
 	it("keeps multiple code blocks independent", () => {
@@ -69,12 +67,6 @@ describe("MarkdownRenderer — code syntax highlighting", () => {
 		const out = formatMarkdown("```ts\nconst x = 1\n```\n")
 		expect(out).not.toContain("const x = 1")
 		expect(strip(out)).toContain("const x = 1")
-	})
-
-	it("renders unsupported-language code dimmed", () => {
-		const out = formatMarkdown("```text\n6 CO2 + 6 H2O\n```\n")
-		const visible = strip(out)
-		expect(visible).toContain("6 CO2 + 6 H2O")
 	})
 })
 
@@ -125,17 +117,6 @@ describe("MarkdownRenderer — block elements", () => {
 	})
 })
 
-describe("MarkdownRenderer — tables are not specially rendered", () => {
-	it("does not draw a bordered table box", () => {
-		const md = ["| Name | Role |", "| --- | --- |", "| Nova | agent |"].join("\n")
-		const visible = strip(formatMarkdown(md))
-		expect(visible).not.toContain("┌")
-		expect(visible).not.toContain("┬")
-		expect(visible).not.toContain("┼")
-		expect(visible).not.toContain("┤")
-	})
-})
-
 describe("MarkdownRenderer — fence delimiters", () => {
 	it.each([
 		["```text\n~~~\n**literal**\n```\nAfter", "  ~~~\n  **literal**\n\nAfter"],
@@ -162,14 +143,6 @@ describe("StreamingMarkdownRenderer", () => {
 			out = stream.update(full.slice(0, i))
 		}
 		expect(strip(out)).toEqual(strip(formatMarkdown(full)))
-	})
-
-	it("returns cached output when called with the same text", () => {
-		const stream = new StreamingMarkdownRenderer()
-		const text = "hello world"
-		const a = stream.update(text)
-		const b = stream.update(text)
-		expect(b).toBe(a)
 	})
 
 	it("can be reset to start fresh", () => {

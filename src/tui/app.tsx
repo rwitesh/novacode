@@ -148,10 +148,10 @@ function App({
 
 	const activity = useMemo(() => {
 		if (exitConfirmKey === "C")
-			return { label: "Press Ctrl+C again to exit", color: theme.palette.warning }
-		if (mode.type === "searchSelect") return { label: "Filtering...", color: theme.palette.primary }
-		if (mode.type !== "chat") return { label: "Waiting for input", color: theme.palette.muted }
-		return { label: "/help", color: theme.palette.muted }
+			return { label: "Press Ctrl+C again to exit", color: theme.colors.warning }
+		if (mode.type === "searchSelect") return { label: "Filtering...", color: theme.colors.info }
+		if (mode.type !== "chat") return { label: "Waiting for input", color: theme.colors.muted }
+		return { label: "/help", color: theme.colors.muted }
 	}, [exitConfirmKey, mode.type, theme])
 
 	const composerSuggestions = mode.type === "chat" ? suggestions : []

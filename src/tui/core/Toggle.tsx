@@ -15,17 +15,17 @@ export function Toggle({
 		<Box flexDirection="row">
 			<Text
 				bold={selected === "yes"}
-				color={selected === "yes" ? theme.palette.bg : theme.palette.fg}
-				backgroundColor={selected === "yes" ? theme.palette.primary : undefined}
+				color={selected === "yes" ? theme.colors.selection.text : theme.colors.text}
+				backgroundColor={selected === "yes" ? theme.colors.selection.background : undefined}
 			>
 				{selected === "yes" ? "❯ " : "  "}
 				{yesLabel}
 			</Text>
-			<Text color={theme.palette.muted}> </Text>
+			<Text color={theme.colors.muted}> </Text>
 			<Text
 				bold={selected === "no"}
-				color={selected === "no" ? theme.palette.bg : theme.palette.fg}
-				backgroundColor={selected === "no" ? theme.palette.primary : undefined}
+				color={selected === "no" ? theme.colors.selection.text : theme.colors.text}
+				backgroundColor={selected === "no" ? theme.colors.selection.background : undefined}
 			>
 				{selected === "no" ? "❯ " : "  "}
 				{noLabel}

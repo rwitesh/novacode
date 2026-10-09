@@ -1,9 +1,11 @@
 import type { ModelMessage, ToolResultPart } from "ai"
+import chalk from "chalk"
 import stripAnsi from "strip-ansi"
 import { summarizeToolOutput } from "../content.ts"
 import { formatToolArgs } from "../format.ts"
 import { groupSkills } from "../skills/index.ts"
 import type { PermissionMode, Skill } from "../types.ts"
+import { defaultTheme } from "./theme/default.ts"
 import type { TimelineEvent } from "./types.ts"
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
@@ -23,6 +25,17 @@ export function sanitizeText(text: string): string {
 			/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g,
 			"",
 		)
+}
+
+export function formatError(message: string, error: unknown): string {
+	const detail = error instanceof Error ? (error.stack ?? error.message) : String(error)
+	return chalk.hex(defaultTheme.colors.error)(sanitizeText(`${message}: ${detail}`))
+}
+
+export function isErrorMessage(text: string): boolean {
+	return /^(?:Error:|AbortError:|Failed to\b|✗)|^\(aborted\)$|\b(?:aborted|cancelled|canceled)\.?$/i.test(
+		sanitizeText(text).trim(),
+	)
 }
 
 export function buildSessionInfo(

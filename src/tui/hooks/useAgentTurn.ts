@@ -6,7 +6,7 @@ import { summarizeToolOutput, toToolResultOutput } from "../../content.ts"
 import type { SessionStore } from "../../db/sessionStore.ts"
 import { formatToolArgs } from "../../format.ts"
 import type { ToolResult } from "../../types.ts"
-import { countGrepMatches } from "../helpers.ts"
+import { countGrepMatches, formatError } from "../helpers.ts"
 import { StreamingMarkdownRenderer } from "../markdown/index.ts"
 import type { ActiveTool } from "../types.ts"
 
@@ -224,7 +224,7 @@ export function useAgentTurn(
 						}
 					}
 				} catch (err) {
-					console.error("Failed to generate or save session title:", err)
+					console.error(formatError("Failed to generate or save session title", err))
 				}
 			} catch (err) {
 				if (signal.aborted) {
